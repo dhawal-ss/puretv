@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  PureTV for Twitch — Android TV manifest (SECTION 07.1)
+  Sideload distribution only (GitHub Releases) — no Play Store metadata,
+  no Play TV listing requirements beyond the LEANBACK_LAUNCHER category
+  needed for the device's launcher to surface the app.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <!-- TV discovery: declare touchscreen optional, Leanback (10-foot UI) required -->
+    <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
+    <uses-feature android:name="android.software.leanback" android:required="true" />
+
+    <application
+        android:name=".PureTvTvApp"
+        android:allowBackup="false"
+        android:banner="@drawable/banner"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.PureTv.Tv">
+
+        <activity
+            android:name=".TvMainActivity"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|uiMode"
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:resizeableActivity="false"
+            android:screenOrientation="landscape"
+            android:theme="@style/Theme.PureTv.Tv">
+
+            <!-- LEANBACK_LAUNCHER (not the phone's MAIN/LAUNCHER pairing) is what
+                 makes the Android TV home screen surface this app (Section 7.1). -->
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
+            </intent-filter>
+
+            <!-- OAuth PKCE redirect — same scheme as the phone app so a single
+                 Twitch developer application/CLIENT_ID can serve all platforms. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="puretv-twitch" android:host="auth" />
+            </intent-filter>
+        </activity>
+
+    </application>
+</manifest>

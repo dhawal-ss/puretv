@@ -1,0 +1,173 @@
+# SECTION 09 — release pipeline. Triggered by pushing a `v*` tag (e.g. `v1.0.0`);
+# builds installable artifacts for all four pieces and attaches them to a draft
+# GitHub Release for manual review before publishing.
+#
+# [ACTION REQUIRED] before this can run for real:
+#   1. Android signing — add these repo secrets and uncomment the signing step:
+#        ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD,
+#        ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD
+#      (Section 14 Gotcha #6: unsigned release builds install but Play Store /
+#      sideloading on TV will reject or warn on them.)
+#   2. Windows code signing — desktop MSI/EXE builds are unsigned by default;
+#      SmartScreen will warn users on first run. Add an Authenticode cert and
+#      a signing step (e.g. via `signtool` on a windows-latest runner) once
+#      you have one. Until then, tell users to click "More info → Run anyway".
+#   3. Container registry — this workflow pushes the proxy image to GHCR using
+#      the built-in GITHUB_TOKEN; no extra secret needed, but the package's
+#      visibility defaults to private — set it to public in repo → Packages.
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version string for a manual run (e.g. 1.2.3) — only used for artifact naming"
+        required: false
+        default: "0.0.0-dev"
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  android:
+    name: Android phone/tablet + TV (release APK/AAB)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Cache Gradle
+        uses: gradle/actions/setup-gradle@v3
+
+      # --- Signing (disabled until secrets exist — see header note #1) -------
+      # - name: Decode keystore
+      #   run: echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > keystore.jks
+      # - name: Build signed release artifacts
+      #   env:
+      #     KEYSTORE_PATH: ${{ github.workspace }}/keystore.jks
+      #     KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+      #     KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+      #     KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+      #   run: ./gradlew :app-android:bundleRelease :app-android:assembleRelease :app-tv:assembleRelease
+
+      - name: Build unsigned release artifacts (placeholder until signing secrets are configured)
+        env:
+          TWITCH_CLIENT_SECRET: ${{ secrets.TWITCH_CLIENT_SECRET }}
+        run: ./gradlew :app-android:assembleRelease :app-tv:assembleRelease
+
+      - name: Upload Android artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-release
+          path: |
+            app-android/build/outputs/apk/release/*.apk
+            app-tv/build/outputs/apk/release/*.apk
+          if-no-files-found: error
+
+  windows:
+    name: Windows desktop (MSI + EXE)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Cache Gradle
+        uses: gradle/actions/setup-gradle@v3
+
+      - name: Package MSI + EXE installers
+        env:
+          TWITCH_CLIENT_SECRET: ${{ secrets.TWITCH_CLIENT_SECRET }}
+        run: ./gradlew :app-windows:packageReleaseMsi :app-windows:packageReleaseExe
+
+      # --- Code signing (disabled until a cert exists — see header note #2) --
+      # - name: Sign installers
+      #   run: |
+      #     signtool sign /f ${{ secrets.WINDOWS_CERT_PATH }} /p ${{ secrets.WINDOWS_CERT_PASSWORD }} `
+      #       /tr http://timestamp.digicert.com /td sha256 /fd sha256 `
+      #       (Get-ChildItem app-windows/build/compose/binaries/main-release/*/*.msi, app-windows/build/compose/binaries/main-release/*/*.exe)
+
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-release
+          path: |
+            app-windows/build/compose/binaries/main-release/msi/*.msi
+            app-windows/build/compose/binaries/main-release/exe/*.exe
+          if-no-files-found: error
+
+  proxy-image:
+    name: Go proxy (Docker image -> GHCR)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Resolve image tag
+        id: vars
+        run: |
+          REF_NAME="${{ github.ref_name }}"
+          VERSION="${REF_NAME#v}"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Build & push image
+        uses: docker/build-push-action@v6
+        with:
+          context: proxy-server
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/puretv-twitch-proxy:latest
+            ghcr.io/${{ github.repository_owner }}/puretv-twitch-proxy:${{ steps.vars.outputs.version }}
+
+  draft-release:
+    name: Create draft GitHub Release
+    needs: [android, windows, proxy-image]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create draft release with artifacts
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          generate_release_notes: true
+          files: |
+            artifacts/android-release/**/*.apk
+            artifacts/windows-release/**/*.msi
+            artifacts/windows-release/**/*.exe
+          body: |
+            ## PureTV for Twitch ${{ github.ref_name }}
+
+            **Before publishing this draft:**
+            - [ ] Confirm Android APKs install on a real device/emulator (and are signed, once signing is configured — see release.yml header)
+            - [ ] Confirm the Windows installer runs end-to-end on a clean VM (VLC must be installed separately — see root README "Setup")
+            - [ ] Confirm `ghcr.io/${{ github.repository_owner }}/puretv-twitch-proxy:${{ github.ref_name }}` pulls and serves `/health`
+            - [ ] Update CHANGELOG / release notes below as needed

@@ -1,0 +1,26 @@
+# Gradle
+.gradle/
+build/
+**/build/
+
+# IDE
+.idea/
+*.iml
+
+# Kotlin / JVM
+*.class
+*.jar
+# …but DO commit the Gradle wrapper jar (needed by ./gradlew in CI & for contributors)
+!gradle/wrapper/gradle-wrapper.jar
+
+# Bundled VLC native libraries (populated by `gradle :app-windows:bundleVlc`).
+# These are large binary files (~95 MB) — run bundleVlc on each build machine
+# before packaging. See app-windows/build.gradle.kts `bundleVlc` task.
+app-windows/resources/windows/vlc/
+
+# Secrets — injected at build time, never committed (see secrets.properties.example)
+secrets.properties
+
+# OS
+.DS_Store
+Thumbs.db

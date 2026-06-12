@@ -1,0 +1,54 @@
+package com.puretv.twitch.android.di
+
+import androidx.media3.common.util.UnstableApi
+import androidx.room.Room
+import com.puretv.twitch.android.data.AppSettingsStore
+import com.puretv.twitch.android.data.SecureTokenStore
+import com.puretv.twitch.android.data.db.PureTvDatabase
+import com.puretv.twitch.android.player.TwitchPlayer
+import com.puretv.twitch.android.ui.BrowseViewModel
+import com.puretv.twitch.android.ui.ChannelViewModel
+import com.puretv.twitch.android.ui.HomeViewModel
+import com.puretv.twitch.android.ui.LoginViewModel
+import com.puretv.twitch.android.ui.SearchViewModel
+import com.puretv.twitch.android.ui.SettingsViewModel
+import com.puretv.twitch.android.ui.StreamViewModel
+import com.puretv.twitch.core.di.TokenHolder
+import org.koin.androidx.viewmodel.dsl.viewModel
+import org.koin.dsl.module
+
+/**
+ * SECTION 11 — phone/tablet-specific Koin bindings layered on top of
+ * `coreModule`: Room database, encrypted token storage, DataStore-backed
+ * settings, the ExoPlayer wrapper (singleton so PiP keeps the same
+ * playback session across navigation), and screen ViewModels.
+ */
+@OptIn(UnstableApi::class)
+val androidModule = module {
+    // --- Persistence -----------------------------------------------------
+    single {
+        Room.databaseBuilder(get(), PureTvDatabase::class.java, PureTvDatabase.DB_NAME)
+            .fallbackToDestructiveMigration()
+            .build()
+    }
+    single { get<PureTvDatabase>().cachedStreamDao() }
+    single { get<PureTvDatabase>().cachedChannelDao() }
+    single { get<PureTvDatabase>().cachedEmoteDao() }
+    single { get<PureTvDatabase>().watchHistoryDao() }
+    single { get<PureTvDatabase>().searchHistoryDao() }
+
+    single { SecureTokenStore(get()) }
+    single { AppSettingsStore(get(), get(), get<TokenHolder>()) }
+
+    // --- Playback ---------------------------------------------------------
+    single { TwitchPlayer(get(), get()) }
+
+    // --- ViewModels --------------------------------------------------------
+    viewModel { HomeViewModel(get(), get(), get()) }
+    viewModel { BrowseViewModel(get()) }
+    viewModel { SearchViewModel(get()) }
+    viewModel { (channelLogin: String) -> StreamViewModel(channelLogin, get(), get(), get(), get(), get(), get()) }
+    viewModel { (channelLogin: String) -> ChannelViewModel(channelLogin, get(), get()) }
+    viewModel { SettingsViewModel(get()) }
+    viewModel { LoginViewModel(get()) }
+}

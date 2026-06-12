@@ -1,0 +1,96 @@
+# SECTION 09 — continuous integration. Runs on every push/PR; mirrors the
+# four independently-buildable pieces of the monorepo (Section 12.1: "core is
+# the only thing shared — the three apps and the proxy never depend on each
+# other"), so a break in one never blocks or hides a break in another.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ---- Kotlin/Gradle: core + the three platform apps -------------------------
+  gradle-build:
+    name: Gradle (core, android, tv, desktop)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Cache Gradle
+        uses: gradle/actions/setup-gradle@v3
+
+      # Lint/static checks intentionally omitted: ktlint/detekt aren't yet wired
+      # into the root build (Section 13). When they are, add a step here
+      # WITHOUT `continue-on-error` — a silenced lint step is worse than no
+      # lint step because it looks green while ignoring failures.
+
+      - name: Unit tests (core commonTest + platform unit tests)
+        run: ./gradlew :core:allTests :app-android:testDebugUnitTest :app-tv:testDebugUnitTest :app-windows:test
+
+      - name: Assemble Android phone/tablet APK (debug)
+        run: ./gradlew :app-android:assembleDebug
+
+      - name: Assemble Android TV APK (debug)
+        run: ./gradlew :app-tv:assembleDebug
+
+      - name: Package Windows desktop distributable (current OS image only — full MSI/EXE requires windows-latest, see release.yml)
+        run: ./gradlew :app-windows:createDistributable
+
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gradle-test-reports
+          path: |
+            **/build/reports/tests/
+            **/build/test-results/
+          retention-days: 7
+
+  # ---- Go: self-hosted ad-block proxy -----------------------------------------
+  go-proxy:
+    name: Go proxy server
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: proxy-server
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+          # NOTE: no `cache-dependency-path` — this server is pure stdlib
+          # (see go.mod), so there's no go.sum to key the cache on.
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test (with race detector + coverage)
+        run: go test -race -coverprofile=coverage.out ./...
+
+      - name: Build
+        run: go build -o /tmp/proxy-server .
+
+      - name: Upload coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: go-proxy-coverage
+          path: proxy-server/coverage.out
+          retention-days: 7

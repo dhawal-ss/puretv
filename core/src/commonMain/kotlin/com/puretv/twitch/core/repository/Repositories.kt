@@ -1,0 +1,63 @@
+package com.puretv.twitch.core.repository
+
+import com.puretv.twitch.core.api.TwitchApiClient
+import com.puretv.twitch.core.model.ChannelInfo
+import com.puretv.twitch.core.model.GameInfo
+import com.puretv.twitch.core.model.StreamInfo
+import com.puretv.twitch.core.stream.StreamResolver
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+
+/**
+ * Wraps [TwitchApiClient] with light in-memory caching the UI layer can
+ * observe directly. Persistent caching (Room/SQLite) hangs off these via
+ * the platform-specific repository constructors wired in Koin (Section 11).
+ */
+class StreamRepository(
+    private val apiClient: TwitchApiClient,
+    private val streamResolver: StreamResolver,
+) {
+    private val _topStreams = MutableStateFlow<List<StreamInfo>>(emptyList())
+    val topStreams: StateFlow<List<StreamInfo>> = _topStreams.asStateFlow()
+
+    suspend fun refreshTopStreams(gameId: String? = null): List<StreamInfo> {
+        val streams = apiClient.getStreams(gameIds = listOfNotNull(gameId))
+        _topStreams.value = streams
+        return streams
+    }
+
+    suspend fun streamsForChannels(logins: List<String>): List<StreamInfo> =
+        if (logins.isEmpty()) emptyList() else apiClient.getStreams(userLogins = logins)
+
+    suspend fun resolvePlayableStream(
+        channelLogin: String,
+        oauthToken: String? = null,
+        playerType: String = "site",
+    ) = streamResolver.resolveMasterPlaylist(channelLogin, oauthToken, playerType)
+}
+
+class ChannelRepository(private val apiClient: TwitchApiClient) {
+    private val cache = mutableMapOf<String, ChannelInfo>()
+
+    suspend fun getChannel(login: String): ChannelInfo? {
+        cache[login]?.let { return it }
+        val channel = apiClient.getUsers(logins = listOf(login)).firstOrNull()
+        channel?.let { cache[login] = it }
+        return channel
+    }
+
+    suspend fun search(query: String, liveOnly: Boolean = false) = apiClient.searchChannels(query, liveOnly)
+
+    suspend fun topGames(): List<GameInfo> = apiClient.getTopGames()
+}
+
+class UserRepository(private val apiClient: TwitchApiClient) {
+    private val _followedLogins = MutableStateFlow<List<String>>(emptyList())
+    val followedLogins: StateFlow<List<String>> = _followedLogins.asStateFlow()
+
+    suspend fun loadFollows(userId: String) {
+        val follows = apiClient.getFollowedChannels(userId)
+        _followedLogins.value = follows.map { it.broadcaster_login }
+    }
+}

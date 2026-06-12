@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="background">#FF0A0A0F</color>
+    <color name="surface">#FF141420</color>
+    <color name="twitch_purple">#FF9B5DE5</color>
+</resources>

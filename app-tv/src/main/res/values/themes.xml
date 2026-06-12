@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Theme.Leanback gives us the system's TV-appropriate window defaults
+         (overscan-safe insets, no action bar); Compose for TV owns all
+         in-app rendering on top of it (Section 7.1). -->
+    <style name="Theme.PureTv.Tv" parent="Theme.Leanback">
+        <item name="android:windowBackground">@color/background</item>
+        <item name="android:colorBackground">@color/background</item>
+    </style>
+</resources>

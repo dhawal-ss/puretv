@@ -1,0 +1,20 @@
+# SECTION 09 — one-command self-hosting. Run `docker compose up -d`, then point
+# your PureTV app's "Custom proxy URL" setting at:
+#   http://<this-host>:8080/playlist
+# (over HTTPS via your own reverse-proxy/TLS-terminator if exposing publicly —
+# see README.md "Exposing this publicly" for a Caddy/Traefik example).
+services:
+  proxy:
+    build: .
+    image: puretv-twitch-proxy:latest
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      PORT: "8080"
+      # Uncomment to override the upstream User-Agent sent to Twitch's CDN:
+      # UPSTREAM_USER_AGENT: "Mozilla/5.0 ..."
+    # NOTE: no `healthcheck:` block — the runtime image is built `FROM scratch`
+    # (Section 09's minimal-attack-surface goal) and has no shell/wget/curl to
+    # run one with. Use the host-level `GET /health` endpoint from outside the
+    # container (e.g. your reverse-proxy's own health probe) instead.

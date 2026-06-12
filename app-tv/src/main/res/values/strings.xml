@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PureTV for Twitch</string>
+    <string name="tagline">Twitch. No ads. No nonsense.</string>
+    <string name="ad_blocked">AD BLOCKED</string>
+    <string name="ad_filtered">AD FILTERED</string>
+    <string name="ad_block_off">AD BLOCK OFF</string>
+
+    <string name="nav_live">Live Channels</string>
+    <string name="nav_following">Following</string>
+    <string name="nav_categories">Categories</string>
+    <string name="nav_search">Search</string>
+    <string name="nav_settings">Settings</string>
+    <string name="nav_login">Sign in</string>
+</resources>
