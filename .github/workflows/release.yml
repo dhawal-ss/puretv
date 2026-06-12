@@ -94,6 +94,9 @@ jobs:
       - name: Install VLC (bundled into the installer so users need nothing extra)
         run: choco install vlc --yes --no-progress
 
+      - name: Install WiX Toolset 3.x (jpackage needs it to build the MSI/EXE)
+        run: choco install wixtoolset --yes --no-progress
+
       - name: Bundle VLC + package MSI + EXE installers
         env:
           TWITCH_CLIENT_SECRET: ${{ secrets.TWITCH_CLIENT_SECRET }}
