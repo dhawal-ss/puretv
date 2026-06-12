@@ -147,7 +147,8 @@ class UpdateManager {
                 if (installer.extension.equals("msi", ignoreCase = true)) {
                     appendLine("msiexec /i \"${installer.absolutePath}\" /passive /norestart")
                 } else {
-                    appendLine("\"${installer.absolutePath}\" /SILENT")
+                    // Inno Setup installer: silent in-place update, no prompts.
+                    appendLine("\"${installer.absolutePath}\" /VERYSILENT /SUPPRESSMSGBOXES /NORESTART")
                 }
                 if (exe != null) appendLine("start \"\" \"$exe\"")
             },

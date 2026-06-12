@@ -34,7 +34,7 @@ permissions:
 
 jobs:
   windows:
-    name: Windows desktop (MSI + EXE)
+    name: Windows desktop (installer)
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -51,34 +51,36 @@ jobs:
       - name: Install VLC (bundled into the installer so users need nothing extra)
         run: choco install vlc --yes --no-progress
 
-      - name: Install WiX Toolset 3.x (jpackage needs it to build the MSI/EXE)
-        run: choco install wixtoolset --yes --no-progress
+      - name: Install Inno Setup (wraps the app with a launch-after-install step)
+        run: choco install innosetup --yes --no-progress
 
-      # bundleVlc and packaging must be SEPARATE Gradle invocations: in one
-      # invocation, jpackage's prepareAppResources reads the directory bundleVlc
-      # writes to, which Gradle 8.10 rejects as an undeclared task dependency.
+      # bundleVlc and the app image must be SEPARATE Gradle invocations: in one
+      # invocation, prepareAppResources reads the directory bundleVlc writes to,
+      # which Gradle 8.10 rejects as an undeclared task dependency.
       - name: Bundle VLC into app resources
         run: .\gradlew.bat :app-windows:bundleVlc
 
-      - name: Package MSI + EXE installers
+      - name: Build release app image
         env:
           TWITCH_CLIENT_SECRET: ${{ secrets.TWITCH_CLIENT_SECRET }}
-        run: .\gradlew.bat :app-windows:packageReleaseMsi :app-windows:packageReleaseExe
+        run: .\gradlew.bat :app-windows:createReleaseDistributable
 
-      # --- Code signing (disabled until a cert exists — see header note #2) --
-      # - name: Sign installers
-      #   run: |
-      #     signtool sign /f ${{ secrets.WINDOWS_CERT_PATH }} /p ${{ secrets.WINDOWS_CERT_PASSWORD }} `
-      #       /tr http://timestamp.digicert.com /td sha256 /fd sha256 `
-      #       (Get-ChildItem app-windows/build/compose/binaries/main-release/*/*.msi, app-windows/build/compose/binaries/main-release/*/*.exe)
+      # --- Code signing (disabled until a cert exists) ---
+      # Once a cert is set up, sign the .exe files inside the app image and the
+      # final installer below with signtool before upload.
 
-      - name: Upload Windows artifacts
+      - name: Build installer (Inno Setup, auto-launches after install)
+        shell: pwsh
+        run: |
+          $ver = "${{ github.ref_name }}" -replace '^v',''
+          if (-not $ver) { $ver = "0.0.0" }
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DMyAppVersion=$ver" "app-windows\installer\puretv.iss"
+
+      - name: Upload Windows artifact
         uses: actions/upload-artifact@v4
         with:
           name: windows-release
-          path: |
-            app-windows/build/compose/binaries/main-release/msi/*.msi
-            app-windows/build/compose/binaries/main-release/exe/*.exe
+          path: app-windows/build/installer/*.exe
           if-no-files-found: error
 
   proxy-image:
@@ -134,7 +136,6 @@ jobs:
           draft: true
           generate_release_notes: true
           files: |
-            artifacts/windows-release/**/*.msi
             artifacts/windows-release/**/*.exe
           body: |
             ## PureTV for Twitch ${{ github.ref_name }}
