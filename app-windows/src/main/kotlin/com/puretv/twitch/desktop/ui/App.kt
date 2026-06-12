@@ -62,6 +62,7 @@ import com.puretv.twitch.desktop.update.UpdateManager
 import com.puretv.twitch.desktop.update.UpdateState
 import com.puretv.twitch.desktop.ui.components.UpdateBanner
 import com.puretv.twitch.desktop.ui.screens.BrowseContent
+import com.puretv.twitch.desktop.ui.screens.CategoryContent
 import com.puretv.twitch.desktop.ui.screens.ChannelContent
 import com.puretv.twitch.desktop.ui.screens.HomeContent
 import com.puretv.twitch.desktop.ui.screens.LoginContent
@@ -85,6 +86,7 @@ enum class Destination(val label: String, val icon: ImageVector) {
 
 private sealed class Route {
     data object Top : Route()
+    data class Category(val gameId: String, val gameName: String) : Route()
     data class Channel(val login: String) : Route()
     data class Stream(val login: String) : Route()
 }
@@ -160,9 +162,16 @@ fun App(koin: Koin, windowState: WindowState, onClose: () -> Unit, awtWindow: Aw
                                     onWatch = { route = Route.Stream(r.login) },
                                     onBack = { route = Route.Top },
                                 )
+                                is Route.Category -> CategoryContent(
+                                    koin = koin,
+                                    gameId = r.gameId,
+                                    gameName = r.gameName,
+                                    onOpenChannel = { login -> route = Route.Channel(login) },
+                                    onBack = { route = Route.Top },
+                                )
                                 Route.Top -> when (destination) {
                                     Destination.HOME -> HomeContent(koin = koin, onOpenChannel = { login -> route = Route.Channel(login) })
-                                    Destination.BROWSE -> BrowseContent(koin = koin)
+                                    Destination.BROWSE -> BrowseContent(koin = koin, onOpenCategory = { gameId, gameName -> route = Route.Category(gameId, gameName) })
                                     Destination.SEARCH -> SearchContent(koin = koin, onOpenChannel = { login -> route = Route.Channel(login) })
                                     Destination.SETTINGS -> SettingsContent(koin = koin, onExit = onClose)
                                     Destination.ACCOUNT -> LoginContent(koin = koin)

@@ -12,7 +12,7 @@ plugins {
 // ── App version (single source of truth) ─────────────────────────────────────
 // Drives both the MSI `packageVersion` AND the generated AppBuildConfig the
 // in-app updater compares against GitHub Releases — so the two can never drift.
-val appVersion = "1.0.2"
+val appVersion = "1.0.3"
 
 val generateAppBuildConfig by tasks.registering {
     val outDir = layout.buildDirectory.dir("generated/buildconfig/kotlin")

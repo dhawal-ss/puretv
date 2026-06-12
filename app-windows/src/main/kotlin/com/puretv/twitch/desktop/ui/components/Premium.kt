@@ -63,7 +63,6 @@ fun StreamCard(stream: StreamInfo, onClick: () -> Unit, modifier: Modifier = Mod
 
     Column(
         modifier = modifier
-            .width(260.dp)
             .graphicsLayer { scaleX = scale; scaleY = scale }
             .pointerInput(Unit) {
                 awaitPointerEventScope {
@@ -136,7 +135,21 @@ fun StreamCard(stream: StreamInfo, onClick: () -> Unit, modifier: Modifier = Mod
         Spacer(Modifier.height(8.dp))
         Text(stream.userName, style = MaterialTheme.typography.titleMedium, color = c.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
         Text(stream.title, style = MaterialTheme.typography.bodyMedium, color = c.textSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        Text(stream.gameName, style = MaterialTheme.typography.bodyMedium, color = c.textMuted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        // Viewer count under the card — explicit "live now + how many watching".
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 2.dp)) {
+            Box(Modifier.size(6.dp).clip(CircleShape).background(c.live))
+            Spacer(Modifier.width(6.dp))
+            Text("${formatViewerCount(stream.viewerCount)} viewers", style = MaterialTheme.typography.bodyMedium, color = c.textSecondary, maxLines = 1)
+            if (stream.gameName.isNotBlank()) {
+                Text(
+                    " · ${stream.gameName}",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = c.textMuted,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
     }
 }
 
@@ -187,7 +200,7 @@ fun Skeleton(modifier: Modifier = Modifier) {
 
 @Composable
 fun StreamCardSkeleton(modifier: Modifier = Modifier) {
-    Column(modifier = modifier.width(260.dp)) {
+    Column(modifier = modifier) {
         Skeleton(modifier = Modifier.fillMaxWidth().aspectRatio(16f / 9f).clip(RoundedCornerShape(10.dp)))
         Spacer(Modifier.height(8.dp))
         Skeleton(modifier = Modifier.fillMaxWidth(0.6f).height(14.dp).clip(RoundedCornerShape(4.dp)))

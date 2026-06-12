@@ -167,6 +167,35 @@ class BrowseViewModel(private val channelRepository: ChannelRepository) : Deskto
     }
 }
 
+// ---- Category (live streams within a game) -----------------------------------
+
+data class CategoryUiState(
+    val gameName: String = "",
+    val streams: List<StreamInfo> = emptyList(),
+    val isLoading: Boolean = true,
+)
+
+/**
+ * Backs the Browse → Category screen: loads the live streams in one game,
+ * ordered by viewers. [gameName] is passed through from the Browse card so the
+ * header renders instantly, before the stream list resolves.
+ */
+class CategoryViewModel(
+    private val gameId: String,
+    gameName: String,
+    private val streamRepository: StreamRepository,
+) : DesktopViewModel() {
+    private val _state = MutableStateFlow(CategoryUiState(gameName = gameName, isLoading = true))
+    val state: StateFlow<CategoryUiState> = _state.asStateFlow()
+
+    init {
+        scope.launch {
+            val streams = runCatching { streamRepository.streamsForGame(gameId) }.getOrDefault(emptyList())
+            _state.update { it.copy(streams = streams, isLoading = false) }
+        }
+    }
+}
+
 // ---- Search ------------------------------------------------------------------
 
 data class SearchUiState(
