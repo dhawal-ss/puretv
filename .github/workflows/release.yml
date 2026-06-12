@@ -33,53 +33,6 @@ permissions:
   packages: write
 
 jobs:
-  android:
-    name: Android phone/tablet + TV (release APK/AAB)
-    runs-on: ubuntu-latest
-    # Non-blocking: the Android apps aren't being distributed yet (a KSP/Room
-    # build issue is tracked separately). A failure here must not hold back the
-    # Windows release.
-    continue-on-error: true
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up JDK 17
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "17"
-
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Cache Gradle
-        uses: gradle/actions/setup-gradle@v3
-
-      # --- Signing (disabled until secrets exist — see header note #1) -------
-      # - name: Decode keystore
-      #   run: echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > keystore.jks
-      # - name: Build signed release artifacts
-      #   env:
-      #     KEYSTORE_PATH: ${{ github.workspace }}/keystore.jks
-      #     KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-      #     KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-      #     KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-      #   run: ./gradlew :app-android:bundleRelease :app-android:assembleRelease :app-tv:assembleRelease
-
-      - name: Build unsigned release artifacts (placeholder until signing secrets are configured)
-        env:
-          TWITCH_CLIENT_SECRET: ${{ secrets.TWITCH_CLIENT_SECRET }}
-        run: ./gradlew :app-android:assembleRelease :app-tv:assembleRelease
-
-      - name: Upload Android artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: android-release
-          path: |
-            app-android/build/outputs/apk/release/*.apk
-            app-tv/build/outputs/apk/release/*.apk
-          if-no-files-found: error
-
   windows:
     name: Windows desktop (MSI + EXE)
     runs-on: windows-latest
