@@ -100,7 +100,7 @@ jobs:
       - name: Bundle VLC + package MSI + EXE installers
         env:
           TWITCH_CLIENT_SECRET: ${{ secrets.TWITCH_CLIENT_SECRET }}
-        run: ./gradlew :app-windows:bundleVlc :app-windows:packageReleaseMsi :app-windows:packageReleaseExe
+        run: .\gradlew.bat :app-windows:bundleVlc :app-windows:packageReleaseMsi :app-windows:packageReleaseExe
 
       # --- Code signing (disabled until a cert exists — see header note #2) --
       # - name: Sign installers
