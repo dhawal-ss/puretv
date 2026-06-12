@@ -36,7 +36,16 @@ class UpdateManager {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val json = Json { ignoreUnknownKeys = true }
-    private val http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build()
+    private val http = HttpClient.newBuilder()
+        .connectTimeout(Duration.ofSeconds(10))
+        // A GitHub release asset URL (browser_download_url) does NOT serve the
+        // file: it 302-redirects to a short-lived signed release-assets.github
+        // usercontent.com URL. The JDK HttpClient defaults to Redirect.NEVER,
+        // so without this the download aborts on the 302 with
+        // "Download failed (HTTP 302)". NORMAL follows the HTTPS->HTTPS redirect
+        // while still refusing any HTTPS->HTTP downgrade.
+        .followRedirects(HttpClient.Redirect.NORMAL)
+        .build()
 
     private val _state = MutableStateFlow<UpdateState>(UpdateState.Idle)
     val state: StateFlow<UpdateState> = _state.asStateFlow()
