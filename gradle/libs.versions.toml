@@ -1,0 +1,105 @@
+# PureTV for Twitch — Version Catalog
+# Pin these exact versions. Do not bump unless a build error forces it —
+# version skew between Kotlin/Compose Multiplatform/AGP is the #1 failure mode.
+
+[versions]
+kotlin = "2.0.21"
+compose-multiplatform = "1.7.0"
+agp = "8.7.0"
+koin = "4.0.0"
+ktor = "3.0.1"
+coroutines = "1.9.0"
+serialization = "1.7.3"
+room = "2.7.0"
+datastore = "1.1.1"
+exoplayer = "1.4.1"
+leanback = "1.2.0"
+compose-tv = "1.0.0"
+vlcj = "4.8.3"
+okio = "3.9.1"
+workmanager = "2.10.0"
+coil = "3.0.4"
+
+[libraries]
+# Kotlin
+kotlin-stdlib = { module = "org.jetbrains.kotlin:kotlin-stdlib", version.ref = "kotlin" }
+
+# Compose Multiplatform
+compose-ui = { module = "org.jetbrains.compose.ui:ui", version.ref = "compose-multiplatform" }
+compose-material3 = { module = "org.jetbrains.compose.material3:material3", version.ref = "compose-multiplatform" }
+compose-foundation = { module = "org.jetbrains.compose.foundation:foundation", version.ref = "compose-multiplatform" }
+compose-runtime = { module = "org.jetbrains.compose.runtime:runtime", version.ref = "compose-multiplatform" }
+
+# Koin DI
+koin-core = { module = "io.insert-koin:koin-core", version.ref = "koin" }
+koin-android = { module = "io.insert-koin:koin-android", version.ref = "koin" }
+koin-compose = { module = "io.insert-koin:koin-compose", version.ref = "koin" }
+
+# Ktor (networking in KMP)
+ktor-client-core = { module = "io.ktor:ktor-client-core", version.ref = "ktor" }
+ktor-client-okhttp = { module = "io.ktor:ktor-client-okhttp", version.ref = "ktor" }
+ktor-client-websockets = { module = "io.ktor:ktor-client-websockets", version.ref = "ktor" }
+ktor-client-content-negotiation = { module = "io.ktor:ktor-client-content-negotiation", version.ref = "ktor" }
+ktor-serialization-json = { module = "io.ktor:ktor-serialization-kotlinx-json", version.ref = "ktor" }
+ktor-client-logging = { module = "io.ktor:ktor-client-logging", version.ref = "ktor" }
+ktor-server-core = { module = "io.ktor:ktor-server-core", version.ref = "ktor" }
+ktor-server-netty = { module = "io.ktor:ktor-server-netty", version.ref = "ktor" }
+
+# Serialization
+kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "serialization" }
+
+# Coroutines
+kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "coroutines" }
+kotlinx-coroutines-android = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-android", version.ref = "coroutines" }
+
+# Room (Android only)
+room-runtime = { module = "androidx.room:room-runtime", version.ref = "room" }
+room-ktx = { module = "androidx.room:room-ktx", version.ref = "room" }
+room-compiler = { module = "androidx.room:room-compiler", version.ref = "room" }
+
+# DataStore (Android only)
+datastore-preferences = { module = "androidx.datastore:datastore-preferences", version.ref = "datastore" }
+
+# ExoPlayer / Media3 (Android only)
+media3-exoplayer = { module = "androidx.media3:media3-exoplayer", version.ref = "exoplayer" }
+media3-exoplayer-hls = { module = "androidx.media3:media3-exoplayer-hls", version.ref = "exoplayer" }
+media3-ui = { module = "androidx.media3:media3-ui", version.ref = "exoplayer" }
+media3-datasource-okhttp = { module = "androidx.media3:media3-datasource-okhttp", version.ref = "exoplayer" }
+media3-session = { module = "androidx.media3:media3-session", version.ref = "exoplayer" }
+
+# Android TV
+leanback = { module = "androidx.leanback:leanback", version.ref = "leanback" }
+compose-tv-foundation = { module = "androidx.tv:tv-foundation", version.ref = "compose-tv" }
+compose-tv-material = { module = "androidx.tv:tv-material", version.ref = "compose-tv" }
+
+# VLCJ (Desktop/Windows only)
+vlcj = { module = "uk.co.caprica:vlcj", version.ref = "vlcj" }
+
+# WorkManager (Android only)
+workmanager = { module = "androidx.work:work-runtime-ktx", version.ref = "workmanager" }
+
+# Image loading
+coil-compose = { module = "io.coil-kt.coil3:coil-compose", version.ref = "coil" }
+# Coil 3 split network engines by Ktor major version — ktor3 here matches our
+# pinned Ktor 3.0.x. There is no version-suffix-less `coil-network-ktor`.
+coil-network = { module = "io.coil-kt.coil3:coil-network-ktor3", version.ref = "coil" }
+
+# Testing — kotlin.test wraps JUnit on JVM/Android and the native runner on
+# KMP Native, so the same test source can run on every target the module
+# compiles for. The common-annotations artifact is only needed for Native
+# targets; with JVM+Android, kotlin-test alone resolves the right variants.
+kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
+
+[plugins]
+kotlin-multiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
+kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
+kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
+kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
+compose-multiplatform = { id = "org.jetbrains.compose", version.ref = "compose-multiplatform" }
+# Kotlin 2.0+ moved the Compose compiler out of the Kotlin plugin itself into
+# this separate one. Must be applied in every module that uses @Composable,
+# version-locked to the Kotlin version.
+compose-compiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
+android-application = { id = "com.android.application", version.ref = "agp" }
+android-library = { id = "com.android.library", version.ref = "agp" }
+ksp = { id = "com.google.devtools.ksp", version = "2.0.21-1.0.28" }

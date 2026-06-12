@@ -1,0 +1,414 @@
+package com.puretv.twitch.desktop.ui
+
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Login
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Tv
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.WindowState
+import coil3.ImageLoader
+import coil3.compose.setSingletonImageLoaderFactory
+import coil3.network.ktor3.KtorNetworkFetcherFactory
+import coil3.request.crossfade
+import com.puretv.twitch.desktop.data.DesktopSettingsStore
+import com.puretv.twitch.desktop.platform.WindowsNative
+import com.puretv.twitch.desktop.update.UpdateManager
+import com.puretv.twitch.desktop.update.UpdateState
+import com.puretv.twitch.desktop.ui.components.UpdateBanner
+import com.puretv.twitch.desktop.ui.screens.BrowseContent
+import com.puretv.twitch.desktop.ui.screens.ChannelContent
+import com.puretv.twitch.desktop.ui.screens.HomeContent
+import com.puretv.twitch.desktop.ui.screens.LoginContent
+import com.puretv.twitch.desktop.ui.screens.SearchContent
+import com.puretv.twitch.desktop.ui.screens.SettingsContent
+import com.puretv.twitch.desktop.ui.screens.StreamContent
+import com.puretv.twitch.desktop.ui.theme.PureTvDesktopTheme
+import com.puretv.twitch.desktop.ui.theme.PureTvTheme
+import com.puretv.twitch.desktop.ui.theme.ThemeVariant
+import java.awt.MouseInfo
+import java.awt.Window as AwtWindow
+import org.koin.core.Koin
+
+enum class Destination(val label: String, val icon: ImageVector) {
+    HOME("Home", Icons.Filled.Home),
+    BROWSE("Browse", Icons.Filled.Tv),
+    SEARCH("Search", Icons.Filled.Search),
+    SETTINGS("Settings", Icons.Filled.Settings),
+    ACCOUNT("Account", Icons.AutoMirrored.Filled.Login),
+}
+
+private sealed class Route {
+    data object Top : Route()
+    data class Channel(val login: String) : Route()
+    data class Stream(val login: String) : Route()
+}
+
+@Composable
+fun App(koin: Koin, windowState: WindowState, onClose: () -> Unit, awtWindow: AwtWindow) {
+    setSingletonImageLoaderFactory { context ->
+        ImageLoader.Builder(context)
+            .components { add(KtorNetworkFetcherFactory()) }
+            .crossfade(true)
+            .build()
+    }
+
+    val settingsStore = remember { koin.get<DesktopSettingsStore>() }
+    val settings by settingsStore.settings.collectAsState()
+    val themeVariant = ThemeVariant.fromKey(settings.theme)
+    val shell = rememberAppShellController(windowState, awtWindow)
+
+    val updateManager = remember { koin.get<UpdateManager>() }
+    val updateState by updateManager.state.collectAsState()
+    var updateDismissed by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { updateManager.checkForUpdates() }
+
+    PureTvDesktopTheme(variant = themeVariant) {
+        CompositionLocalProvider(LocalAppShell provides shell) {
+            var destination by remember { mutableStateOf(Destination.HOME) }
+            var route by remember { mutableStateOf<Route>(Route.Top) }
+            val c = PureTvTheme.colors
+
+            Surface(modifier = Modifier.fillMaxSize(), color = c.background) {
+                Column(modifier = Modifier.fillMaxSize()) {
+                    if (shell.playerMode != PlayerMode.FULLSCREEN) {
+                        CustomTitleBar(shell = shell, onClose = onClose, awtWindow = awtWindow)
+                        Box(Modifier.fillMaxWidth().height(1.dp).background(c.hairline))
+                        if (!updateDismissed) {
+                            UpdateBanner(
+                                state = updateState,
+                                onUpdate = {
+                                    val s = updateState
+                                    if (s is UpdateState.Available) updateManager.downloadAndInstall(s.info, onClose)
+                                    else updateManager.checkForUpdates(force = true)
+                                },
+                                onDismiss = { updateDismissed = true },
+                            )
+                        }
+                    }
+
+                    Row(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                        AnimatedVisibility(
+                            visible = !shell.isImmersive,
+                            enter = slideInHorizontally { -it },
+                            exit = slideOutHorizontally { -it },
+                        ) {
+                            NavigationSidebar(
+                                selected = destination,
+                                onSelect = {
+                                    destination = it
+                                    route = Route.Top
+                                },
+                            )
+                        }
+
+                        Box(modifier = Modifier.fillMaxSize()) {
+                            when (val r = route) {
+                                is Route.Stream -> StreamContent(
+                                    koin = koin,
+                                    channelLogin = r.login,
+                                    onBack = { route = Route.Channel(r.login) },
+                                )
+                                is Route.Channel -> ChannelContent(
+                                    koin = koin,
+                                    channelLogin = r.login,
+                                    onWatch = { route = Route.Stream(r.login) },
+                                    onBack = { route = Route.Top },
+                                )
+                                Route.Top -> when (destination) {
+                                    Destination.HOME -> HomeContent(koin = koin, onOpenChannel = { login -> route = Route.Channel(login) })
+                                    Destination.BROWSE -> BrowseContent(koin = koin)
+                                    Destination.SEARCH -> SearchContent(koin = koin, onOpenChannel = { login -> route = Route.Channel(login) })
+                                    Destination.SETTINGS -> SettingsContent(koin = koin, onExit = onClose)
+                                    Destination.ACCOUNT -> LoginContent(koin = koin)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ── Custom title bar ───────────────────────────────────────────────────────────
+
+@Composable
+private fun CustomTitleBar(shell: AppShellController, onClose: () -> Unit, awtWindow: AwtWindow) {
+    val c = PureTvTheme.colors
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(38.dp)
+            .background(c.background),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        // Drag zone — fills available width to the left of the window buttons.
+        // On the first real drag movement we hand the gesture to Windows via a
+        // native move loop (WindowsNative.startWindowDrag), which gives us Aero
+        // Snap / Snap Layouts for free. A double-click toggles maximize, matching
+        // native title-bar behavior. If the native call is unavailable we fall
+        // back to manual repositioning so the title bar is never "stuck".
+        Row(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxHeight()
+                .padding(start = 12.dp)
+                .pointerInput(awtWindow) {
+                    var lastDownTime = 0L
+                    var manualDrag = false
+                    var winX0 = 0; var winY0 = 0
+                    var ptrX0 = 0; var ptrY0 = 0
+                    awaitPointerEventScope {
+                        while (true) {
+                            val ev = awaitPointerEvent()
+                            val change = ev.changes.firstOrNull()
+                            when (ev.type) {
+                                PointerEventType.Press -> {
+                                    val t = change?.uptimeMillis ?: 0L
+                                    if (t - lastDownTime in 1..400) {
+                                        // Double-click on the caption → maximize/restore.
+                                        shell.toggleMaximize()
+                                        lastDownTime = 0L
+                                        manualDrag = false
+                                    } else {
+                                        lastDownTime = t
+                                        // Hand the drag to the OS at button-down so Aero
+                                        // Snap engages. startWindowDrag BLOCKS in the OS
+                                        // move loop until the mouse is released *if* it
+                                        // takes over; if it returns almost immediately it
+                                        // didn't engage, so we drive a manual drag instead
+                                        // (the bar is never left unresponsive).
+                                        val startNs = System.nanoTime()
+                                        val native = WindowsNative.startWindowDrag(awtWindow)
+                                        val blockedMs = (System.nanoTime() - startNs) / 1_000_000
+                                        if (!native || blockedMs < 60) {
+                                            val p = MouseInfo.getPointerInfo().location
+                                            winX0 = awtWindow.location.x; winY0 = awtWindow.location.y
+                                            ptrX0 = p.x; ptrY0 = p.y
+                                            manualDrag = true
+                                        } else {
+                                            manualDrag = false
+                                        }
+                                    }
+                                }
+                                PointerEventType.Move -> if (manualDrag && change?.pressed == true) {
+                                    val p = MouseInfo.getPointerInfo().location
+                                    awtWindow.setLocation(winX0 + p.x - ptrX0, winY0 + p.y - ptrY0)
+                                }
+                                PointerEventType.Release -> { manualDrag = false }
+                            }
+                        }
+                    }
+                },
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(20.dp)
+                    .background(c.twitchPurple, RoundedCornerShape(5.dp)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text("P", color = Color.White, fontWeight = FontWeight.ExtraBold, fontSize = 11.sp)
+            }
+            Spacer(Modifier.width(8.dp))
+            Text("PureTV for Twitch", color = c.textSecondary, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+        }
+
+        // Window control buttons — outside the drag zone so clicks are not swallowed
+        WinButton(onClick = { shell.minimize() }) { MinimizeIcon() }
+        WinButton(onClick = { shell.toggleMaximize() }) { MaximizeIcon(shell.isMaximized) }
+        WinButton(onClick = onClose, isClose = true) {
+            Icon(Icons.Filled.Close, "Close", tint = PureTvTheme.colors.textSecondary, modifier = Modifier.size(14.dp))
+        }
+    }
+}
+
+@Composable
+private fun WinButton(onClick: () -> Unit, isClose: Boolean = false, content: @Composable () -> Unit) {
+    val c = PureTvTheme.colors
+    var hovered by remember { mutableStateOf(false) }
+    Box(
+        modifier = Modifier
+            .width(46.dp)
+            .fillMaxHeight()
+            .background(
+                when {
+                    isClose && hovered -> Color(0xFFC42B1C)
+                    hovered -> c.surfaceHover
+                    else -> Color.Transparent
+                },
+            )
+            .pointerInput(Unit) {
+                awaitPointerEventScope {
+                    while (true) {
+                        val ev = awaitPointerEvent()
+                        hovered = when (ev.type) {
+                            PointerEventType.Enter -> true
+                            PointerEventType.Exit -> false
+                            else -> hovered
+                        }
+                    }
+                }
+            }
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) { content() }
+}
+
+@Composable
+private fun MinimizeIcon() {
+    Box(Modifier.size(width = 10.dp, height = 1.dp).background(PureTvTheme.colors.textSecondary))
+}
+
+@Composable
+private fun MaximizeIcon(isMaximized: Boolean) {
+    val color = PureTvTheme.colors.textSecondary
+    Box(
+        Modifier.size(10.dp).drawBehind {
+            val s = Stroke(width = 1.5.dp.toPx())
+            val r = CornerRadius(1.dp.toPx())
+            if (isMaximized) {
+                val pad = 2.dp.toPx()
+                drawRoundRect(color, topLeft = Offset(pad, 0f), size = Size(size.width - pad, size.height - pad), cornerRadius = r, style = s)
+                drawRoundRect(color, topLeft = Offset(0f, pad), size = Size(size.width - pad, size.height - pad), cornerRadius = r, style = s)
+            } else {
+                drawRoundRect(color, cornerRadius = r, style = s)
+            }
+        },
+    )
+}
+
+// ── Navigation sidebar ─────────────────────────────────────────────────────────
+
+@Composable
+private fun NavigationSidebar(selected: Destination, onSelect: (Destination) -> Unit) {
+    val c = PureTvTheme.colors
+    Column(
+        modifier = Modifier
+            .fillMaxHeight()
+            .width(200.dp)
+            .background(c.surface),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 18.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(30.dp)
+                    .background(c.twitchPurple, RoundedCornerShape(8.dp)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text("P", color = Color.White, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyLarge)
+            }
+            Text(
+                "PureTV",
+                color = c.textPrimary,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(start = 10.dp),
+            )
+        }
+
+        Box(Modifier.fillMaxWidth().height(1.dp).background(c.hairline))
+        Spacer(Modifier.height(6.dp))
+
+        Destination.entries.forEach { dest ->
+            NavItem(icon = dest.icon, label = dest.label, selected = selected == dest, onClick = { onSelect(dest) })
+        }
+    }
+}
+
+@Composable
+private fun NavItem(icon: ImageVector, label: String, selected: Boolean, onClick: () -> Unit) {
+    val c = PureTvTheme.colors
+    var hovered by remember { mutableStateOf(false) }
+
+    Box(modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 2.dp)) {
+        if (selected) {
+            Box(
+                modifier = Modifier
+                    .width(3.dp)
+                    .height(28.dp)
+                    .align(Alignment.CenterStart)
+                    .background(c.twitchPurple, RoundedCornerShape(topEnd = 4.dp, bottomEnd = 4.dp)),
+            )
+        }
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 10.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(when { selected -> c.twitchPurple.copy(alpha = 0.14f); hovered -> c.surfaceHover; else -> Color.Transparent })
+                .pointerInput(Unit) {
+                    awaitPointerEventScope {
+                        while (true) {
+                            val ev = awaitPointerEvent()
+                            hovered = when (ev.type) { PointerEventType.Enter -> true; PointerEventType.Exit -> false; else -> hovered }
+                        }
+                    }
+                }
+                .clickable(onClick = onClick)
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(icon, label, tint = if (selected) c.twitchPurpleLight else c.textSecondary, modifier = Modifier.size(18.dp))
+            Text(
+                label,
+                color = if (selected) c.textPrimary else c.textSecondary,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                modifier = Modifier.padding(start = 10.dp),
+            )
+        }
+    }
+}

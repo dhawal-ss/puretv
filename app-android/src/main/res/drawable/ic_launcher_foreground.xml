@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Placeholder adaptive-icon foreground — a simple "P" monogram in the PureTV
+  purple on a transparent background. This is intentionally minimal (no
+  image-generation tooling is available in this build environment); replace
+  with branded vector/raster artwork before release (Section 9 — design system).
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#9B5DE5"
+        android:pathData="M38,30 h22 a16,16 0 0 1 0,32 h-10 v16 h-12 z M50,42 v8 h10 a4,4 0 0 0 0,-8 z" />
+</vector>
