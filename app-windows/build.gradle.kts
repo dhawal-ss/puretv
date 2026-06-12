@@ -158,6 +158,15 @@ compose.desktop {
     application {
         mainClass = "com.puretv.twitch.desktop.MainKt"
 
+        // Disable ProGuard/R8 for the release distributable. This app relies on
+        // reflection (Koin, Ktor, kotlinx.serialization), where minification is
+        // both risky at runtime and fails the build outright on optional missing
+        // classes (Netty's lz4 / bouncycastle / tcnative). The bundle is mostly
+        // VLC anyway, so the size saving would be negligible.
+        buildTypes.release.proguard {
+            isEnabled.set(false)
+        }
+
         nativeDistributions {
             // Extra resources directory: files in resources/windows/ are copied
             // into the distributable's resources/ folder and available at runtime
