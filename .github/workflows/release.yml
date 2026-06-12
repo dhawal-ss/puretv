@@ -36,6 +36,10 @@ jobs:
   android:
     name: Android phone/tablet + TV (release APK/AAB)
     runs-on: ubuntu-latest
+    # Non-blocking: the Android apps aren't being distributed yet (a KSP/Room
+    # build issue is tracked separately). A failure here must not hold back the
+    # Windows release.
+    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
 
@@ -97,10 +101,16 @@ jobs:
       - name: Install WiX Toolset 3.x (jpackage needs it to build the MSI/EXE)
         run: choco install wixtoolset --yes --no-progress
 
-      - name: Bundle VLC + package MSI + EXE installers
+      # bundleVlc and packaging must be SEPARATE Gradle invocations: in one
+      # invocation, jpackage's prepareAppResources reads the directory bundleVlc
+      # writes to, which Gradle 8.10 rejects as an undeclared task dependency.
+      - name: Bundle VLC into app resources
+        run: .\gradlew.bat :app-windows:bundleVlc
+
+      - name: Package MSI + EXE installers
         env:
           TWITCH_CLIENT_SECRET: ${{ secrets.TWITCH_CLIENT_SECRET }}
-        run: .\gradlew.bat :app-windows:bundleVlc :app-windows:packageReleaseMsi :app-windows:packageReleaseExe
+        run: .\gradlew.bat :app-windows:packageReleaseMsi :app-windows:packageReleaseExe
 
       # --- Code signing (disabled until a cert exists — see header note #2) --
       # - name: Sign installers
@@ -152,7 +162,9 @@ jobs:
 
   draft-release:
     name: Create draft GitHub Release
-    needs: [android, windows, proxy-image]
+    # Only the Windows installer gates the release; Android is non-blocking and
+    # the proxy image publishes itself to GHCR independently.
+    needs: [windows]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
     steps:
