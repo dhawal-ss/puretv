@@ -30,6 +30,15 @@ class StreamRepository(
     suspend fun streamsForChannels(logins: List<String>): List<StreamInfo> =
         if (logins.isEmpty()) emptyList() else apiClient.getStreams(userLogins = logins)
 
+    /**
+     * Live streams in a single category (game), ordered by viewer count — backs
+     * the Browse → Category screen. Deliberately does NOT touch [topStreams]:
+     * unlike [refreshTopStreams], this is a one-off read so Home's cached top
+     * list is never overwritten when the user drills into a category.
+     */
+    suspend fun streamsForGame(gameId: String, first: Int = 40): List<StreamInfo> =
+        if (gameId.isBlank()) emptyList() else apiClient.getStreams(gameIds = listOf(gameId), first = first)
+
     suspend fun resolvePlayableStream(
         channelLogin: String,
         oauthToken: String? = null,

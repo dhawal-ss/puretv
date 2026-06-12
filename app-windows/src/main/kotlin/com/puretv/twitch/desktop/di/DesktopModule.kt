@@ -7,6 +7,7 @@ import com.puretv.twitch.desktop.player.LocalStreamProxy
 import com.puretv.twitch.desktop.player.VlcPlayer
 import com.puretv.twitch.desktop.update.UpdateManager
 import com.puretv.twitch.desktop.ui.BrowseViewModel
+import com.puretv.twitch.desktop.ui.CategoryViewModel
 import com.puretv.twitch.desktop.ui.ChannelViewModel
 import com.puretv.twitch.desktop.ui.HomeViewModel
 import com.puretv.twitch.desktop.ui.LoginViewModel
@@ -57,6 +58,8 @@ val desktopModule = module {
     // --- ViewModels (plain factories — see note above) -------------------------
     factory { HomeViewModel(get(), get(), get()) }
     factory { BrowseViewModel(get()) }
+    // Category drill-down takes (gameId, gameName) from the tapped Browse card.
+    factory { (gameId: String, gameName: String) -> CategoryViewModel(gameId, gameName, get()) }
     factory { SearchViewModel(get()) }
     factory { (channelLogin: String) ->
         StreamViewModel(channelLogin, get(), get(), get(), get(), get(), get(), get(), get(), get())

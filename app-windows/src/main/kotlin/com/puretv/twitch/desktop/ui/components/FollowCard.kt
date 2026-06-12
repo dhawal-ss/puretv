@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -60,7 +59,6 @@ fun FollowCard(state: FollowCardState, onClick: () -> Unit, modifier: Modifier =
 
     Column(
         modifier = modifier
-            .width(220.dp)
             .graphicsLayer { scaleX = scale; scaleY = scale }
             .pointerInput(Unit) {
                 awaitPointerEventScope {
