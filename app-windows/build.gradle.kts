@@ -12,7 +12,7 @@ plugins {
 // ── App version (single source of truth) ─────────────────────────────────────
 // Drives both the MSI `packageVersion` AND the generated AppBuildConfig the
 // in-app updater compares against GitHub Releases — so the two can never drift.
-val appVersion = "1.0.0"
+val appVersion = "1.0.1"
 
 val generateAppBuildConfig by tasks.registering {
     val outDir = layout.buildDirectory.dir("generated/buildconfig/kotlin")
@@ -168,6 +168,14 @@ compose.desktop {
         }
 
         nativeDistributions {
+            // Bundle the FULL JDK module set into the runtime image. jlink's
+            // automatic module detection misses java.net.http (used by the
+            // updater) and likely other reflectively-loaded modules (Ktor/Netty
+            // TLS, crypto), which makes the packaged app die at launch with
+            // "Failed to launch JVM" / NoClassDefFoundError. The size cost is
+            // small next to the bundled VLC.
+            includeAllModules = true
+
             // Extra resources directory: files in resources/windows/ are copied
             // into the distributable's resources/ folder and available at runtime
             // via System.getProperty("compose.application.resources.dir").
