@@ -91,10 +91,13 @@ jobs:
       - name: Cache Gradle
         uses: gradle/actions/setup-gradle@v3
 
-      - name: Package MSI + EXE installers
+      - name: Install VLC (bundled into the installer so users need nothing extra)
+        run: choco install vlc --yes --no-progress
+
+      - name: Bundle VLC + package MSI + EXE installers
         env:
           TWITCH_CLIENT_SECRET: ${{ secrets.TWITCH_CLIENT_SECRET }}
-        run: ./gradlew :app-windows:packageReleaseMsi :app-windows:packageReleaseExe
+        run: ./gradlew :app-windows:bundleVlc :app-windows:packageReleaseMsi :app-windows:packageReleaseExe
 
       # --- Code signing (disabled until a cert exists — see header note #2) --
       # - name: Sign installers

@@ -1,111 +1,72 @@
 <div align="center">
 
-# 📺 PureTV for Twitch
+# PureTV
 
-### Ad-free Twitch viewing for Windows — clean, fast, and yours.
+A clean, ad-free way to watch live streams on Windows.
 
-[![Download PureTV for Windows](https://img.shields.io/badge/⬇%20Download%20PureTV-Windows%20Installer-9147FF?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/dhawal-ss/puretv/releases/latest)
+[![Download PureTV](https://img.shields.io/badge/Download%20PureTV-Windows%20Installer-7C3AED?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/dhawal-ss/puretv/releases/latest)
 
-**[👉 Click here to download the latest version](https://github.com/dhawal-ss/puretv/releases/latest)**
-
-*Unaffiliated with Twitch Interactive, Inc. — an independent community project.*
+**[Click here to download the latest version](https://github.com/dhawal-ss/puretv/releases/latest)**
 
 </div>
 
 ---
 
-## ⬇️ How to install (takes about a minute)
+## Install (about a minute)
 
-1. Click the big **Download PureTV** button above.
-2. On the page that opens, under **Assets**, click the file ending in **`.msi`**.
+1. Click the Download PureTV button above.
+2. On the page that opens, under "Assets", click the file that ends in `.msi`.
 3. Open the downloaded file and follow the prompts.
-4. **If Windows shows a blue “Windows protected your PC” screen**, click
-   **More info → Run anyway**. This appears only because the app isn’t
-   code-signed yet — it’s safe to continue.
-5. Launch **PureTV for Twitch** from your Start menu and sign in with Twitch.
+4. If Windows shows a blue "Windows protected your PC" screen, click "More info", then "Run anyway". This only appears because the app is not code-signed yet, and it is safe to continue.
+5. Open PureTV from your Start menu and sign in.
 
-> 💡 **Playback uses VLC.** If video doesn’t start, install the free
-> [VLC media player](https://www.videolan.org/vlc/) and reopen PureTV.
+Everything the app needs is included in the installer, so there is nothing else to set up.
 
-## ✨ What you get
+## What you get
 
-- **Ad-free streams** — mid-roll ads are blocked before the player ever sees
-  them, with a live status pill so you always know it’s working.
-- **Follow your favorites** — hit **Follow** on any channel and it shows up on
-  your Home page, live or offline, so you never have to search again.
-- **Automatic updates** — PureTV checks for new versions on launch and updates
-  itself in one click. No reinstalling.
-- **Live chat** — read and send messages right next to the stream.
-- **Theatre & fullscreen** — proper, native-feeling window controls and Aero Snap.
+- Ad-free playback. Mid-roll ads are filtered out before the player ever sees them, and a small status indicator on the player shows you it is working.
+- Follow your favorites. Add any channel and it shows up on your Home page, live or offline, so you never have to search for it again.
+- Automatic updates. PureTV checks for a new version when it starts and updates itself in one click.
+- Live chat right beside the stream.
+- Real window controls: theatre mode, borderless fullscreen, and snap-to-edge dragging that feels native.
 
-## 🔄 Updating
+## Updating
 
-You don’t have to do anything — when a new version is released, PureTV shows an
-**“Update available”** banner at the top. Click **Update** and it installs the
-new version and relaunches. You can also check manually in **Settings → About**.
+You do not have to do anything. When a new version is out, PureTV shows an "Update available" banner at the top of the window. Click Update and it installs the new version and reopens. You can also check any time under Settings, then About.
 
-## 🛡️ Privacy
+## Privacy
 
-Your Twitch login goes straight to Twitch using standard OAuth — PureTV has no
-servers of its own and never sees your credentials. Tokens are stored
-encrypted on your own machine.
+Your sign-in goes straight to the streaming service using standard OAuth. PureTV runs no servers of its own and never sees your password. Your session is stored encrypted on your own computer.
 
 ---
 
-## 🧑‍💻 For developers
+## For developers
 
-PureTV is a Kotlin Multiplatform monorepo: a shared `core` module plus three
-platform apps (phone/tablet, Android TV, Windows desktop) and an optional Go
-ad-block proxy.
+PureTV is a Kotlin Multiplatform project. A shared `core` module holds the API client, sign-in, ad-block engine, chat, and data models, and each platform app builds its own UI on top. The Windows app uses Compose Multiplatform with VLC for playback.
+
+Run the desktop app (needs JDK 17 and VLC installed):
 
 ```
-PureTVforTwitch/
-├── core/            KMP module — API client, auth, ad-block engine, chat, models
-├── app-android/     Phone & tablet app (Jetpack Compose)
-├── app-tv/          Android TV app (Compose for TV)
-├── app-windows/     Windows desktop app (Compose Multiplatform + VLCJ)
-├── proxy-server/    Self-hosted ad-block proxy (Go) — optional
-└── .github/workflows/  CI + release pipelines
+./gradlew :app-windows:run
 ```
 
-### Build & run the Windows app
+Sign-in needs a client secret, kept in a gitignored `secrets.properties` (copy `secrets.properties.example` and fill in your own).
 
-Prerequisites: **JDK 17**, **Gradle 8.10+** (no wrapper is committed), and
-**VLC** installed.
+Package the installer (this bundles VLC, so the installed app needs nothing extra):
 
-```powershell
-gradle :app-windows:run
+```
+./gradlew :app-windows:bundleVlc :app-windows:packageReleaseMsi
 ```
 
-### Package an installer
+To cut a release, bump `appVersion` in `app-windows/build.gradle.kts`, commit, then tag and push, for example:
 
-```powershell
-gradle :app-windows:bundleVlc          # bundle VLC into the installer (run once)
-gradle :app-windows:packageReleaseMsi  # produces the .msi under app-windows/build/compose/binaries
+```
+git tag v1.0.1
+git push origin v1.0.1
 ```
 
-### How ad-blocking works
+CI builds the installers and opens a draft release. Publish it, and the in-app updater picks it up on everyone's next launch.
 
-A three-tier fallback chain (`core/.../adblock/AdBlockEngine.kt`):
+## License
 
-1. **Proxy router** — the small stream playlist is fetched through a region
-   Twitch doesn’t ad-stitch; video segments still come straight from Twitch’s CDN.
-2. **Manifest rewrite** — strips Twitch’s stitched-ad markers from the playlist
-   locally if the proxy is unavailable.
-3. **Black-frame fallback** — at the player layer, mutes and overlays a notice
-   if an ad segment ever slips through.
-
-### Releasing a new version
-
-1. Bump `appVersion` in `app-windows/build.gradle.kts`.
-2. Commit, then tag: `git tag vX.Y.Z && git push origin vX.Y.Z`.
-3. CI builds the installers and opens a **draft** GitHub Release.
-4. **Publish** the draft — the in-app updater only sees published releases.
-
-See `.github/workflows/release.yml` for the full pipeline, and
-`DESIGN_SYSTEM.md` for the shared visual language.
-
-## 📄 License
-
-Not yet specified — add one (MIT/Apache-2.0 are common for community tooling)
-before a wider public release.
+PureTV is open source under the MIT License (see [LICENSE](LICENSE)). Contributions are very welcome, so feel free to open an issue or a pull request.
