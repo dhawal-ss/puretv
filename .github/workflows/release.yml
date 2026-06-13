@@ -130,6 +130,26 @@ jobs:
           name: windows-release
           path: artifacts/windows-release
 
+      - name: Resolve version (strip leading v from the tag)
+        id: vars
+        run: |
+          REF_NAME="${{ github.ref_name }}"
+          echo "version=${REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      # Maintainer pre-publish checklist goes to the Actions run summary, NOT the
+      # release body — so it never reaches end users even if the draft is
+      # published without edits. The `body` below is written to be safe to
+      # publish as-is.
+      - name: Pre-publish checklist (maintainer only — shown in the Actions run)
+        run: |
+          cat >> "$GITHUB_STEP_SUMMARY" <<'EOF'
+          ### Before publishing this draft
+          - [ ] Windows installer runs end-to-end on a clean VM
+          - [ ] `ghcr.io/${{ github.repository_owner }}/puretv-twitch-proxy:${{ github.ref_name }}` pulls and serves `/health`
+          - [ ] Android APKs install + are signed (once signing is configured — see this file's header)
+          - [ ] Eyeball the auto-generated "What's Changed" notes on the draft
+          EOF
+
       - name: Create draft release with artifacts
         uses: softprops/action-gh-release@v2
         with:
@@ -137,11 +157,13 @@ jobs:
           generate_release_notes: true
           files: |
             artifacts/windows-release/**/*.exe
+          # User-facing notes. GitHub appends the auto-generated "What's Changed"
+          # / Full Changelog below this. Keep it short and free of internal TODOs.
           body: |
             ## PureTV for Twitch ${{ github.ref_name }}
 
-            **Before publishing this draft:**
-            - [ ] Confirm Android APKs install on a real device/emulator (and are signed, once signing is configured — see release.yml header)
-            - [ ] Confirm the Windows installer runs end-to-end on a clean VM (VLC must be installed separately — see root README "Setup")
-            - [ ] Confirm `ghcr.io/${{ github.repository_owner }}/puretv-twitch-proxy:${{ github.ref_name }}` pulls and serves `/health`
-            - [ ] Update CHANGELOG / release notes below as needed
+            Download **PureTV-Setup-${{ steps.vars.outputs.version }}.exe** below and run it. The app launches automatically when the install finishes. Everything the app needs is included — no separate VLC install required.
+
+            If Windows shows a SmartScreen warning, click **More info → Run anyway** (the app is not code-signed yet).
+
+            Already have an earlier version? You can uninstall it first from **Add or remove programs**, or just install over it.
