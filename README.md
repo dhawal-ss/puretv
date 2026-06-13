@@ -15,7 +15,7 @@ A clean, ad-free way to watch live streams on Windows.
 ## Install (about a minute)
 
 1. Click the Download PureTV button above.
-2. On the page that opens, under "Assets", click the file that ends in `.msi`.
+2. On the page that opens, under "Assets", click the file that ends in `.exe`.
 3. Open the downloaded file and follow the prompts.
 4. If Windows shows a blue "Windows protected your PC" screen, click "More info", then "Run anyway". This only appears because the app is not code-signed yet, and it is safe to continue.
 5. Open PureTV from your Start menu and sign in.
