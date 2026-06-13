@@ -144,7 +144,7 @@ class UpdateManager {
     }
 
     private fun launchInstaller(installer: File) {
-        val exe = ProcessHandle.current().info().command().orElse(null)
+        val exe = resolveAppExecutable()
         val script = File(installer.parentFile, "apply-update.bat")
         // Quoting lives INSIDE the .bat (paths can contain spaces); we invoke the
         // bat by path so cmd never mangles quotes. `timeout` lets this process
@@ -159,11 +159,46 @@ class UpdateManager {
                     // Inno Setup installer: silent in-place update, no prompts.
                     appendLine("\"${installer.absolutePath}\" /VERYSILENT /SUPPRESSMSGBOXES /NORESTART")
                 }
-                if (exe != null) appendLine("start \"\" \"$exe\"")
+                if (exe != null) {
+                    // Relaunch the freshly-installed app. The installer upgrades
+                    // in place (same {app} dir — see installer/puretv.iss), so this
+                    // path is still valid after the silent install completes.
+                    appendLine("start \"\" \"$exe\"")
+                }
             },
         )
         // `start "" /min "<bat>"` spawns an independent process tree that survives
         // our exit; Java quotes the bat path for us.
         ProcessBuilder("cmd.exe", "/c", "start", "", "/min", script.absolutePath).start()
+    }
+
+    /**
+     * Resolves the running app's launcher .exe so the post-update batch can
+     * relaunch it. The previous build relied solely on
+     * `ProcessHandle.current().command()` — a JDK `Optional` that comes back
+     * *empty* on some JVMs/launchers. When empty, no relaunch line was written,
+     * so the app silently shut down after every update and never reopened.
+     *
+     * Resolution order, most-reliable first:
+     *   1. `jpackage.app-path` — set by jpackage launchers (JDK 18+) to the exe's
+     *      absolute path. Stable across the in-place upgrade.
+     *   2. Derived from the packaged layout: `compose.application.resources.dir`
+     *      points at `<install>\app\resources`, so the launcher sits two levels
+     *      up as `<install>\$LAUNCHER_EXE_NAME`. JDK-version independent.
+     *   3. `ProcessHandle.current().command()` — last-ditch fallback for dev.
+     */
+    private fun resolveAppExecutable(): String? {
+        System.getProperty("jpackage.app-path")?.takeIf { it.isNotBlank() }?.let { return it }
+        System.getProperty("compose.application.resources.dir")?.let { res ->
+            val install = File(res).parentFile?.parentFile
+            val launcher = install?.let { File(it, LAUNCHER_EXE_NAME) }
+            if (launcher != null && launcher.exists()) return launcher.absolutePath
+        }
+        return ProcessHandle.current().info().command().orElse(null)
+    }
+
+    private companion object {
+        /** jpackage launcher name — derives from build.gradle.kts `packageName`. */
+        const val LAUNCHER_EXE_NAME = "PureTV for Twitch.exe"
     }
 }

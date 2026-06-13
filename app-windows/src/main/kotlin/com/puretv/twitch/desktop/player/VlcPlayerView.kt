@@ -65,6 +65,13 @@ fun VlcPlayerView(
     val panel = remember {
         JPanel(BorderLayout()).apply {
             background = Color.BLACK
+            // Neither the Canvas (above) nor its Swing wrapper may accept keyboard
+            // focus. If AWT ever routes focus into this interop hierarchy, Compose's
+            // Skia layer stops receiving keys — the mechanism behind the old
+            // "stuck in fullscreen, F/Esc dead" bug. The window-level
+            // KeyEventDispatcher in StreamContent is the primary guard; this is
+            // belt-and-suspenders so focus never lands here in the first place.
+            isFocusable = false
             add(canvas, BorderLayout.CENTER)
         }
     }
