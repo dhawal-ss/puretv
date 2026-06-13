@@ -1,5 +1,6 @@
 package com.puretv.twitch.desktop
 
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.WindowState
@@ -8,9 +9,11 @@ import androidx.compose.ui.window.rememberWindowState
 import com.puretv.twitch.core.di.coreModule
 import com.puretv.twitch.desktop.data.DesktopSettingsStore
 import com.puretv.twitch.desktop.di.desktopModule
+import com.puretv.twitch.desktop.platform.WindowsNative
 import com.puretv.twitch.desktop.player.LocalStreamProxy
 import com.puretv.twitch.desktop.player.VlcPlayer
 import com.puretv.twitch.desktop.ui.App
+import javax.swing.SwingUtilities
 import kotlinx.coroutines.runBlocking
 import org.koin.core.context.GlobalContext.startKoin
 import org.koin.dsl.koinApplication
@@ -43,6 +46,15 @@ fun main() {
             icon = appIcon,
             undecorated = true,
         ) {
+            // Re-enable Windows-native window management (Aero Snap, Snap Layouts,
+            // Win+Arrow, edge-resize) on our undecorated frame. Runs once the
+            // window is realized; one EDT-deferred retry covers the rare case
+            // where the HWND isn't bound yet at first composition.
+            LaunchedEffect(Unit) {
+                if (!WindowsNative.enableBorderlessSnap(window)) {
+                    SwingUtilities.invokeLater { WindowsNative.enableBorderlessSnap(window) }
+                }
+            }
             // `window` is FrameWindowScope.window (ComposeWindow extends java.awt.Frame).
             // Pass it to App so the custom title bar can move the window without
             // relying on LocalWindow (which is library-internal in CMP 1.7).

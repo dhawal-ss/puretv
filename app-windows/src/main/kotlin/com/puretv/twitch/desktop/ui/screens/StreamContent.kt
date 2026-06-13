@@ -10,7 +10,6 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -49,6 +48,7 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -60,16 +60,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.input.key.KeyEventType
-import androidx.compose.ui.input.key.key
-import androidx.compose.ui.input.key.onPreviewKeyEvent
-import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.TextStyle
@@ -93,6 +87,9 @@ import kotlinx.coroutines.launch
 import org.koin.core.Koin
 import org.koin.core.parameter.parametersOf
 import java.awt.Color as AwtColor
+import java.awt.KeyEventDispatcher
+import java.awt.KeyboardFocusManager
+import java.awt.event.KeyEvent
 
 private val CHAT_WIDTH = 360.dp
 
@@ -145,33 +142,45 @@ fun StreamContent(koin: Koin, channelLogin: String, onBack: () -> Unit) {
             }
         }
     }
-    val focusRequester = remember { FocusRequester() }
-    LaunchedEffect(mode) {
-        // Re-assert keyboard focus on every mode change. Entering fullscreen
-        // resizes the heavyweight VLC surface and can pull AWT focus toward it;
-        // without re-requesting, the F/Esc shortcuts would die and the user
-        // would be trapped in fullscreen with no way out but Task Manager.
-        focusRequester.requestFocus()
-        resetControls()
+    LaunchedEffect(mode) { resetControls() }
+
+    // Player hotkeys (F/T/C/Space/Esc) are handled at the AWT KeyboardFocusManager
+    // level, NOT via Compose's onKeyEvent. The heavyweight VLC video Canvas is a
+    // native window that can pull keyboard focus off Compose's Skia layer; once
+    // that happened the Compose key handler stopped firing and the user was
+    // trapped in fullscreen with F/Esc dead (the "stuck fullscreen" bug). A
+    // KeyEventDispatcher sees every key the focused window receives regardless of
+    // whether Compose or the Canvas currently holds focus, so the shortcuts can
+    // never die. We skip it while the chat input is focused so typing — including
+    // spaces and the letters f/t/c — still reaches the chat box.
+    var chatInputFocused by remember { mutableStateOf(false) }
+    val latestMode = rememberUpdatedState(mode)
+    val latestChatFocused = rememberUpdatedState(chatInputFocused)
+    DisposableEffect(Unit) {
+        val dispatcher = KeyEventDispatcher { e ->
+            if (e.id != KeyEvent.KEY_PRESSED) return@KeyEventDispatcher false
+            if (latestChatFocused.value) return@KeyEventDispatcher false
+            val m = latestMode.value
+            when (e.keyCode) {
+                KeyEvent.VK_F -> { shell.setPlayerMode(if (m == PlayerMode.FULLSCREEN) PlayerMode.DEFAULT else PlayerMode.FULLSCREEN); true }
+                KeyEvent.VK_T -> { shell.setPlayerMode(if (m == PlayerMode.THEATER) PlayerMode.DEFAULT else PlayerMode.THEATER); true }
+                KeyEvent.VK_C -> { shell.toggleChat(); true }
+                KeyEvent.VK_SPACE -> { viewModel.togglePlayPause(); true }
+                // Esc only acts when immersive, so it doesn't swallow a stray Esc
+                // elsewhere; in DEFAULT mode it passes through untouched.
+                KeyEvent.VK_ESCAPE -> if (m != PlayerMode.DEFAULT) { shell.exitImmersive(); true } else false
+                else -> false
+            }
+        }
+        val kfm = KeyboardFocusManager.getCurrentKeyboardFocusManager()
+        kfm.addKeyEventDispatcher(dispatcher)
+        onDispose { kfm.removeKeyEventDispatcher(dispatcher) }
     }
 
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(Color.Black)
-            .focusRequester(focusRequester)
-            .focusable()
-            .onPreviewKeyEvent { e ->
-                if (e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
-                when (e.key) {
-                    Key.F -> { shell.setPlayerMode(if (mode == PlayerMode.FULLSCREEN) PlayerMode.DEFAULT else PlayerMode.FULLSCREEN); true }
-                    Key.T -> { shell.setPlayerMode(if (mode == PlayerMode.THEATER) PlayerMode.DEFAULT else PlayerMode.THEATER); true }
-                    Key.C -> { shell.toggleChat(); true }
-                    Key.Spacebar -> { viewModel.togglePlayPause(); true }
-                    Key.Escape -> { shell.exitImmersive(); true }
-                    else -> false
-                }
-            }
             .pointerInput(mode) {
                 // Only genuine cursor movement counts as "activity". When the
                 // controls auto-hide in THEATER/FULLSCREEN, the player Box grows
@@ -304,7 +313,10 @@ fun StreamContent(koin: Koin, channelLogin: String, onBack: () -> Unit) {
                         }
                         Box(Modifier.fillMaxWidth().height(1.dp).background(c.hairline))
                         ChatMessageList(messages = state.chatMessages, modifier = Modifier.weight(1f))
-                        ChatInputBar(onSend = viewModel::sendChatMessage)
+                        ChatInputBar(
+                            onSend = viewModel::sendChatMessage,
+                            onFocusChanged = { chatInputFocused = it },
+                        )
                     }
                 }
             }
@@ -521,7 +533,7 @@ private fun ChatMessageRow(message: ChatMessage) {
 }
 
 @Composable
-private fun ChatInputBar(onSend: (String) -> Unit) {
+private fun ChatInputBar(onSend: (String) -> Unit, onFocusChanged: (Boolean) -> Unit = {}) {
     val c = PureTvTheme.colors
     var text by remember { mutableStateOf("") }
     Row(
@@ -542,7 +554,11 @@ private fun ChatInputBar(onSend: (String) -> Unit) {
                 singleLine = true,
                 textStyle = TextStyle(color = c.textPrimary, fontSize = MaterialTheme.typography.bodyMedium.fontSize),
                 cursorBrush = SolidColor(c.twitchPurple),
-                modifier = Modifier.fillMaxWidth(),
+                // Report focus up so the player-hotkey dispatcher stands down while
+                // the user is typing (otherwise f/t/c/space would be eaten).
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .onFocusChanged { onFocusChanged(it.isFocused) },
             )
         }
         IconButton(onClick = {

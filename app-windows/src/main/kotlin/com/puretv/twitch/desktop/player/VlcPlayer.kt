@@ -209,10 +209,17 @@ class VlcPlayer {
     /** [volume] is 0–100, matching VLC's native scale (Section 8.4 volume slider). */
     fun setVolume(volume: Int) {
         val mp = mediaPlayer ?: return
-        SwingUtilities.invokeLater {
-            mp.audio().setVolume(volume.coerceIn(0, 100))
-            _status.update { it.copy(volume = volume.coerceIn(0, 100)) }
-        }
+        val v = volume.coerceIn(0, 100)
+        // INSTANT volume — do NOT marshal through SwingUtilities.invokeLater.
+        // The slider's onValueChange already runs on the EDT, so invokeLater only
+        // *re-queued* this work behind whatever AWT repaint/resize tasks the
+        // heavyweight VLC video surface had pending — a backlog that grew to the
+        // ~2s lag users reported while a stream was playing. Neither call needs
+        // the EDT: libvlc_audio_set_volume is thread-safe, and MutableStateFlow
+        // updates are safe from any thread (see class header). Publishing the UI
+        // state first keeps the slider glued to the cursor.
+        _status.update { it.copy(volume = v) }
+        runCatching { mp.audio().setVolume(v) }
     }
 
     fun release() {
