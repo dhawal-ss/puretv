@@ -60,6 +60,7 @@ import com.puretv.twitch.desktop.data.DesktopSettingsStore
 import com.puretv.twitch.desktop.platform.WindowsNative
 import com.puretv.twitch.desktop.update.UpdateManager
 import com.puretv.twitch.desktop.update.UpdateState
+import com.puretv.twitch.desktop.ui.components.Kicker
 import com.puretv.twitch.desktop.ui.components.UpdateBanner
 import com.puretv.twitch.desktop.ui.screens.BrowseContent
 import com.puretv.twitch.desktop.ui.screens.CategoryContent
@@ -71,6 +72,7 @@ import com.puretv.twitch.desktop.ui.screens.SettingsContent
 import com.puretv.twitch.desktop.ui.screens.StreamContent
 import com.puretv.twitch.desktop.ui.theme.PureTvDesktopTheme
 import com.puretv.twitch.desktop.ui.theme.PureTvTheme
+import com.puretv.twitch.desktop.ui.theme.PureTvType
 import com.puretv.twitch.desktop.ui.theme.ThemeVariant
 import java.awt.MouseInfo
 import java.awt.Window as AwtWindow
@@ -278,7 +280,7 @@ private fun CustomTitleBar(shell: AppShellController, onClose: () -> Unit, awtWi
                     .background(c.twitchPurple, RoundedCornerShape(5.dp)),
                 contentAlignment = Alignment.Center,
             ) {
-                Text("P", color = Color.White, fontWeight = FontWeight.ExtraBold, fontSize = 11.sp)
+                Text("P", color = c.background, fontFamily = PureTvType.display, fontWeight = FontWeight.ExtraBold, fontSize = 12.sp)
             }
             Spacer(Modifier.width(8.dp))
             Text("PureTV for Twitch", color = c.textSecondary, fontSize = 12.sp, fontWeight = FontWeight.Medium)
@@ -384,19 +386,20 @@ private fun NavigationSidebar(selected: Destination, onSelect: (Destination) -> 
                     .background(c.twitchPurple, RoundedCornerShape(8.dp)),
                 contentAlignment = Alignment.Center,
             ) {
-                Text("P", color = Color.White, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyLarge)
+                Text("P", color = c.background, fontWeight = FontWeight.ExtraBold, style = MaterialTheme.typography.titleLarge)
             }
             Text(
                 "PureTV",
                 color = c.textPrimary,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.titleLarge,
                 modifier = Modifier.padding(start = 10.dp),
             )
         }
 
         Box(Modifier.fillMaxWidth().height(1.dp).background(c.hairline))
-        Spacer(Modifier.height(6.dp))
+        Spacer(Modifier.height(16.dp))
+        Kicker("Menu", modifier = Modifier.padding(horizontal = 18.dp, vertical = 2.dp))
+        Spacer(Modifier.height(8.dp))
 
         Destination.entries.forEach { dest ->
             NavItem(icon = dest.icon, label = dest.label, selected = selected == dest, onClick = { onSelect(dest) })

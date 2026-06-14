@@ -11,6 +11,22 @@ release notes automatically.
 
 ---
 
+## 1.2.0 — 2026-06-14
+
+A complete visual redesign — PureTV now looks like a proper cinema.
+
+### New
+- **A brand-new editorial look.** Every screen has been redesigned around a refined dark theme, confident typography, and stream thumbnails treated like cover art.
+- **Richer chat.** Messages now show timestamps, moderator/subscriber badges, and emotes.
+
+### Improved
+- **Cleaner player controls**, including an easier quality switcher.
+- **Home, Browse, Channel, Search, Settings and Sign-in** are all more readable, more spacious, and more polished.
+- Crisper buttons, cards, and hover effects throughout.
+
+### Fixed
+- Loading and empty screens no longer show blank gray boxes.
+
 ## 1.1.0 — 2026-06-14
 
 A smoother, more secure sign-in and safer automatic updates.

@@ -9,7 +9,6 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -25,8 +24,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -67,7 +64,6 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.puretv.twitch.core.adblock.AdBlockStatus
@@ -79,14 +75,19 @@ import com.puretv.twitch.desktop.ui.LocalAppShell
 import com.puretv.twitch.desktop.ui.PlayerMode
 import com.puretv.twitch.desktop.ui.StreamViewModel
 import com.puretv.twitch.desktop.ui.rememberDesktopViewModel
+import com.puretv.twitch.desktop.ui.components.AdBlockPill
+import com.puretv.twitch.desktop.ui.components.ChatMessageRow
+import com.puretv.twitch.desktop.ui.components.LiveDot
+import com.puretv.twitch.desktop.ui.components.SegmentedControl
 import com.puretv.twitch.desktop.ui.theme.PureTvMotion
+import com.puretv.twitch.desktop.ui.theme.PureTvShape
 import com.puretv.twitch.desktop.ui.theme.PureTvTheme
+import com.puretv.twitch.desktop.ui.theme.PureTvType
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.koin.core.Koin
 import org.koin.core.parameter.parametersOf
-import java.awt.Color as AwtColor
 import java.awt.KeyEventDispatcher
 import java.awt.KeyboardFocusManager
 import java.awt.event.KeyEvent
@@ -367,11 +368,11 @@ private fun TopBar(
                 overflow = TextOverflow.Ellipsis,
             )
             if (viewerInfo != null) {
-                Text(viewerInfo, style = MaterialTheme.typography.bodyMedium, color = c.textSecondary)
+                Text(viewerInfo, style = PureTvType.data, color = c.textSecondary)
             }
         }
 
-        AdBlockStatusPill(adBlockStatus)
+        AdBlockPill(adBlockStatus)
         Spacer(Modifier.width(4.dp))
 
         IconButton(onClick = onToggleFollow, enabled = canFollow) {
@@ -404,30 +405,6 @@ private fun TopBar(
         }
     }
     Box(Modifier.fillMaxWidth().height(1.dp).background(c.hairline))
-}
-
-// ── Ad-block pill ──────────────────────────────────────────────────────────────
-
-@Composable
-private fun AdBlockStatusPill(status: AdBlockStatus) {
-    val c = PureTvTheme.colors
-    val (label, dotColor) = when (status) {
-        AdBlockStatus.AD_BLOCKED -> "Ads blocked" to c.adBlockGreen
-        AdBlockStatus.AD_FILTERED -> "Ads filtered" to c.adBlockGreen
-        AdBlockStatus.AD_BLOCK_OFF -> "Ad block off" to c.textMuted
-        AdBlockStatus.DISABLED -> "Disabled" to c.textMuted
-        AdBlockStatus.UNKNOWN -> "Checking…" to c.textMuted
-    }
-    Row(
-        modifier = Modifier
-            .border(1.dp, c.hairline, RoundedCornerShape(20.dp))
-            .background(c.surfaceVariant, RoundedCornerShape(20.dp))
-            .padding(horizontal = 10.dp, vertical = 5.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box(Modifier.size(7.dp).background(dotColor, CircleShape))
-        Text(label, color = c.textSecondary, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(start = 6.dp))
-    }
 }
 
 // ── Playback controls ─────────────────────────────────────────────────────────
@@ -474,29 +451,18 @@ private fun PlaybackControls(
                 inactiveTrackColor = c.surfaceVariant,
             ),
         )
-        Spacer(Modifier.width(8.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            StreamQuality.entries.forEach { quality ->
-                QualityPill(quality.label, quality == currentQuality) { onQualitySelected(quality) }
-            }
+        Spacer(Modifier.weight(1f))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            LiveDot(size = 6.dp)
+            Spacer(Modifier.width(6.dp))
+            Text("LIVE", style = PureTvType.data, color = c.textSecondary)
         }
-    }
-}
-
-@Composable
-private fun QualityPill(label: String, selected: Boolean, onClick: () -> Unit) {
-    val c = PureTvTheme.colors
-    Box(
-        modifier = Modifier
-            .border(1.dp, if (selected) c.twitchPurple else c.hairline, RoundedCornerShape(6.dp))
-            .background(if (selected) c.twitchPurple.copy(alpha = 0.2f) else Color.Transparent, RoundedCornerShape(6.dp))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 9.dp, vertical = 5.dp),
-    ) {
-        Text(
-            label,
-            color = if (selected) c.twitchPurpleLight else c.textSecondary,
-            style = MaterialTheme.typography.labelSmall,
+        Spacer(Modifier.width(14.dp))
+        SegmentedControl(
+            options = StreamQuality.entries,
+            selected = currentQuality,
+            label = { it.label },
+            onSelect = onQualitySelected,
         )
     }
 }
@@ -515,20 +481,7 @@ private fun ChatMessageList(messages: List<ChatMessage>, modifier: Modifier = Mo
         verticalArrangement = Arrangement.spacedBy(4.dp),
         contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 8.dp),
     ) {
-        items(messages, key = { it.id }) { ChatMessageRow(it) }
-    }
-}
-
-@Composable
-private fun ChatMessageRow(message: ChatMessage) {
-    val c = PureTvTheme.colors
-    val nameColor = remember(message.color) {
-        runCatching { Color(AwtColor.decode(message.color).rgb or (0xFF shl 24)) }
-            .getOrDefault(c.twitchPurpleLight)
-    }
-    Row {
-        Text(message.displayName, color = nameColor, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
-        Text(": ${message.message}", color = c.textPrimary, style = MaterialTheme.typography.bodyMedium)
+        items(messages, key = { it.id }) { ChatMessageRow(message = it) }
     }
 }
 
@@ -539,9 +492,10 @@ private fun ChatInputBar(onSend: (String) -> Unit, onFocusChanged: (Boolean) -> 
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(10.dp)
-            .background(c.surfaceVariant, RoundedCornerShape(8.dp))
-            .padding(horizontal = 12.dp, vertical = 8.dp),
+            .padding(14.dp)
+            .border(1.dp, c.hairline, PureTvShape.lg)
+            .background(c.surfaceVariant, PureTvShape.lg)
+            .padding(horizontal = 13.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(modifier = Modifier.weight(1f)) {

@@ -14,11 +14,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
@@ -30,13 +28,19 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.puretv.twitch.core.adblock.AdBlockStrategy
 import com.puretv.twitch.core.model.StreamQuality
 import com.puretv.twitch.desktop.ui.SettingsViewModel
+import com.puretv.twitch.desktop.ui.components.ButtonVariant
+import com.puretv.twitch.desktop.ui.components.Kicker
+import com.puretv.twitch.desktop.ui.components.PureButton
+import com.puretv.twitch.desktop.ui.components.SegmentedControl
+import com.puretv.twitch.desktop.ui.components.handCursor
 import com.puretv.twitch.desktop.ui.rememberDesktopViewModel
+import com.puretv.twitch.desktop.ui.theme.PureTvShape
 import com.puretv.twitch.desktop.ui.theme.PureTvTheme
+import com.puretv.twitch.desktop.ui.theme.PureTvType
 import com.puretv.twitch.desktop.ui.theme.ThemeVariant
 import com.puretv.twitch.desktop.ui.theme.themeColors
 import com.puretv.twitch.desktop.update.UpdateManager
@@ -54,15 +58,26 @@ fun SettingsContent(koin: Koin, onExit: () -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(24.dp)
+            .padding(horizontal = 40.dp, vertical = 36.dp)
             .verticalScroll(rememberScrollState()),
     ) {
-        Text("Settings", style = MaterialTheme.typography.headlineMedium, color = c.textPrimary)
+        Kicker("Settings", accent = true)
+        Spacer(Modifier.height(12.dp))
+        Text("Preferences", style = MaterialTheme.typography.displayLarge, color = c.textPrimary)
 
+        // ── Appearance ───────────────────────────────────────────────────────────
         SettingsSection(title = "Appearance") {
             Text("Theme", style = MaterialTheme.typography.titleMedium, color = c.textPrimary)
+            Text(
+                "Choose the cinema base this app paints against.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = c.textMuted,
+            )
             val currentVariant = ThemeVariant.fromKey(state.settings.theme)
-            Row(modifier = Modifier.padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(
+                modifier = Modifier.padding(top = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
                 ThemeVariant.entries.forEach { variant ->
                     ThemeSwatch(
                         variant = variant,
@@ -73,17 +88,26 @@ fun SettingsContent(koin: Koin, onExit: () -> Unit) {
             }
         }
 
+        // ── Playback ─────────────────────────────────────────────────────────────
         SettingsSection(title = "Playback") {
-            Text("Preferred quality", style = MaterialTheme.typography.titleMedium, color = c.textPrimary)
-            Row(modifier = Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                StreamQuality.entries.forEach { quality ->
-                    val selected = state.settings.preferredQuality.equals(quality.name, ignoreCase = true)
-                    QualityChip(label = quality.label, selected = selected, onClick = { viewModel.setPreferredQuality(quality) })
-                }
+            SettingsRow(
+                label = "Preferred quality",
+                description = "The variant PureTV reaches for first when a stream opens.",
+            ) {
+                val selectedQuality = StreamQuality.entries.firstOrNull {
+                    state.settings.preferredQuality.equals(it.name, ignoreCase = true)
+                } ?: StreamQuality.AUTO
+                SegmentedControl(
+                    options = StreamQuality.entries,
+                    selected = selectedQuality,
+                    label = { it.label },
+                    onSelect = { viewModel.setPreferredQuality(it) },
+                )
             }
         }
 
-        SettingsSection(title = "Ad Block") {
+        // ── Ad blocking ──────────────────────────────────────────────────────────
+        SettingsSection(title = "Ad blocking") {
             SettingsRow(
                 label = "Block ads",
                 description = "Routes playback through the local proxy so Twitch's mid-roll ads never reach the player.",
@@ -91,33 +115,56 @@ fun SettingsContent(koin: Koin, onExit: () -> Unit) {
                 Switch(
                     checked = state.settings.adBlockEnabled,
                     onCheckedChange = viewModel::setAdBlockEnabled,
-                    colors = SwitchDefaults.colors(checkedThumbColor = c.twitchPurple),
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = c.background,
+                        checkedTrackColor = c.twitchPurple,
+                        uncheckedThumbColor = c.textSecondary,
+                        uncheckedTrackColor = c.surfaceVariant,
+                        uncheckedBorderColor = c.hairlineStrong,
+                    ),
                 )
             }
-            Text("Strategy", style = MaterialTheme.typography.titleMedium, color = c.textPrimary, modifier = Modifier.padding(top = 12.dp))
-            Row(modifier = Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                AdBlockStrategy.entries.forEach { strategy ->
-                    val selected = state.settings.adBlockStrategy.equals(strategy.name, ignoreCase = true)
-                    QualityChip(
-                        label = strategy.name.lowercase().replaceFirstChar { it.uppercase() },
-                        selected = selected,
-                        onClick = { viewModel.setAdBlockStrategy(strategy) },
-                    )
-                }
+            HairlineDivider()
+            SettingsRow(
+                label = "Strategy",
+                description = "How the proxy neutralises ad segments before they hit VLC.",
+            ) {
+                val selectedStrategy = AdBlockStrategy.entries.firstOrNull {
+                    state.settings.adBlockStrategy.equals(it.name, ignoreCase = true)
+                } ?: AdBlockStrategy.PROXY_PRIMARY
+                SegmentedControl(
+                    options = AdBlockStrategy.entries,
+                    selected = selectedStrategy,
+                    label = { strategyLabel(it) },
+                    onSelect = { viewModel.setAdBlockStrategy(it) },
+                )
             }
             Text(
-                "Local proxy on http://localhost:${state.proxyPort} — VLC streams through it, never directly from Twitch's CDN.",
+                "Local proxy on http://localhost:${state.proxyPort}",
+                style = PureTvType.data,
+                color = c.textTertiary,
+                modifier = Modifier.padding(top = 14.dp),
+            )
+            Text(
+                "VLC streams through it, never directly from Twitch's CDN.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = c.textMuted,
-                modifier = Modifier.padding(top = 12.dp),
+                modifier = Modifier.padding(top = 4.dp),
             )
         }
 
+        // ── Account ──────────────────────────────────────────────────────────────
         SettingsSection(title = "Account") {
             if (state.isLoggedIn) {
-                Text("Signed in as ${state.loginUsername ?: "(unknown)"}", style = MaterialTheme.typography.bodyLarge, color = c.textPrimary)
-                Button(onClick = viewModel::logOut, modifier = Modifier.padding(top = 8.dp)) {
-                    Text("Log out")
+                SettingsRow(
+                    label = "Signed in",
+                    description = state.loginUsername ?: "(unknown)",
+                ) {
+                    PureButton(
+                        text = "Log out",
+                        onClick = viewModel::logOut,
+                        variant = ButtonVariant.Secondary,
+                    )
                 }
             } else {
                 Text(
@@ -128,35 +175,62 @@ fun SettingsContent(koin: Koin, onExit: () -> Unit) {
             }
         }
 
+        // ── About ────────────────────────────────────────────────────────────────
         SettingsSection(title = "About") {
             Text("PureTV for Twitch", style = MaterialTheme.typography.titleMedium, color = c.textPrimary)
-            Text("Version ${updateManager.currentVersion}", style = MaterialTheme.typography.bodyMedium, color = c.textSecondary)
-            Spacer(Modifier.height(12.dp))
+            Text(
+                "v${updateManager.currentVersion}",
+                style = PureTvType.data,
+                color = c.textTertiary,
+                modifier = Modifier.padding(top = 4.dp),
+            )
+            Spacer(Modifier.height(16.dp))
             when (val s = updateState) {
-                UpdateState.Idle -> Button(onClick = { updateManager.checkForUpdates(force = true) }) {
-                    Text("Check for updates")
-                }
+                UpdateState.Idle -> PureButton(
+                    text = "Check for updates",
+                    onClick = { updateManager.checkForUpdates(force = true) },
+                    variant = ButtonVariant.Secondary,
+                )
                 is UpdateState.Available -> {
-                    Text("Update available: ${s.info.version}", style = MaterialTheme.typography.bodyMedium, color = c.twitchPurpleLight)
-                    Spacer(Modifier.height(8.dp))
-                    Button(onClick = { updateManager.downloadAndInstall(s.info, onExit) }) {
-                        Text("Download & install ${s.info.version}")
-                    }
+                    Text(
+                        "Update available: ${s.info.version}",
+                        style = PureTvType.data,
+                        color = c.twitchPurpleLight,
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    PureButton(
+                        text = "Download & install ${s.info.version}",
+                        onClick = { updateManager.downloadAndInstall(s.info, onExit) },
+                    )
                 }
                 is UpdateState.Downloading -> Text(
                     "Downloading update… ${(s.progress * 100).toInt()}%",
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = PureTvType.data,
                     color = c.textSecondary,
                 )
                 is UpdateState.Error -> {
-                    Text("Update failed: ${s.message}", style = MaterialTheme.typography.bodyMedium, color = c.live)
-                    Spacer(Modifier.height(8.dp))
-                    Button(onClick = { updateManager.checkForUpdates(force = true) }) { Text("Retry") }
+                    Text("Update failed: ${s.message}", style = PureTvType.data, color = c.live)
+                    Spacer(Modifier.height(12.dp))
+                    PureButton(
+                        text = "Retry",
+                        onClick = { updateManager.checkForUpdates(force = true) },
+                        variant = ButtonVariant.Secondary,
+                    )
                 }
             }
         }
+
+        Spacer(Modifier.height(24.dp))
     }
 }
+
+/** Humanise an [AdBlockStrategy] enum entry into a control label. */
+private fun strategyLabel(strategy: AdBlockStrategy): String =
+    strategy.name.split('_').joinToString(" ") { word ->
+        word.lowercase().replaceFirstChar { it.uppercase() }
+    }
+
+// ── Theme swatch ──────────────────────────────────────────────────────────────────
 
 @Composable
 private fun ThemeSwatch(variant: ThemeVariant, selected: Boolean, onClick: () -> Unit) {
@@ -164,67 +238,79 @@ private fun ThemeSwatch(variant: ThemeVariant, selected: Boolean, onClick: () ->
     val vc = themeColors[variant]!!
     Column(
         modifier = Modifier
-            .border(
-                width = if (selected) 2.dp else 1.dp,
-                color = if (selected) c.twitchPurple else c.hairline,
-                shape = RoundedCornerShape(10.dp),
-            )
-            .clip(RoundedCornerShape(10.dp))
-            .background(vc.surface)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 10.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(6.dp),
+            .handCursor()
+            .clickable(onClick = onClick),
+        horizontalAlignment = Alignment.Start,
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            Box(Modifier.size(12.dp).background(vc.background, CircleShape))
-            Box(Modifier.size(12.dp).background(vc.twitchPurple, CircleShape))
+        // 76x50 preview split between the variant's canvas and its accent.
+        Box(
+            modifier = Modifier
+                .size(width = 76.dp, height = 50.dp)
+                .clip(PureTvShape.sm)
+                .background(vc.background)
+                .border(
+                    width = if (selected) 2.dp else 1.dp,
+                    color = if (selected) c.twitchPurple else c.hairlineStrong,
+                    shape = PureTvShape.sm,
+                ),
+        ) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(8.dp)
+                    .size(16.dp)
+                    .clip(PureTvShape.xs)
+                    .background(vc.twitchPurple),
+            )
         }
-        Text(variant.displayName, color = vc.textSecondary, style = MaterialTheme.typography.labelSmall)
+        Text(
+            variant.displayName,
+            style = PureTvType.dataSmall,
+            color = if (selected) c.textPrimary else c.textTertiary,
+        )
     }
 }
+
+// ── Section + row scaffolding ──────────────────────────────────────────────────────
 
 @Composable
 private fun SettingsSection(title: String, content: @Composable ColumnScope.() -> Unit) {
     val c = PureTvTheme.colors
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(top = 20.dp)
-            .background(c.surface, RoundedCornerShape(12.dp))
-            .padding(16.dp),
-    ) {
-        Text(title, style = MaterialTheme.typography.titleLarge, color = c.twitchPurpleLight)
-        Column(modifier = Modifier.padding(top = 12.dp)) { content() }
+    Column(modifier = Modifier.fillMaxWidth().padding(top = 40.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+            Text(title, style = MaterialTheme.typography.headlineMedium, color = c.textPrimary)
+            Spacer(Modifier.width(16.dp))
+            Box(Modifier.weight(1f).height(1.dp).background(c.hairline))
+        }
+        Column(modifier = Modifier.padding(top = 20.dp)) { content() }
     }
 }
 
 @Composable
 private fun SettingsRow(label: String, description: String, trailing: @Composable () -> Unit) {
     val c = PureTvTheme.colors
-    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Column(modifier = Modifier.weight(1f)) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Column(modifier = Modifier.weight(1f).padding(end = 24.dp)) {
             Text(label, style = MaterialTheme.typography.titleMedium, color = c.textPrimary)
-            Text(description, style = MaterialTheme.typography.bodyMedium, color = c.textSecondary)
+            Text(description, style = MaterialTheme.typography.bodyMedium, color = c.textMuted)
         }
         trailing()
     }
 }
 
 @Composable
-private fun QualityChip(label: String, selected: Boolean, onClick: () -> Unit) {
+private fun HairlineDivider() {
     val c = PureTvTheme.colors
-    Row(
-        modifier = Modifier
-            .clip(RoundedCornerShape(8.dp))
-            .background(if (selected) c.twitchPurple else c.surfaceVariant)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 8.dp),
-    ) {
-        Text(
-            label,
-            color = if (selected) Color.White else c.textSecondary,
-            style = MaterialTheme.typography.bodyMedium,
-        )
-    }
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .padding(vertical = 16.dp)
+            .height(1.dp)
+            .background(c.hairline),
+    )
 }
