@@ -1,5 +1,9 @@
 package com.puretv.twitch.core.api
 
+import io.ktor.client.HttpClient
+import io.ktor.client.request.forms.submitForm
+import io.ktor.client.statement.bodyAsText
+import io.ktor.http.parameters
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -84,4 +88,41 @@ object DeviceAuth {
             "grant_type" to "refresh_token",
             "refresh_token" to refreshToken,
         )
+
+    suspend fun requestDeviceCode(
+        http: HttpClient,
+        clientId: String = TwitchConfig.CLIENT_ID,
+        scopes: String = TwitchConfig.SCOPES,
+    ): DeviceCodeResponse {
+        val response = http.submitForm(
+            url = "${TwitchConfig.AUTH_BASE}/device",
+            formParameters = parameters { deviceCodeForm(clientId, scopes).forEach { (k, v) -> append(k, v) } },
+        )
+        return parseDeviceCode(response.bodyAsText())
+    }
+
+    suspend fun pollOnce(
+        http: HttpClient,
+        deviceCode: String,
+        clientId: String = TwitchConfig.CLIENT_ID,
+        scopes: String = TwitchConfig.SCOPES,
+    ): DevicePollResult {
+        val response = http.submitForm(
+            url = "${TwitchConfig.AUTH_BASE}/token",
+            formParameters = parameters { pollForm(clientId, deviceCode, scopes).forEach { (k, v) -> append(k, v) } },
+        )
+        return parsePollResult(response.bodyAsText())
+    }
+
+    suspend fun refreshToken(
+        http: HttpClient,
+        refreshToken: String,
+        clientId: String = TwitchConfig.CLIENT_ID,
+    ): TokenResponse {
+        val response = http.submitForm(
+            url = "${TwitchConfig.AUTH_BASE}/token",
+            formParameters = parameters { refreshForm(clientId, refreshToken).forEach { (k, v) -> append(k, v) } },
+        )
+        return json.decodeFromString(TokenResponse.serializer(), response.bodyAsText())
+    }
 }
