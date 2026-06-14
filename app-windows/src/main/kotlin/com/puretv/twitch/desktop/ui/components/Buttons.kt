@@ -26,7 +26,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.Dp
@@ -68,14 +67,17 @@ fun PureButton(
     val focused by interaction.collectIsFocusedAsState()
     val active = enabled && !loading
 
+    // Primary is a SOLID accent (no gradient — gradients read "AI slop"); the light
+    // violet wants dark ink on top, so Primary text is the near-black background color.
     val fg = when (variant) {
-        ButtonVariant.Primary, ButtonVariant.Destructive -> Color.White
+        ButtonVariant.Primary -> c.background
+        ButtonVariant.Destructive -> Color.White
         ButtonVariant.Secondary -> c.textPrimary
         ButtonVariant.Ghost -> if (hovered) c.textPrimary else c.textSecondary
     }
     val bg by animateColorAsState(
         targetValue = when (variant) {
-            ButtonVariant.Primary -> Color.Transparent // gradient applied separately
+            ButtonVariant.Primary -> if (hovered) c.twitchPurpleLight else c.twitchPurple
             ButtonVariant.Secondary -> if (hovered) c.surfaceHover else c.surfaceRaised
             ButtonVariant.Ghost -> if (hovered) c.surfaceHover else Color.Transparent
             ButtonVariant.Destructive -> if (hovered) c.live.copy(alpha = 0.88f) else c.live
@@ -93,10 +95,7 @@ fun PureButton(
             .pressScale(interaction)
             .focusRing(focused, cornerRadius = 8.dp)
             .clip(PureTvShape.sm)
-            .then(
-                if (variant == ButtonVariant.Primary && active) Modifier.background(c.accentGradient)
-                else Modifier.background(if (variant == ButtonVariant.Primary) SolidColor(c.surfaceRaised) else SolidColor(bg)),
-            )
+            .background(bg)
             .then(
                 if (variant == ButtonVariant.Secondary) Modifier.border(1.dp, c.hairlineStrong, PureTvShape.sm)
                 else Modifier,

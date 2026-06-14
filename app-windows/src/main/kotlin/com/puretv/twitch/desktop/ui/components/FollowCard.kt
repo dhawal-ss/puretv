@@ -1,12 +1,11 @@
 package com.puretv.twitch.desktop.ui.components
 
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -15,141 +14,102 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.input.pointer.PointerEventType
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import coil3.compose.AsyncImage
 import com.puretv.twitch.desktop.ui.FollowCardState
 import com.puretv.twitch.desktop.ui.theme.PureTvMotion
+import com.puretv.twitch.desktop.ui.theme.PureTvShape
 import com.puretv.twitch.desktop.ui.theme.PureTvTheme
+import com.puretv.twitch.desktop.ui.theme.PureTvType
 
 /**
- * A saved-channel card for the Home "Following" rail. Renders two states from
- * one [FollowCardState]:
- *  - LIVE  → thumbnail + LIVE badge + viewer count (same language as StreamCard).
- *  - OFFLINE → dimmed avatar + name + "Offline" — still present so the user
- *    never has to search; one click reopens the channel.
+ * A saved-channel card for the Home "From channels you follow" shelf, in the
+ * Cinémathèque language so it reads as the same magazine as [StreamCard]:
+ *  - LIVE    → duotone [CoverImage] + [BoxScrim] + [LiveChip] + [ViewerChip], with
+ *    a poster lift on hover and the title shifting to the violet accent.
+ *  - OFFLINE → a dimmed duotone cover with a centered [Avatar], an "OFFLINE" mono
+ *    label, and the name beneath — still present so reopening a channel is one click.
  */
 @Composable
 fun FollowCard(state: FollowCardState, onClick: () -> Unit, modifier: Modifier = Modifier) {
     val c = PureTvTheme.colors
-    var hovered by remember { mutableStateOf(false) }
-    val scale by animateFloatAsState(
-        targetValue = if (hovered) 1.04f else 1.0f,
-        animationSpec = tween(PureTvMotion.Fast, easing = FastOutSlowInEasing),
-        label = "followCardScale",
+    val interaction = remember { MutableInteractionSource() }
+    val hovered by interaction.collectIsHoveredAsState()
+    val titleColor by animateColorAsState(
+        if (hovered && state.isLive) c.twitchPurpleLight else if (state.isLive) c.textPrimary else c.textSecondary,
+        tween(PureTvMotion.Fast),
+        label = "followTitle",
     )
 
     Column(
         modifier = modifier
-            .graphicsLayer { scaleX = scale; scaleY = scale }
-            .pointerInput(Unit) {
-                awaitPointerEventScope {
-                    while (true) {
-                        val event = awaitPointerEvent()
-                        hovered = when (event.type) {
-                            PointerEventType.Enter -> true
-                            PointerEventType.Exit -> false
-                            else -> hovered
-                        }
-                    }
-                }
-            }
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                onClick = onClick,
-            ),
+            .hoverLift(interaction, lift = 6.dp, scaleTo = 1f)
+            .hoverable(interaction)
+            .handCursor()
+            .clickable(interactionSource = interaction, indication = null, onClick = onClick),
     ) {
-        val borderBrush = if (hovered) c.accentGradient else Brush.linearGradient(listOf(c.hairline, c.hairline))
-
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .aspectRatio(16f / 9f)
-                .border(width = if (hovered) 2.dp else 1.dp, brush = borderBrush, shape = RoundedCornerShape(10.dp))
-                .clip(RoundedCornerShape(10.dp))
-                .background(c.surfaceVariant),
-            contentAlignment = Alignment.Center,
+                .clip(PureTvShape.md),
         ) {
-            if (state.isLive && state.thumbnailUrl.isNotBlank()) {
+            if (state.isLive) {
                 val thumbUrl = state.thumbnailUrl
-                    .replace("{width}", "440")
-                    .replace("{height}", "248")
-                AsyncImage(
-                    model = thumbUrl,
+                    .takeIf { it.isNotBlank() }
+                    ?.replace("{width}", "440")
+                    ?.replace("{height}", "248")
+                CoverImage(
+                    imageUrl = thumbUrl,
+                    seed = state.displayName,
                     contentDescription = state.title,
-                    contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize(),
                 )
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(56.dp)
-                        .align(Alignment.BottomCenter)
-                        .background(c.bottomScrim),
-                )
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.BottomStart)
-                        .padding(8.dp)
-                        .clip(RoundedCornerShape(4.dp))
-                        .background(c.live)
-                        .padding(horizontal = 6.dp, vertical = 2.dp),
-                ) {
-                    Text("LIVE", style = MaterialTheme.typography.labelSmall, color = c.textPrimary, fontWeight = FontWeight.Bold)
-                }
-                Box(Modifier.align(Alignment.BottomEnd).padding(8.dp)) {
-                    Text(formatViewerCount(state.viewerCount), style = MaterialTheme.typography.labelSmall, color = c.textPrimary)
-                }
+                BoxScrim(Modifier.fillMaxSize())
+                LiveChip(Modifier.align(Alignment.TopStart).padding(8.dp))
+                ViewerChip(formatViewerCount(state.viewerCount), Modifier.align(Alignment.BottomEnd).padding(8.dp))
             } else {
-                // Offline — dimmed avatar centered on the card.
+                // Offline — dimmed duotone cover with the channel's avatar centered on it.
+                CoverImage(
+                    imageUrl = null,
+                    seed = state.displayName,
+                    contentDescription = null,
+                    modifier = Modifier.fillMaxSize().alpha(0.45f),
+                )
                 Avatar(
                     displayName = state.displayName,
                     imageUrl = state.avatarUrl.takeIf { it.isNotBlank() },
-                    size = 56,
-                    modifier = Modifier.alpha(0.7f),
+                    size = 52,
+                    modifier = Modifier.align(Alignment.Center),
                 )
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.BottomStart)
-                        .padding(8.dp)
-                        .clip(RoundedCornerShape(4.dp))
-                        .background(c.surfaceHover)
-                        .padding(horizontal = 6.dp, vertical = 2.dp),
-                ) {
-                    Text("OFFLINE", style = MaterialTheme.typography.labelSmall, color = c.textMuted, fontWeight = FontWeight.Bold)
-                }
+                Text(
+                    "OFFLINE",
+                    style = PureTvType.dataSmall,
+                    color = c.textMuted,
+                    modifier = Modifier.align(Alignment.BottomStart).padding(8.dp),
+                )
             }
         }
 
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(10.dp))
         Text(
             state.displayName,
             style = MaterialTheme.typography.titleMedium,
-            color = if (state.isLive) c.textPrimary else c.textSecondary,
+            color = titleColor,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
         Text(
-            if (state.isLive) state.title.ifBlank { state.gameName } else "Offline",
+            if (state.isLive) state.gameName.ifBlank { state.title } else "Offline",
             style = MaterialTheme.typography.bodyMedium,
             color = c.textMuted,
             maxLines = 1,

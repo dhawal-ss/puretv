@@ -1,5 +1,6 @@
 package com.puretv.twitch.desktop.ui.components
 
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -50,7 +51,9 @@ import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.puretv.twitch.core.model.StreamInfo
 import com.puretv.twitch.desktop.ui.theme.PureTvMotion
+import com.puretv.twitch.desktop.ui.theme.PureTvShape
 import com.puretv.twitch.desktop.ui.theme.PureTvTheme
+import com.puretv.twitch.desktop.ui.theme.PureTvType
 
 // ── Stream card ────────────────────────────────────────────────────────────────
 
@@ -59,89 +62,48 @@ fun StreamCard(stream: StreamInfo, onClick: () -> Unit, modifier: Modifier = Mod
     val c = PureTvTheme.colors
     val interaction = remember { MutableInteractionSource() }
     val hovered by interaction.collectIsHoveredAsState()
+    // Cinémathèque hover: a clean lift + the title shifting to accent. No gradient
+    // border, no scale bloat — "lift, don't glow".
+    val titleColor by animateColorAsState(
+        if (hovered) c.twitchPurpleLight else c.textPrimary,
+        tween(PureTvMotion.Fast),
+        label = "cardTitle",
+    )
 
     Column(
         modifier = modifier
-            .hoverLift(interaction)
+            .hoverLift(interaction, lift = 6.dp, scaleTo = 1f)
             .hoverable(interaction)
             .handCursor()
             .clickable(interactionSource = interaction, indication = null, onClick = onClick),
     ) {
-        val borderBrush = if (hovered) {
-            c.accentGradient
-        } else {
-            Brush.linearGradient(listOf(c.hairline, c.hairline))
-        }
-
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .aspectRatio(16f / 9f)
-                .border(width = if (hovered) 2.dp else 1.dp, brush = borderBrush, shape = RoundedCornerShape(10.dp))
-                .clip(RoundedCornerShape(10.dp))
-                .background(c.surfaceVariant),
+                .clip(PureTvShape.md),
         ) {
             val thumbUrl = stream.thumbnailUrl
                 .replace("{width}", "440")
                 .replace("{height}", "248")
-            if (thumbUrl.isNotBlank()) {
-                AsyncImage(
-                    model = thumbUrl,
-                    contentDescription = stream.title,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize(),
-                )
-            }
-
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(64.dp)
-                    .align(Alignment.BottomCenter)
-                    .background(c.bottomScrim),
+            CoverImage(
+                imageUrl = thumbUrl,
+                seed = stream.userName,
+                contentDescription = stream.title,
+                modifier = Modifier.fillMaxSize(),
             )
-
-            Box(
-                modifier = Modifier
-                    .align(Alignment.BottomStart)
-                    .padding(8.dp)
-                    .clip(RoundedCornerShape(6.dp))
-                    .background(c.live)
-                    .border(1.dp, Color.White.copy(alpha = 0.18f), RoundedCornerShape(6.dp))
-                    .padding(horizontal = 7.dp, vertical = 3.dp),
-            ) {
-                Text("LIVE", style = MaterialTheme.typography.labelSmall, color = Color.White, fontWeight = FontWeight.Bold)
-            }
-
-            Box(
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(8.dp)
-                    .clip(RoundedCornerShape(6.dp))
-                    .background(Color.Black.copy(alpha = 0.55f))
-                    .padding(horizontal = 7.dp, vertical = 3.dp),
-            ) {
-                Text(formatViewerCount(stream.viewerCount), style = MaterialTheme.typography.labelSmall, color = Color.White)
-            }
+            BoxScrim(Modifier.fillMaxSize())
+            LiveChip(Modifier.align(Alignment.TopStart).padding(8.dp))
+            ViewerChip(formatViewerCount(stream.viewerCount), Modifier.align(Alignment.BottomEnd).padding(8.dp))
         }
 
-        Spacer(Modifier.height(8.dp))
-        Text(stream.userName, style = MaterialTheme.typography.titleMedium, color = c.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        Text(stream.title, style = MaterialTheme.typography.bodyMedium, color = c.textSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        // Viewer count under the card — explicit "live now + how many watching".
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 2.dp)) {
-            Box(Modifier.size(6.dp).clip(CircleShape).background(c.live))
-            Spacer(Modifier.width(6.dp))
-            Text("${formatViewerCount(stream.viewerCount)} viewers", style = MaterialTheme.typography.bodyMedium, color = c.textSecondary, maxLines = 1)
-            if (stream.gameName.isNotBlank()) {
-                Text(
-                    " · ${stream.gameName}",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = c.textMuted,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
+        Spacer(Modifier.height(10.dp))
+        Text(stream.userName, style = MaterialTheme.typography.titleMedium, color = titleColor, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        if (stream.gameName.isNotBlank()) {
+            Text(stream.gameName, style = MaterialTheme.typography.bodyMedium, color = c.textSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        if (stream.title.isNotBlank()) {
+            Text(stream.title, style = MaterialTheme.typography.bodyMedium, color = c.textMuted, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
 }
@@ -161,9 +123,9 @@ fun SectionHeader(title: String, onSeeAll: (() -> Unit)? = null, modifier: Modif
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(title, style = MaterialTheme.typography.titleLarge, color = c.textPrimary)
+        Kicker(title)
         if (onSeeAll != null) {
-            Text("See all", style = MaterialTheme.typography.bodyMedium, color = c.twitchPurpleLight, modifier = Modifier.clickable(onClick = onSeeAll))
+            Text("See all", style = PureTvType.data, color = c.twitchPurpleLight, modifier = Modifier.clickable(onClick = onSeeAll).handCursor())
         }
     }
 }
@@ -222,7 +184,7 @@ fun Avatar(displayName: String, imageUrl: String?, size: Int = 36, modifier: Mod
             modifier = modifier.size(sizeDp).clip(CircleShape).background(c.twitchPurple),
             contentAlignment = Alignment.Center,
         ) {
-            Text(displayName.take(1).uppercase(), style = MaterialTheme.typography.labelSmall, color = c.textPrimary, fontWeight = FontWeight.Bold)
+            Text(displayName.take(1).uppercase(), style = MaterialTheme.typography.labelSmall, color = c.background, fontWeight = FontWeight.Bold)
         }
     }
 }

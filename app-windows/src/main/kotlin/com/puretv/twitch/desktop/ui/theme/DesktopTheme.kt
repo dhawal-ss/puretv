@@ -11,6 +11,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -52,7 +53,7 @@ data class PureTvDesktopColors(
 // ── Theme variants ─────────────────────────────────────────────────────────────
 
 enum class ThemeVariant(val key: String, val displayName: String) {
-    PURE_DARK("dark", "Pure Dark"),
+    PURE_DARK("dark", "Cinéma"),
     AMOLED("amoled", "AMOLED Black"),
     DEEP_INDIGO("indigo", "Deep Indigo"),
     CHARCOAL("charcoal", "Charcoal"),
@@ -69,10 +70,11 @@ private fun buildColors(
     surfaceVariant: Color,
     surfaceRaised: Color,
     surfaceHover: Color,
-    // Brand accent: deliberately distinct from Twitch's own #9146FF (non-affiliation
-    // — see DESIGN_SYSTEM.md). Reconciles the prior code/doc mismatch on #9B5DE5.
-    accent: Color = Color(0xFF9B5DE5),
-    accentLight: Color = Color(0xFFC77DFF),
+    // Cinémathèque violet: brand accent, deliberately distinct from Twitch's own
+    // #9146FF (non-affiliation). Refined cooler/softer than the prior #9B5DE5 and
+    // used sparingly — one accent moment per region, never a wash.
+    accent: Color = Color(0xFFA78BFA),
+    accentLight: Color = Color(0xFFC4B5FD),
 ) = PureTvDesktopColors(
     background = bg,
     surface = surface,
@@ -99,13 +101,14 @@ private fun buildColors(
 
 val themeColors: Map<ThemeVariant, PureTvDesktopColors> = mapOf(
     ThemeVariant.PURE_DARK to buildColors(
-        // Deepened, faintly cooler surface ladder — each rung ~+8-10 lightness is
-        // the elevation system (depth from the ladder + hairlines, not shadows).
-        bg = Color(0xFF07070E),
-        surface = Color(0xFF0E0E18),
-        surfaceVariant = Color(0xFF16161F),
-        surfaceRaised = Color(0xFF1D1D29),
-        surfaceHover = Color(0xFF25253A),
+        // Cinémathèque — the near-black cinema base. The surface ladder climbs in
+        // small luminosity steps; depth comes from the ladder + hairlines, never
+        // shadows. Almost monochrome so imagery + the lone violet accent carry.
+        bg = Color(0xFF08080A),
+        surface = Color(0xFF0F0F14),
+        surfaceVariant = Color(0xFF15151A),
+        surfaceRaised = Color(0xFF1C1C22),
+        surfaceHover = Color(0xFF232329),
     ),
     ThemeVariant.AMOLED to buildColors(
         bg = Color(0xFF000000),
@@ -168,28 +171,51 @@ object PureTvMotion {
 object PureTvShape {
     val xs = RoundedCornerShape(6.dp)    // chips, badges
     val sm = RoundedCornerShape(8.dp)    // buttons, inputs
-    val md = RoundedCornerShape(10.dp)   // thumbnails, cards
+    val md = RoundedCornerShape(10.dp)   // thumbnails, posters, cards
     val lg = RoundedCornerShape(14.dp)   // panels, dialogs
+    val xl = RoundedCornerShape(16.dp)   // hero / cover-art / large surfaces
     val pill = RoundedCornerShape(999.dp) // primary CTA, search, avatars
 }
 
 // ── Typography ─────────────────────────────────────────────────────────────────
 
-// Type discipline: negative tracking on large sizes, generous line-height on body,
-// positive tracking on tiny labels; weights clustered at 400/500/600/700. This is
-// what reads as "designed, not defaulted" even before a custom font is bundled.
+// Type discipline (Cinémathèque): Bricolage Grotesque carries display + section
+// voice with tight negative tracking; Archivo carries every functional string;
+// IBM Plex Mono (see PureTvType) carries data. Negative tracking on large sizes,
+// generous line-height on body — this is the "designed, not defaulted" layer.
 private val PureTvDesktopTypography = Typography(
-    displayLarge = TextStyle(fontSize = 32.sp, fontWeight = FontWeight.Bold, letterSpacing = (-1.0).sp, lineHeight = 38.sp),
-    headlineLarge = TextStyle(fontSize = 26.sp, fontWeight = FontWeight.Bold, letterSpacing = (-0.6).sp, lineHeight = 32.sp),
-    headlineMedium = TextStyle(fontSize = 21.sp, fontWeight = FontWeight.SemiBold, letterSpacing = (-0.4).sp, lineHeight = 28.sp),
-    titleLarge = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.SemiBold, letterSpacing = (-0.3).sp, lineHeight = 24.sp),
-    titleMedium = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.Medium, letterSpacing = (-0.1).sp, lineHeight = 22.sp),
-    bodyLarge = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.Normal, lineHeight = 23.sp),
-    bodyMedium = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Normal, lineHeight = 20.sp),
-    labelLarge = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 0.1.sp, lineHeight = 16.sp),
-    labelMedium = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Medium, letterSpacing = 0.2.sp, lineHeight = 16.sp),
-    labelSmall = TextStyle(fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.6.sp, lineHeight = 14.sp),
+    // Display & section voice → Bricolage Grotesque.
+    displayLarge = TextStyle(fontFamily = BricolageGrotesque, fontSize = 40.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = (-1.2).sp, lineHeight = 44.sp),
+    headlineLarge = TextStyle(fontFamily = BricolageGrotesque, fontSize = 30.sp, fontWeight = FontWeight.Bold, letterSpacing = (-0.8).sp, lineHeight = 34.sp),
+    headlineMedium = TextStyle(fontFamily = BricolageGrotesque, fontSize = 22.sp, fontWeight = FontWeight.Bold, letterSpacing = (-0.4).sp, lineHeight = 28.sp),
+    titleLarge = TextStyle(fontFamily = BricolageGrotesque, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, letterSpacing = (-0.2).sp, lineHeight = 24.sp),
+    // Functional UI → Archivo.
+    titleMedium = TextStyle(fontFamily = Archivo, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, letterSpacing = (-0.1).sp, lineHeight = 20.sp),
+    bodyLarge = TextStyle(fontFamily = Archivo, fontSize = 15.sp, fontWeight = FontWeight.Normal, lineHeight = 22.sp),
+    bodyMedium = TextStyle(fontFamily = Archivo, fontSize = 13.sp, fontWeight = FontWeight.Normal, lineHeight = 19.sp),
+    labelLarge = TextStyle(fontFamily = Archivo, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 0.1.sp, lineHeight = 16.sp),
+    labelMedium = TextStyle(fontFamily = Archivo, fontSize = 12.sp, fontWeight = FontWeight.Medium, letterSpacing = 0.2.sp, lineHeight = 16.sp),
+    labelSmall = TextStyle(fontFamily = Archivo, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 0.4.sp, lineHeight = 14.sp),
 )
+
+// ── Editorial type tokens ────────────────────────────────────────────────────────
+// Material's Typography has no monospace slot, so the IBM Plex Mono styles that give
+// data + kickers their "instrument-panel" precision live here, alongside direct
+// family handles for the rare case a component needs to set a family explicitly.
+object PureTvType {
+    val display: FontFamily = BricolageGrotesque
+    val ui: FontFamily = Archivo
+    val mono: FontFamily = IBMPlexMono
+
+    /** Eyebrow / section kicker — apply `.uppercase()` at the call site. */
+    val kicker = TextStyle(fontFamily = IBMPlexMono, fontSize = 10.5.sp, fontWeight = FontWeight.Medium, letterSpacing = 2.2.sp, lineHeight = 14.sp)
+
+    /** Viewer counts, datelines, quality labels. */
+    val data = TextStyle(fontFamily = IBMPlexMono, fontSize = 12.sp, fontWeight = FontWeight.Normal, letterSpacing = 0.3.sp, lineHeight = 16.sp)
+
+    /** Timestamps, tiny badges. */
+    val dataSmall = TextStyle(fontFamily = IBMPlexMono, fontSize = 10.5.sp, fontWeight = FontWeight.Medium, letterSpacing = 0.6.sp, lineHeight = 14.sp)
+}
 
 // ── Theme wrapper ──────────────────────────────────────────────────────────────
 
