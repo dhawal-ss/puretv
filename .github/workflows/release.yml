@@ -12,6 +12,16 @@
 #      SmartScreen will warn users on first run. Add an Authenticode cert and
 #      a signing step (e.g. via `signtool` on a windows-latest runner) once
 #      you have one. Until then, tell users to click "More info → Run anyway".
+#      (NOTE: Authenticode is about SmartScreen reputation — it is SEPARATE from
+#      the Ed25519 update-integrity signing below, which the in-app updater
+#      verifies and which IS already wired up.)
+#   4. Update-integrity signing [REQUIRED for the auto-updater] — add the repo
+#      secret UPDATE_SIGNING_KEY (the Ed25519 private key PEM) and embed the
+#      matching public key in app-windows/.../update/UpdateSigning.kt. The
+#      draft-release job signs the installer with it; the app refuses to install
+#      any update whose signature doesn't verify. See UpdateSigning.kt for the
+#      one-time `openssl genpkey` setup. Until the secret is set, this workflow
+#      fails closed at the signing step rather than publish an unverifiable build.
 #   3. Container registry — this workflow pushes the proxy image to GHCR using
 #      the built-in GITHUB_TOKEN; no extra secret needed, but the package's
 #      visibility defaults to private — set it to public in repo → Packages.
@@ -152,6 +162,28 @@ jobs:
           - [ ] Eyeball the auto-generated "What's Changed" notes on the draft
           EOF
 
+      # Detached Ed25519 signature so the in-app updater can verify the installer
+      # before running it. The private key lives only in the UPDATE_SIGNING_KEY
+      # secret; the matching public key is embedded in UpdateSigning.kt. The .sig
+      # holds the base64 of the raw signature (UpdateSignatureVerifier reads it as
+      # text). Fail-closed: a missing secret blocks the release.
+      - name: Sign installer for update integrity (Ed25519)
+        env:
+          UPDATE_SIGNING_KEY: ${{ secrets.UPDATE_SIGNING_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${UPDATE_SIGNING_KEY:-}" ]; then
+            echo "::error::UPDATE_SIGNING_KEY secret is not set. The in-app updater is fail-closed and rejects unsigned releases — refusing to publish. See app-windows/src/main/kotlin/com/puretv/twitch/desktop/update/UpdateSigning.kt for setup."
+            exit 1
+          fi
+          installer="$(find artifacts/windows-release -name '*.exe' | head -n1)"
+          if [ -z "$installer" ]; then echo "::error::No .exe installer found to sign."; exit 1; fi
+          printf '%s\n' "$UPDATE_SIGNING_KEY" > signing_key.pem
+          openssl pkeyutl -sign -inkey signing_key.pem -rawin -in "$installer" -out installer.sig.raw
+          base64 -w0 installer.sig.raw > "${installer}.sig"
+          rm -f signing_key.pem installer.sig.raw
+          echo "Signed $(basename "$installer") -> $(basename "${installer}").sig"
+
       - name: Create draft release with artifacts
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
@@ -159,6 +191,7 @@ jobs:
           generate_release_notes: true
           files: |
             artifacts/windows-release/**/*.exe
+            artifacts/windows-release/**/*.exe.sig
           # User-facing notes. GitHub appends the auto-generated "What's Changed"
           # / Full Changelog below this. Keep it short and free of internal TODOs.
           body: |
