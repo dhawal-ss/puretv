@@ -116,7 +116,7 @@ class TwitchChatClient(
     /** Queues a message; actual send is throttled by [ChatRateLimiter] (20 msgs / 30s). */
     suspend fun sendMessage(channel: String, message: String) {
         try {
-            outbox.send("PRIVMSG #${channel.lowercase()} :$message")
+            outbox.send(buildPrivmsgLine(channel, message))
         } catch (e: ClosedSendChannelException) {
             // not connected — drop silently, UI should reflect connection state
         }
@@ -135,6 +135,26 @@ class TwitchChatClient(
             TwitchIrcParser.parse(line, currentChannel.orEmpty())?.let { _events.emit(it) }
         }
     }
+}
+
+/** Twitch rejects chat messages longer than 500 characters outright. */
+internal const val MAX_CHAT_MESSAGE_LENGTH = 500
+
+/**
+ * Builds a single IRC PRIVMSG line, hardened against CRLF command injection.
+ *
+ * IRC delimits commands with `\r\n`, so an outgoing [message] body containing a
+ * line break would otherwise be parsed by Twitch as multiple commands — letting
+ * a crafted or pasted message forge JOIN/PRIVMSG/etc. under the authenticated
+ * user's `chat:edit` session. Line breaks are neutralised to spaces and the body
+ * is truncated to Twitch's [MAX_CHAT_MESSAGE_LENGTH] limit.
+ */
+internal fun buildPrivmsgLine(channel: String, message: String): String {
+    val safeBody = message
+        .replace('\r', ' ')
+        .replace('\n', ' ')
+        .take(MAX_CHAT_MESSAGE_LENGTH)
+    return "PRIVMSG #${channel.lowercase()} :$safeBody"
 }
 
 /**

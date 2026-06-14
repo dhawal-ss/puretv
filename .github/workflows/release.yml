@@ -37,19 +37,21 @@ jobs:
     name: Windows desktop (installer)
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Set up JDK 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4
         with:
           distribution: temurin
           java-version: "17"
 
       - name: Cache Gradle
-        uses: gradle/actions/setup-gradle@v3
+        uses: gradle/actions/setup-gradle@d9c87d481d55275bb5441eef3fe0e46805f9ef70 # v3
 
       - name: Install VLC (bundled into the installer so users need nothing extra)
-        run: choco install vlc --yes --no-progress
+        # Pinned for reproducible installer builds + CVE tracking (3.0.21+ fixes
+        # CVE-2024-46461, which affects VLC <= 3.0.20). Bump deliberately.
+        run: choco install vlc --version=3.0.23 --yes --no-progress
 
       - name: Install Inno Setup (wraps the app with a launch-after-install step)
         run: choco install innosetup --yes --no-progress
@@ -77,7 +79,7 @@ jobs:
           & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DMyAppVersion=$ver" "app-windows\installer\puretv.iss"
 
       - name: Upload Windows artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: windows-release
           path: app-windows/build/installer/*.exe
@@ -87,10 +89,10 @@ jobs:
     name: Go proxy (Docker image -> GHCR)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Log in to GHCR
-        uses: docker/login-action@v3
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -107,7 +109,7 @@ jobs:
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Build & push image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: proxy-server
           push: true
@@ -125,7 +127,7 @@ jobs:
     steps:
       # Only the Windows installer artifact — downloading all artifacts also
       # pulls a stray Docker buildx metadata file that intermittently fails.
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: windows-release
           path: artifacts/windows-release
@@ -151,7 +153,7 @@ jobs:
           EOF
 
       - name: Create draft release with artifacts
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
           draft: true
           generate_release_notes: true

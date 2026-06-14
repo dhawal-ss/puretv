@@ -8,7 +8,6 @@ import io.ktor.http.parameters
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
-import kotlin.random.Random
 
 /**
  * RFC 7636 PKCE helpers shared by both the Android/TV (Custom Tabs + deep link)
@@ -26,11 +25,27 @@ object PkceAuth {
     private const val VERIFIER_CHARS =
         "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~"
 
-    /** A cryptographically-sufficient random verifier string (43-128 chars). */
-    fun generateVerifier(length: Int = 64): String =
-        buildString(length) {
-            repeat(length) { append(VERIFIER_CHARS[Random.nextInt(VERIFIER_CHARS.length)]) }
+    /**
+     * A cryptographically random verifier string drawn from [VERIFIER_CHARS]
+     * (the RFC 7636 unreserved set). Backed by [secureRandomBytes] (a CSPRNG);
+     * the high tail of each byte is rejected so the modulo mapping onto the
+     * character set is unbiased.
+     */
+    fun generateVerifier(length: Int = 64): String {
+        val bound = VERIFIER_CHARS.length
+        val limit = 256 - (256 % bound) // reject bytes >= limit to avoid modulo bias
+        val out = StringBuilder(length)
+        while (out.length < length) {
+            for (b in secureRandomBytes(length)) {
+                val v = b.toInt() and 0xFF
+                if (v < limit) {
+                    out.append(VERIFIER_CHARS[v % bound])
+                    if (out.length == length) break
+                }
+            }
         }
+        return out.toString()
+    }
 
     fun generateState(): String = generateVerifier(32)
 
