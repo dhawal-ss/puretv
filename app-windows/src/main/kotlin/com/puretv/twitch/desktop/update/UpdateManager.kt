@@ -87,7 +87,9 @@ class UpdateManager {
             version = release.tag_name,
             downloadUrl = asset.browser_download_url,
             sizeBytes = asset.size,
-            notes = release.name.ifBlank { release.tag_name },
+            // Friendly changelog (from CHANGELOG.md via the release body); the
+            // banner shows its first line. Falls back to the release name/tag.
+            notes = release.body.trim().ifBlank { release.name.ifBlank { release.tag_name } },
             htmlUrl = release.html_url,
             signatureUrl = release.signatureAsset(asset)?.browser_download_url,
         )
