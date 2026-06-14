@@ -21,6 +21,13 @@ app-windows/resources/windows/vlc/
 # Secrets — injected at build time, never committed (see secrets.properties.example)
 secrets.properties
 
+# Private keys — NEVER commit. The Ed25519 update-signing key (and any other
+# *.pem) must be generated OUTSIDE the repo (see UpdateSigning.kt).
+*.pem
+
+# Internal build/design docs (specs, plans, prompts) — kept out of the repo.
+docs/superpowers/
+
 # OS
 .DS_Store
 Thumbs.db
