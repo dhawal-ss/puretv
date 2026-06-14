@@ -10,7 +10,9 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -37,6 +39,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
@@ -54,33 +57,15 @@ import com.puretv.twitch.desktop.ui.theme.PureTvTheme
 @Composable
 fun StreamCard(stream: StreamInfo, onClick: () -> Unit, modifier: Modifier = Modifier) {
     val c = PureTvTheme.colors
-    var hovered by remember { mutableStateOf(false) }
-    val scale by animateFloatAsState(
-        targetValue = if (hovered) 1.04f else 1.0f,
-        animationSpec = tween(PureTvMotion.Fast, easing = FastOutSlowInEasing),
-        label = "cardScale",
-    )
+    val interaction = remember { MutableInteractionSource() }
+    val hovered by interaction.collectIsHoveredAsState()
 
     Column(
         modifier = modifier
-            .graphicsLayer { scaleX = scale; scaleY = scale }
-            .pointerInput(Unit) {
-                awaitPointerEventScope {
-                    while (true) {
-                        val event = awaitPointerEvent()
-                        hovered = when (event.type) {
-                            PointerEventType.Enter -> true
-                            PointerEventType.Exit -> false
-                            else -> hovered
-                        }
-                    }
-                }
-            }
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                onClick = onClick,
-            ),
+            .hoverLift(interaction)
+            .hoverable(interaction)
+            .handCursor()
+            .clickable(interactionSource = interaction, indication = null, onClick = onClick),
     ) {
         val borderBrush = if (hovered) {
             c.accentGradient
@@ -120,15 +105,23 @@ fun StreamCard(stream: StreamInfo, onClick: () -> Unit, modifier: Modifier = Mod
                 modifier = Modifier
                     .align(Alignment.BottomStart)
                     .padding(8.dp)
-                    .clip(RoundedCornerShape(4.dp))
+                    .clip(RoundedCornerShape(6.dp))
                     .background(c.live)
-                    .padding(horizontal = 6.dp, vertical = 2.dp),
+                    .border(1.dp, Color.White.copy(alpha = 0.18f), RoundedCornerShape(6.dp))
+                    .padding(horizontal = 7.dp, vertical = 3.dp),
             ) {
-                Text("LIVE", style = MaterialTheme.typography.labelSmall, color = c.textPrimary, fontWeight = FontWeight.Bold)
+                Text("LIVE", style = MaterialTheme.typography.labelSmall, color = Color.White, fontWeight = FontWeight.Bold)
             }
 
-            Box(Modifier.align(Alignment.BottomEnd).padding(8.dp)) {
-                Text(formatViewerCount(stream.viewerCount), style = MaterialTheme.typography.labelSmall, color = c.textPrimary)
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(8.dp)
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(Color.Black.copy(alpha = 0.55f))
+                    .padding(horizontal = 7.dp, vertical = 3.dp),
+            ) {
+                Text(formatViewerCount(stream.viewerCount), style = MaterialTheme.typography.labelSmall, color = Color.White)
             }
         }
 
