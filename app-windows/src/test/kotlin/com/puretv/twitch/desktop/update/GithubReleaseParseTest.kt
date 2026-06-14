@@ -36,6 +36,36 @@ class GithubReleaseParseTest {
     }
 
     @Test
+    fun finds_signature_asset_matching_the_installer() {
+        val sample = """
+            {
+              "tag_name": "v1.3.0",
+              "assets": [
+                {"name": "PureTV-Setup-1.3.0.exe", "browser_download_url": "https://example/exe", "size": 100},
+                {"name": "PureTV-Setup-1.3.0.exe.sig", "browser_download_url": "https://example/sig", "size": 89}
+              ]
+            }
+        """.trimIndent()
+
+        val release = json.decodeFromString(GithubRelease.serializer(), sample)
+        val installer = release.installerAsset()
+        assertNotNull(installer)
+
+        val sig = release.signatureAsset(installer)
+        assertNotNull(sig)
+        assertEquals("https://example/sig", sig.browser_download_url)
+    }
+
+    @Test
+    fun missing_signature_asset_returns_null() {
+        val sample = """{"tag_name":"v1.0.0","assets":[{"name":"PureTV-Setup-1.0.0.exe","browser_download_url":"https://e/exe","size":1}]}"""
+        val release = json.decodeFromString(GithubRelease.serializer(), sample)
+        val installer = release.installerAsset()
+        assertNotNull(installer)
+        assertEquals(null, release.signatureAsset(installer))
+    }
+
+    @Test
     fun ignores_unknown_api_fields() {
         val withExtra = """{"tag_name":"v1.0.0","unexpected_field":123,"assets":[]}"""
         val release = json.decodeFromString(GithubRelease.serializer(), withExtra)
