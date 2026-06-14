@@ -226,24 +226,35 @@ private fun CustomTitleBar(shell: AppShellController, onClose: () -> Unit, awtWi
                                         shell.toggleMaximize()
                                         lastDownTime = 0L
                                         manualDrag = false
+                                    } else if (shell.isMaximized) {
+                                        // Maximized = locked. Ignore drags so the filled window
+                                        // can't be nudged or accidentally un-maximized mid-drag.
+                                        // Restore it first via the maximize button (or a
+                                        // double-click), and then it's draggable again — a
+                                        // calmer, more predictable feel than Windows' default.
+                                        lastDownTime = t
+                                        manualDrag = false
                                     } else {
                                         lastDownTime = t
-                                        // Hand the drag to the OS at button-down so Aero
-                                        // Snap engages. startWindowDrag BLOCKS in the OS
-                                        // move loop until the mouse is released *if* it
-                                        // takes over; if it returns almost immediately it
-                                        // didn't engage, so we drive a manual drag instead
-                                        // (the bar is never left unresponsive).
+                                        // Hand the drag to the OS at button-down. startWindowDrag
+                                        // BLOCKS in the OS move loop until the mouse is released
+                                        // *if* it takes over; if it returns almost immediately it
+                                        // didn't engage, so we drive a manual drag instead (the bar
+                                        // is never left unresponsive).
+                                        val press = MouseInfo.getPointerInfo().location
+                                        ptrX0 = press.x; ptrY0 = press.y
                                         val startNs = System.nanoTime()
                                         val native = WindowsNative.startWindowDrag(awtWindow)
                                         val blockedMs = (System.nanoTime() - startNs) / 1_000_000
                                         if (!native || blockedMs < 60) {
-                                            val p = MouseInfo.getPointerInfo().location
                                             winX0 = awtWindow.location.x; winY0 = awtWindow.location.y
-                                            ptrX0 = p.x; ptrY0 = p.y
                                             manualDrag = true
                                         } else {
+                                            // Native move loop just ended (mouse released). The OS
+                                            // snap engine doesn't engage for a synthesized HTCAPTION
+                                            // drag, so snap it ourselves if it was dragged to an edge.
                                             manualDrag = false
+                                            snapOnDrop(shell, ptrX0, ptrY0)
                                         }
                                     }
                                 }
@@ -251,7 +262,10 @@ private fun CustomTitleBar(shell: AppShellController, onClose: () -> Unit, awtWi
                                     val p = MouseInfo.getPointerInfo().location
                                     awtWindow.setLocation(winX0 + p.x - ptrX0, winY0 + p.y - ptrY0)
                                 }
-                                PointerEventType.Release -> { manualDrag = false }
+                                PointerEventType.Release -> {
+                                    if (manualDrag) snapOnDrop(shell, ptrX0, ptrY0)
+                                    manualDrag = false
+                                }
                             }
                         }
                     }
@@ -276,6 +290,19 @@ private fun CustomTitleBar(shell: AppShellController, onClose: () -> Unit, awtWi
         WinButton(onClick = onClose, isClose = true) {
             Icon(Icons.Filled.Close, "Close", tint = PureTvTheme.colors.textSecondary, modifier = Modifier.size(14.dp))
         }
+    }
+}
+
+/**
+ * Snaps the window when a title-bar drag is released at a screen edge. Requires
+ * real movement from the [pressX]/[pressY] button-down point (screen coords) so a
+ * plain click — even on a window already sitting at the top of the screen — never
+ * triggers a snap.
+ */
+private fun snapOnDrop(shell: AppShellController, pressX: Int, pressY: Int) {
+    val rel = MouseInfo.getPointerInfo().location
+    if (kotlin.math.abs(rel.x - pressX) + kotlin.math.abs(rel.y - pressY) > 24) {
+        shell.snapForDrop(rel)
     }
 }
 

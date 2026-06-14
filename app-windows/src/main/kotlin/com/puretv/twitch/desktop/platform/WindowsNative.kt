@@ -44,7 +44,14 @@ object WindowsNative {
     private const val WM_NCCALCSIZE = 0x0083
     private const val WM_NCHITTEST = 0x0084
 
-    // Window styles the DWM snap engine requires; undecorated AWT frames omit them.
+    // Window styles. AWT undecorated frames are WS_POPUP with no WS_CAPTION — and
+    // the DWM snap engine refuses to snap WS_POPUP windows. enableBorderlessSnap
+    // clears WS_POPUP and rebuilds the style as a normal overlapped window
+    // (WS_CAPTION|WS_THICKFRAME|WS_SYSMENU|WS_MIN/MAXIMIZEBOX); the WM_NCCALCSIZE
+    // subclass then hides the frame so it still looks borderless.
+    private const val WS_POPUP = Int.MIN_VALUE // 0x80000000 — the sign bit
+    private const val WS_CAPTION = 0x00C00000
+    private const val WS_SYSMENU = 0x00080000
     private const val WS_MAXIMIZE = 0x01000000
     private const val WS_THICKFRAME = 0x00040000
     private const val WS_MINIMIZEBOX = 0x00020000
@@ -199,8 +206,15 @@ object WindowsNative {
 
             // Add the snap-enabling styles, then force a frame recalculation so the
             // new WM_NCCALCSIZE handling takes effect immediately.
+            // Convert the AWT undecorated WS_POPUP frame into a normal overlapped
+            // window: the DWM snap engine (and Win+Arrow keyboard snapping) ignore
+            // WS_POPUP windows, so WS_THICKFRAME/WS_MAXIMIZEBOX alone never sufficed.
+            // The WM_NCCALCSIZE subclass (installed above) hides the frame so it
+            // still looks borderless.
             val style = u.GetWindowLong(hwnd, WinUser.GWL_STYLE)
-            u.SetWindowLong(hwnd, WinUser.GWL_STYLE, style or WS_THICKFRAME or WS_MAXIMIZEBOX or WS_MINIMIZEBOX)
+            val newStyle = (style and WS_POPUP.inv()) or
+                WS_CAPTION or WS_THICKFRAME or WS_SYSMENU or WS_MAXIMIZEBOX or WS_MINIMIZEBOX
+            u.SetWindowLong(hwnd, WinUser.GWL_STYLE, newStyle)
             u.SetWindowPos(
                 hwnd, null, 0, 0, 0, 0,
                 SWP_NOMOVE or SWP_NOSIZE or SWP_NOZORDER or SWP_NOACTIVATE or SWP_FRAMECHANGED,

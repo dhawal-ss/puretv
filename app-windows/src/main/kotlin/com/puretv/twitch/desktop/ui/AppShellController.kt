@@ -10,7 +10,14 @@ import androidx.compose.ui.window.WindowPlacement
 import androidx.compose.ui.window.WindowPosition
 import androidx.compose.ui.window.WindowState
 import java.awt.Frame
+import java.awt.GraphicsConfiguration
+import java.awt.GraphicsEnvironment
+import java.awt.Point
+import java.awt.Toolkit
 import java.awt.Window
+
+/** Distance, in px, from a screen edge that counts as a "drag-to-snap" drop. */
+private const val SNAP_EDGE_PX = 14
 
 enum class PlayerMode { DEFAULT, THEATER, FULLSCREEN }
 
@@ -105,6 +112,46 @@ class AppShellController(
     }
 
     val isMaximized: Boolean get() = windowState.placement == WindowPlacement.Maximized
+
+    /**
+     * DIY Aero Snap, invoked when a title-bar drag is released near a screen edge.
+     * Windows' own snap engine never engages for our synthesized (HTCAPTION) move
+     * loop, so we replicate the essentials ourselves:
+     *   - top edge    → maximize (fill the work area, taskbar visible)
+     *   - left edge   → left half
+     *   - right edge  → right half
+     * [cursor] is the screen-space drop point. No-op when it isn't at an edge.
+     */
+    fun snapForDrop(cursor: Point) {
+        val frame = window as? Frame ?: return
+        val gc = screenContaining(cursor) ?: frame.graphicsConfiguration ?: return
+        val b = gc.bounds
+        when {
+            cursor.y <= b.y + SNAP_EDGE_PX -> windowState.placement = WindowPlacement.Maximized
+            cursor.x <= b.x + SNAP_EDGE_PX -> tileHalf(frame, gc, left = true)
+            cursor.x >= b.x + b.width - SNAP_EDGE_PX -> tileHalf(frame, gc, left = false)
+        }
+    }
+
+    private fun screenContaining(p: Point): GraphicsConfiguration? =
+        GraphicsEnvironment.getLocalGraphicsEnvironment().screenDevices
+            .map { it.defaultConfiguration }
+            .firstOrNull { it.bounds.contains(p) }
+
+    /** Tiles [frame] to the left or right half of [gc]'s work area (taskbar-aware). */
+    private fun tileHalf(frame: Frame, gc: GraphicsConfiguration, left: Boolean) {
+        val b = gc.bounds
+        val insets = Toolkit.getDefaultToolkit().getScreenInsets(gc)
+        val wx = b.x + insets.left
+        val wy = b.y + insets.top
+        val ww = b.width - insets.left - insets.right
+        val wh = b.height - insets.top - insets.bottom
+        val halfW = ww / 2
+        // Leave any maximized state first, then place the floating half-window.
+        frame.extendedState = Frame.NORMAL
+        windowState.placement = WindowPlacement.Floating
+        frame.setBounds(if (left) wx else wx + halfW, wy, halfW, wh)
+    }
 }
 
 val LocalAppShell = compositionLocalOf<AppShellController> {
