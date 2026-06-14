@@ -3,7 +3,7 @@
 # this server is meant to be exposed to the internet by end users who likely
 # aren't security specialists, so the smallest possible attack surface matters).
 
-FROM golang:1.22-alpine AS build
+FROM golang:1.23.12-alpine AS build
 RUN apk add --no-cache ca-certificates
 WORKDIR /src
 COPY go.mod ./
