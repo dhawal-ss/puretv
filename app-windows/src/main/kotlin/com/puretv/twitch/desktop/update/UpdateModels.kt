@@ -9,6 +9,8 @@ data class UpdateInfo(
     val sizeBytes: Long,
     val notes: String,
     val htmlUrl: String,
+    /** URL of the detached Ed25519 signature (`<installer>.sig`), if published. */
+    val signatureUrl: String? = null,
 )
 
 /** Lifecycle of an update check/apply, observed by the banner and Settings. */
@@ -47,3 +49,11 @@ data class GithubAsset(
 fun GithubRelease.installerAsset(): GithubAsset? =
     assets.firstOrNull { it.name.endsWith(".msi", ignoreCase = true) }
         ?: assets.firstOrNull { it.name.endsWith(".exe", ignoreCase = true) }
+
+/**
+ * The detached Ed25519 signature for [installer], published as `<installer>.sig`
+ * (see release.yml). Returns null when the release carries no matching signature
+ * — the updater treats that as "refuse to install" (fail-closed).
+ */
+fun GithubRelease.signatureAsset(installer: GithubAsset): GithubAsset? =
+    assets.firstOrNull { it.name.equals("${installer.name}.sig", ignoreCase = true) }

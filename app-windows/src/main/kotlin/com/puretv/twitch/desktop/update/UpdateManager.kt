@@ -87,8 +87,11 @@ class UpdateManager {
             version = release.tag_name,
             downloadUrl = asset.browser_download_url,
             sizeBytes = asset.size,
-            notes = release.name.ifBlank { release.tag_name },
+            // Friendly changelog (from CHANGELOG.md via the release body); the
+            // banner shows its first line. Falls back to the release name/tag.
+            notes = release.body.trim().ifBlank { release.name.ifBlank { release.tag_name } },
             htmlUrl = release.html_url,
+            signatureUrl = release.signatureAsset(asset)?.browser_download_url,
         )
     }
 
@@ -103,6 +106,7 @@ class UpdateManager {
             runCatching {
                 _state.value = UpdateState.Downloading(0f)
                 val installer = downloadInstaller(info)
+                verifyInstaller(installer, info)
                 launchInstaller(installer)
             }.onSuccess {
                 SwingUtilities.invokeLater { exitApplication() }
@@ -141,6 +145,44 @@ class UpdateManager {
         }
         if (info.sizeBytes > 0 && target.length() != info.sizeBytes) error("Download incomplete — please retry")
         target
+    }
+
+    /**
+     * Verifies the downloaded [installer] against the embedded publisher key
+     * before it is allowed to execute. Fail-closed: if signing is not configured,
+     * the release ships no signature, or the signature does not validate, the
+     * installer is deleted and an error is raised — we never run an unverified
+     * binary. This is the integrity gate for the auto-updater.
+     */
+    private suspend fun verifyInstaller(installer: File, info: UpdateInfo): Unit = withContext(Dispatchers.IO) {
+        if (!UpdateSigning.isConfigured) {
+            installer.delete()
+            error("This build can't verify updates (no signing key configured). Download the latest version manually from ${info.htmlUrl}.")
+        }
+        val signatureUrl = info.signatureUrl ?: run {
+            installer.delete()
+            error("This release isn't signed — refusing to install an unverified update. Download manually from ${info.htmlUrl}.")
+        }
+        val signatureBase64 = downloadText(signatureUrl)
+        val verified = UpdateSignatureVerifier.verify(
+            data = installer.readBytes(),
+            signatureBase64 = signatureBase64,
+            publicKeyBase64 = UpdateSigning.PUBLIC_KEY_BASE64,
+        )
+        if (!verified) {
+            installer.delete()
+            error("Update signature check FAILED — the download may be corrupted or tampered with. Aborting. Get the latest version from ${info.htmlUrl}.")
+        }
+    }
+
+    private fun downloadText(url: String): String {
+        val request = HttpRequest.newBuilder(URI.create(url))
+            .header("User-Agent", "PureTV-Updater")
+            .GET()
+            .build()
+        val response = http.send(request, HttpResponse.BodyHandlers.ofString())
+        if (response.statusCode() !in 200..299) error("Signature download failed (HTTP ${response.statusCode()})")
+        return response.body()
     }
 
     private fun launchInstaller(installer: File) {

@@ -4,9 +4,11 @@ import com.puretv.twitch.core.adblock.AdBlockEngine
 import com.puretv.twitch.core.adblock.AdBlockStatus
 import com.puretv.twitch.core.adblock.AdBlockStrategy
 import com.puretv.twitch.core.api.ChannelSearchResult
-import com.puretv.twitch.core.api.PkceAuth
+import com.puretv.twitch.core.api.DeviceAuth
+import com.puretv.twitch.core.api.DeviceCodeResponse
+import com.puretv.twitch.core.api.DevicePollResult
+import com.puretv.twitch.core.api.TokenResponse
 import com.puretv.twitch.core.api.TwitchApiClient
-import com.puretv.twitch.core.api.TwitchConfig
 import com.puretv.twitch.core.chat.TwitchChatClient
 import com.puretv.twitch.core.di.TokenHolder
 import com.puretv.twitch.core.emotes.EmoteRepository
@@ -427,16 +429,18 @@ class SettingsViewModel(private val settingsStore: DesktopSettingsStore) : Deskt
 
 data class LoginUiState(
     val isAuthenticating: Boolean = false,
-    val authorizeUrl: String? = null,
+    /** Shown while waiting for browser approval. */
+    val userCode: String? = null,
+    val verificationUri: String? = null,
     val error: String? = null,
     val isLoggedIn: Boolean = false,
 )
 
 /**
- * SECTION 03.2/10 — drives the desktop OAuth Authorization Code + PKCE flow
- * via [DesktopOAuthManager]: opens the system browser, waits on the embedded
- * `localhost:3000` redirect listener, then exchanges the code for tokens and
- * persists them through [DesktopSettingsStore]'s encrypted store.
+ * SECTION 03.2/10 — drives the desktop Twitch login via the Device Code Grant
+ * flow ([DeviceAuth]): requests a device/user code, opens the activate page in
+ * the system browser, polls for the token, then persists it through
+ * [DesktopSettingsStore]'s encrypted store. No client_secret, no loopback.
  */
 class LoginViewModel(
     private val settingsStore: DesktopSettingsStore,
@@ -450,50 +454,44 @@ class LoginViewModel(
 
     fun beginLogin() {
         if (_state.value.isAuthenticating) return
-
-        val verifier = PkceAuth.generateVerifier()
-        val challenge = PkceAuth.deriveChallenge(verifier)
-        val state = PkceAuth.generateState()
-        val authorizeUrl = TwitchConfig.authorizeUrl(
-            redirectUri = TwitchConfig.REDIRECT_URI_DESKTOP,
-            codeChallenge = challenge,
-            state = state,
-        )
-        _state.update { it.copy(isAuthenticating = true, authorizeUrl = authorizeUrl, error = null) }
+        _state.update { it.copy(isAuthenticating = true, error = null, userCode = null, verificationUri = null) }
 
         scope.launch {
-            val redirect = try {
-                oauthManager.launchAndAwaitRedirect(authorizeUrl)
-            } catch (e: DesktopOAuthManager.PortInUseException) {
-                // Specific, actionable: tell the user *which* port is contested
-                // and that the fix is to free it — the redirect URI is locked
-                // by the Twitch app registration so we can't reroute.
-                _state.update { it.copy(isAuthenticating = false, error = e.message) }
+            val device = runCatching { DeviceAuth.requestDeviceCode(httpClient) }.getOrNull()
+            if (device == null) {
+                _state.update { it.copy(isAuthenticating = false, error = "Couldn't start sign-in — check your connection and try again.") }
                 return@launch
             }
-            when {
-                redirect == null -> _state.update {
-                    it.copy(isAuthenticating = false, error = "Sign-in timed out or was cancelled — please try again.")
-                }
-                redirect.state != state -> _state.update {
-                    it.copy(isAuthenticating = false, error = "Login state mismatch — please try again.")
-                }
-                else -> completeWithCode(redirect.code, verifier)
-            }
+            // Best-effort pre-fill; the activate page works with or without it.
+            oauthManager.openInBrowser("${device.verificationUri}?public_code=${device.userCode}")
+            _state.update { it.copy(userCode = device.userCode, verificationUri = device.verificationUri) }
+            pollForToken(device)
         }
     }
 
-    private suspend fun completeWithCode(code: String, verifier: String) {
+    private suspend fun pollForToken(device: DeviceCodeResponse) {
+        val deadline = System.currentTimeMillis() + device.expiresInSeconds * 1000
+        var intervalMs = device.intervalSeconds.coerceAtLeast(1) * 1000
+        while (System.currentTimeMillis() < deadline) {
+            kotlinx.coroutines.delay(intervalMs)
+            when (val result = runCatching { DeviceAuth.pollOnce(httpClient, device.deviceCode) }
+                .getOrDefault(DevicePollResult.Pending)) {
+                is DevicePollResult.Success -> { onAuthenticated(result.token); return }
+                is DevicePollResult.Pending -> {}
+                is DevicePollResult.SlowDown -> intervalMs += 5_000
+                is DevicePollResult.Expired -> {
+                    _state.update { it.copy(isAuthenticating = false, userCode = null, error = "Sign-in code expired — please try again.") }
+                    return
+                }
+            }
+        }
+        _state.update { it.copy(isAuthenticating = false, userCode = null, error = "Sign-in timed out — please try again.") }
+    }
+
+    private suspend fun onAuthenticated(token: TokenResponse) {
         runCatching {
-            val token = PkceAuth.exchangeCodeForToken(httpClient, code, verifier, TwitchConfig.REDIRECT_URI_DESKTOP)
-            // ORDERING IS LOAD-BEARING: the next API call (`getUsers()`) reads
-            // its bearer token from TokenHolder via the shared HttpClient. We
-            // must push the new token into the holder BEFORE that call, not
-            // after `saveTokens()` (which also pushes, but too late).
+            // ORDERING IS LOAD-BEARING: push the token before the first authed call.
             tokenHolder.update(token.accessToken)
-            // GET /users with no params → Twitch returns the user that owns
-            // the bearer token. This is how we discover the broadcaster's own
-            // userId + login from a freshly-minted OAuth token.
             val me = apiClient.getUsers().firstOrNull()
             val expiresAt = System.currentTimeMillis() / 1000 + token.expiresInSeconds
             settingsStore.saveTokens(
@@ -504,9 +502,9 @@ class LoginViewModel(
                 login = me?.login,
             )
         }.onSuccess {
-            _state.update { it.copy(isAuthenticating = false, isLoggedIn = true) }
+            _state.update { it.copy(isAuthenticating = false, userCode = null, isLoggedIn = true) }
         }.onFailure { e ->
-            _state.update { it.copy(isAuthenticating = false, error = e.message ?: "Login failed") }
+            _state.update { it.copy(isAuthenticating = false, userCode = null, error = e.message ?: "Login failed") }
         }
     }
 }
