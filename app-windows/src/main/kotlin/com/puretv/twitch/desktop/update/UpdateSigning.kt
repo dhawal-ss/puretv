@@ -11,13 +11,17 @@ package com.puretv.twitch.desktop.update
  * ── [ACTION REQUIRED] one-time setup ─────────────────────────────────────────
  * Generate the keypair locally (needs openssl ≥ 1.1.1):
  *
- *   openssl genpkey -algorithm ed25519 -out update_private.pem
- *   openssl pkey -in update_private.pem -pubout -outform DER | base64 -w0
+ * Generate it OUTSIDE the repo so it can never be committed (the repo also
+ * gitignores *.pem as a backstop):
+ *
+ *   openssl genpkey -algorithm ed25519 -out ~/.puretv-signing/update_private.pem
+ *   openssl pkey -in ~/.puretv-signing/update_private.pem -pubout -outform DER | base64 -w0
  *
  * 1. Paste the printed base64 line between the quotes in [PUBLIC_KEY_BASE64].
- * 2. Put the FULL contents of update_private.pem into the repo secret
- *    `UPDATE_SIGNING_KEY` (Settings → Secrets and variables → Actions).
- * 3. Delete update_private.pem from disk; keep an offline backup somewhere safe.
+ * 2. Put the FULL contents of that .pem into the repo secret `UPDATE_SIGNING_KEY`
+ *    (Settings → Secrets and variables → Actions), e.g.
+ *    `gh secret set UPDATE_SIGNING_KEY < ~/.puretv-signing/update_private.pem`.
+ * 3. Keep an offline backup of the .pem somewhere safe; never put it in the repo.
  *
  * Until [PUBLIC_KEY_BASE64] is filled in, the updater is fail-closed: it refuses
  * to install anything (safer than installing an unverified binary). Set it
