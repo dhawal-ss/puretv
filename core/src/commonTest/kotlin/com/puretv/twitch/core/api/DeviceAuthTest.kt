@@ -31,4 +31,40 @@ class DeviceAuthTest {
         assertEquals("RT", form["refresh_token"])
         assertFalse(form.containsKey("client_secret"))
     }
+
+    @Test
+    fun parseDeviceCode_reads_all_fields() {
+        val body = """
+            {"device_code":"DC","user_code":"ABCD-1234",
+             "verification_uri":"https://www.twitch.tv/activate",
+             "expires_in":1800,"interval":5}
+        """.trimIndent()
+        val r = DeviceAuth.parseDeviceCode(body)
+        assertEquals("DC", r.deviceCode)
+        assertEquals("ABCD-1234", r.userCode)
+        assertEquals("https://www.twitch.tv/activate", r.verificationUri)
+        assertEquals(1800L, r.expiresInSeconds)
+        assertEquals(5L, r.intervalSeconds)
+    }
+
+    @Test
+    fun parsePollResult_pending() {
+        val r = DeviceAuth.parsePollResult("""{"status":400,"message":"authorization_pending"}""")
+        assertTrue(r is DevicePollResult.Pending, "got $r")
+    }
+
+    @Test
+    fun parsePollResult_success_returns_token() {
+        val body = """{"access_token":"AT","refresh_token":"RT","expires_in":3600,"token_type":"bearer","scope":["chat:read"]}"""
+        val r = DeviceAuth.parsePollResult(body)
+        assertTrue(r is DevicePollResult.Success, "got $r")
+        assertEquals("AT", (r as DevicePollResult.Success).token.accessToken)
+        assertEquals("RT", r.token.refreshToken)
+    }
+
+    @Test
+    fun parsePollResult_invalid_device_code_is_expired() {
+        val r = DeviceAuth.parsePollResult("""{"status":400,"message":"invalid device code"}""")
+        assertTrue(r is DevicePollResult.Expired, "got $r")
+    }
 }
