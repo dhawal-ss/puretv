@@ -25,7 +25,7 @@ package com.puretv.twitch.desktop.update
  */
 object UpdateSigning {
 
-    const val PUBLIC_KEY_BASE64: String = ""
+    const val PUBLIC_KEY_BASE64: String = "MCowBQYDK2VwAyEAgz+vFKXZfaDYzI8KpIc4OChDqCAegU8a4vIzTAlOVOc="
 
     /** True once a publisher key is embedded; gates whether updates can install. */
     val isConfigured: Boolean get() = PUBLIC_KEY_BASE64.isNotBlank()
