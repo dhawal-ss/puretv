@@ -2,6 +2,8 @@ package com.puretv.twitch.desktop.data
 
 import com.puretv.twitch.core.di.TokenHolder
 import com.puretv.twitch.core.model.AppSettings
+import com.puretv.twitch.desktop.auth.CURRENT_AUTH_SCHEMA
+import com.puretv.twitch.desktop.auth.needsAuthReset
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -42,6 +44,7 @@ class DesktopSettingsStore(
     private val settingsFile = File(appDataDir, "settings.json")
     private val tokensFile = File(appDataDir, "tokens.enc")
     private val keyFile = File(appDataDir, ".keyseed")
+    private val authSchemaFile = File(appDataDir, ".authschema")
 
     private val json = Json { ignoreUnknownKeys = true; prettyPrint = true; encodeDefaults = true }
 
@@ -50,11 +53,25 @@ class DesktopSettingsStore(
 
     init {
         appDataDir.mkdirs()
+        runMigrations()
         // Cold-start restoration: push the saved access token into the shared
         // TokenHolder so TwitchApiClient/TwitchGqlClient can authenticate on the
         // very first call, before the user has to "log in again" after a restart.
         // Mirrors the Android/TV AppSettingsStore.init pattern.
         loadTokens()?.let { tokenHolder.update(it.accessToken) }
+    }
+
+    /**
+     * One-time re-login on the upgrade that introduced Device Code Grant: tokens
+     * minted under the old authorization_code flow can't be refreshed without the
+     * client_secret, so clear them once and let the user sign in again.
+     */
+    private fun runMigrations() {
+        val storedSchema = runCatching { authSchemaFile.readText().trim().toInt() }.getOrDefault(0)
+        if (needsAuthReset(storedSchema, CURRENT_AUTH_SCHEMA, hasSession = tokensFile.exists())) {
+            clearTokens()
+        }
+        runCatching { authSchemaFile.writeText(CURRENT_AUTH_SCHEMA.toString()) }
     }
 
     // ---- Settings (plaintext JSON) -----------------------------------------
