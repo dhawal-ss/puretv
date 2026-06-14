@@ -51,11 +51,32 @@ fun LoginContent(koin: Koin) {
                 ) {
                     CircularProgressIndicator(color = c.twitchPurple)
                     Text(
-                        "Waiting for you to finish signing in in your browser…",
+                        "We opened your browser — click “Authorize” there to finish.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = c.textSecondary,
                         modifier = Modifier.padding(top = 12.dp),
                     )
+                    state.userCode?.let { code ->
+                        Text(
+                            code,
+                            style = MaterialTheme.typography.headlineMedium,
+                            color = c.textPrimary,
+                            modifier = Modifier.padding(top = 12.dp),
+                        )
+                        Button(
+                            onClick = {
+                                java.awt.Toolkit.getDefaultToolkit().systemClipboard
+                                    .setContents(java.awt.datatransfer.StringSelection(code), null)
+                            },
+                            modifier = Modifier.padding(top = 8.dp),
+                        ) { Text("Copy code") }
+                        Text(
+                            "Didn’t open? Go to twitch.tv/activate and enter this code.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = c.textSecondary,
+                            modifier = Modifier.padding(top = 8.dp),
+                        )
+                    }
                 }
                 else -> Button(
                     onClick = viewModel::beginLogin,
