@@ -135,6 +135,8 @@ jobs:
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
     steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
       # Only the Windows installer artifact — downloading all artifacts also
       # pulls a stray Docker buildx metadata file that intermittently fails.
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
@@ -184,21 +186,34 @@ jobs:
           rm -f signing_key.pem installer.sig.raw
           echo "Signed $(basename "$installer") -> $(basename "${installer}").sig"
 
+      # Turn the top CHANGELOG.md section into the user-facing release notes —
+      # plain language, no auto-generated technical commit list.
+      - name: Build release notes from CHANGELOG
+        run: |
+          VER="${GITHUB_REF_NAME#v}"
+          # Everything after "## <ver>" up to the next "## "; drop leading blank
+          # lines so the first line is the friendly summary the in-app banner shows.
+          awk -v ver="## $VER" '
+            index($0, ver) == 1 { f=1; next }
+            f && index($0, "## ") == 1 { exit }
+            f { print }
+          ' CHANGELOG.md | sed '/./,$!d' > notes.md
+          if [ ! -s notes.md ]; then
+            printf 'This release updates PureTV for Twitch.\n' > notes.md
+          fi
+          cat >> notes.md <<'DL'
+
+          ---
+          **Download** the installer below and run it — everything's included, no separate VLC needed. If Windows shows a SmartScreen warning, click **More info → Run anyway**. Already have PureTV? Just install over it.
+          DL
+          echo "----- release notes -----"; cat notes.md
+
       - name: Create draft release with artifacts
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
           draft: true
-          generate_release_notes: true
+          generate_release_notes: false
+          body_path: notes.md
           files: |
             artifacts/windows-release/**/*.exe
             artifacts/windows-release/**/*.exe.sig
-          # User-facing notes. GitHub appends the auto-generated "What's Changed"
-          # / Full Changelog below this. Keep it short and free of internal TODOs.
-          body: |
-            ## PureTV for Twitch ${{ github.ref_name }}
-
-            Download **PureTV-Setup-${{ steps.vars.outputs.version }}.exe** below and run it. The app launches automatically when the install finishes. Everything the app needs is included — no separate VLC install required.
-
-            If Windows shows a SmartScreen warning, click **More info → Run anyway** (the app is not code-signed yet).
-
-            Already have an earlier version? You can uninstall it first from **Add or remove programs**, or just install over it.
