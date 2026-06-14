@@ -7,10 +7,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 // ── Color palette ──────────────────────────────────────────────────────────────
@@ -23,6 +25,8 @@ data class PureTvDesktopColors(
     val surfaceHover: Color,
     val hairline: Color,
     val hairlineStrong: Color,
+    /** 6%-white top-edge inner glow that gives flat cards a sense of depth. */
+    val innerHighlight: Color,
     val scrim: Color,
     val scrimSoft: Color,
     val twitchPurple: Color,
@@ -30,6 +34,8 @@ data class PureTvDesktopColors(
     val adBlockGreen: Color,
     val textPrimary: Color,
     val textSecondary: Color,
+    /** Between secondary and muted — metadata, captions. */
+    val textTertiary: Color,
     val textMuted: Color,
     val live: Color,
     val online: Color,
@@ -63,24 +69,29 @@ private fun buildColors(
     surfaceVariant: Color,
     surfaceRaised: Color,
     surfaceHover: Color,
-    accent: Color = Color(0xFF9147FF),
-    accentLight: Color = Color(0xFFBF94FF),
+    // Brand accent: deliberately distinct from Twitch's own #9146FF (non-affiliation
+    // — see DESIGN_SYSTEM.md). Reconciles the prior code/doc mismatch on #9B5DE5.
+    accent: Color = Color(0xFF9B5DE5),
+    accentLight: Color = Color(0xFFC77DFF),
 ) = PureTvDesktopColors(
     background = bg,
     surface = surface,
     surfaceVariant = surfaceVariant,
     surfaceRaised = surfaceRaised,
     surfaceHover = surfaceHover,
-    hairline = Color(0x12FFFFFF),
-    hairlineStrong = Color(0x2AFFFFFF),
+    hairline = Color(0x14FFFFFF),
+    hairlineStrong = Color(0x24FFFFFF),
+    innerHighlight = Color(0x0FFFFFFF),
     scrim = Color(0xDD000000),
     scrimSoft = Color(0x88000000),
     twitchPurple = accent,
     twitchPurpleLight = accentLight,
     adBlockGreen = Color(0xFF00C896),
-    textPrimary = Color(0xFFEFEFF5),
-    textSecondary = Color(0xFF7B7B90),
-    textMuted = Color(0xFF484858),
+    // Brighter, near-neutral ink ladder — the old secondary/muted were too dim.
+    textPrimary = Color(0xFFF4F4F8),
+    textSecondary = Color(0xFFC2C4CE),
+    textTertiary = Color(0xFF8A8C99),
+    textMuted = Color(0xFF5E6070),
     live = Color(0xFFEB0400),
     online = Color(0xFF3DAA43),
     warning = Color(0xFFFFAD00),
@@ -88,11 +99,13 @@ private fun buildColors(
 
 val themeColors: Map<ThemeVariant, PureTvDesktopColors> = mapOf(
     ThemeVariant.PURE_DARK to buildColors(
-        bg = Color(0xFF080810),
-        surface = Color(0xFF0F0F1A),
-        surfaceVariant = Color(0xFF171726),
-        surfaceRaised = Color(0xFF1C1C2E),
-        surfaceHover = Color(0xFF22223A),
+        // Deepened, faintly cooler surface ladder — each rung ~+8-10 lightness is
+        // the elevation system (depth from the ladder + hairlines, not shadows).
+        bg = Color(0xFF07070E),
+        surface = Color(0xFF0E0E18),
+        surfaceVariant = Color(0xFF16161F),
+        surfaceRaised = Color(0xFF1D1D29),
+        surfaceHover = Color(0xFF25253A),
     ),
     ThemeVariant.AMOLED to buildColors(
         bg = Color(0xFF000000),
@@ -149,16 +162,33 @@ object PureTvMotion {
     const val ControlsAutoHideMs = 2800L
 }
 
+// ── Shape scale ─────────────────────────────────────────────────────────────────
+// One radius vocabulary so corners are consistent instead of ad hoc per call site.
+
+object PureTvShape {
+    val xs = RoundedCornerShape(6.dp)    // chips, badges
+    val sm = RoundedCornerShape(8.dp)    // buttons, inputs
+    val md = RoundedCornerShape(10.dp)   // thumbnails, cards
+    val lg = RoundedCornerShape(14.dp)   // panels, dialogs
+    val pill = RoundedCornerShape(999.dp) // primary CTA, search, avatars
+}
+
 // ── Typography ─────────────────────────────────────────────────────────────────
 
+// Type discipline: negative tracking on large sizes, generous line-height on body,
+// positive tracking on tiny labels; weights clustered at 400/500/600/700. This is
+// what reads as "designed, not defaulted" even before a custom font is bundled.
 private val PureTvDesktopTypography = Typography(
-    headlineLarge = TextStyle(fontSize = 28.sp, fontWeight = FontWeight.Bold),
-    headlineMedium = TextStyle(fontSize = 22.sp, fontWeight = FontWeight.SemiBold),
-    titleLarge = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.SemiBold),
-    titleMedium = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Medium),
-    bodyLarge = TextStyle(fontSize = 15.sp),
-    bodyMedium = TextStyle(fontSize = 13.sp),
-    labelSmall = TextStyle(fontSize = 11.sp, letterSpacing = 0.5.sp),
+    displayLarge = TextStyle(fontSize = 32.sp, fontWeight = FontWeight.Bold, letterSpacing = (-1.0).sp, lineHeight = 38.sp),
+    headlineLarge = TextStyle(fontSize = 26.sp, fontWeight = FontWeight.Bold, letterSpacing = (-0.6).sp, lineHeight = 32.sp),
+    headlineMedium = TextStyle(fontSize = 21.sp, fontWeight = FontWeight.SemiBold, letterSpacing = (-0.4).sp, lineHeight = 28.sp),
+    titleLarge = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.SemiBold, letterSpacing = (-0.3).sp, lineHeight = 24.sp),
+    titleMedium = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.Medium, letterSpacing = (-0.1).sp, lineHeight = 22.sp),
+    bodyLarge = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.Normal, lineHeight = 23.sp),
+    bodyMedium = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Normal, lineHeight = 20.sp),
+    labelLarge = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 0.1.sp, lineHeight = 16.sp),
+    labelMedium = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Medium, letterSpacing = 0.2.sp, lineHeight = 16.sp),
+    labelSmall = TextStyle(fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.6.sp, lineHeight = 14.sp),
 )
 
 // ── Theme wrapper ──────────────────────────────────────────────────────────────
