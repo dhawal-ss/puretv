@@ -7,7 +7,7 @@ kotlin = "2.0.21"
 compose-multiplatform = "1.7.0"
 agp = "8.7.0"
 koin = "4.0.0"
-ktor = "3.0.1"
+ktor = "3.1.1"
 coroutines = "1.9.0"
 serialization = "1.7.3"
 room = "2.7.0"
@@ -81,7 +81,7 @@ workmanager = { module = "androidx.work:work-runtime-ktx", version.ref = "workma
 # Image loading
 coil-compose = { module = "io.coil-kt.coil3:coil-compose", version.ref = "coil" }
 # Coil 3 split network engines by Ktor major version — ktor3 here matches our
-# pinned Ktor 3.0.x. There is no version-suffix-less `coil-network-ktor`.
+# pinned Ktor 3.1.x. There is no version-suffix-less `coil-network-ktor`.
 coil-network = { module = "io.coil-kt.coil3:coil-network-ktor3", version.ref = "coil" }
 
 # Testing — kotlin.test wraps JUnit on JVM/Android and the native runner on
