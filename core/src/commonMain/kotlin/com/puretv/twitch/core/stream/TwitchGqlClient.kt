@@ -82,7 +82,7 @@ class TwitchGqlClient(
             oauthToken = oauthToken,
         )
         val payload = json.decodeFromString<GqlEnvelope<PlaybackAccessTokenData>>(response)
-        val token = payload.data?.streamPlaybackAccessToken
+        val token = payload.data?.videoPlaybackAccessToken
             ?: throw GqlPlaybackTokenException("VOD PlaybackAccessToken returned no token")
         return StreamToken(value = token.value, signature = token.signature)
     }
@@ -141,6 +141,7 @@ data class GqlEnvelope<T>(val data: T? = null)
 @Serializable
 data class PlaybackAccessTokenData(
     @SerialName("streamPlaybackAccessToken") val streamPlaybackAccessToken: PlaybackAccessTokenValue? = null,
+    @SerialName("videoPlaybackAccessToken") val videoPlaybackAccessToken: PlaybackAccessTokenValue? = null,
 )
 
 @Serializable
