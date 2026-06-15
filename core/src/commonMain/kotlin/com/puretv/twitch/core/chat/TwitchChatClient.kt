@@ -114,9 +114,9 @@ class TwitchChatClient(
     }
 
     /** Queues a message; actual send is throttled by [ChatRateLimiter] (20 msgs / 30s). */
-    suspend fun sendMessage(channel: String, message: String) {
+    suspend fun sendMessage(channel: String, message: String, replyParentMsgId: String? = null) {
         try {
-            outbox.send(buildPrivmsgLine(channel, message))
+            outbox.send(buildPrivmsgLine(channel, message, replyParentMsgId))
         } catch (e: ClosedSendChannelException) {
             // not connected — drop silently, UI should reflect connection state
         }
@@ -149,12 +149,10 @@ internal const val MAX_CHAT_MESSAGE_LENGTH = 500
  * user's `chat:edit` session. Line breaks are neutralised to spaces and the body
  * is truncated to Twitch's [MAX_CHAT_MESSAGE_LENGTH] limit.
  */
-internal fun buildPrivmsgLine(channel: String, message: String): String {
-    val safeBody = message
-        .replace('\r', ' ')
-        .replace('\n', ' ')
-        .take(MAX_CHAT_MESSAGE_LENGTH)
-    return "PRIVMSG #${channel.lowercase()} :$safeBody"
+internal fun buildPrivmsgLine(channel: String, message: String, replyParentMsgId: String? = null): String {
+    val safeBody = message.replace('\r', ' ').replace('\n', ' ').take(MAX_CHAT_MESSAGE_LENGTH)
+    val base = "PRIVMSG #" + channel.lowercase() + " :" + safeBody
+    return if (replyParentMsgId.isNullOrBlank()) base else "@reply-parent-msg-id=" + replyParentMsgId + " " + base
 }
 
 /**
@@ -255,6 +253,8 @@ object TwitchIrcParser {
             isSubscriber = tags["subscriber"] == "1" || badges.any { it.setId == "subscriber" },
             isModerator = tags["mod"] == "1" || badges.any { it.setId == "moderator" },
             isBroadcaster = badges.any { it.setId == "broadcaster" },
+            replyParentDisplayName = tags["reply-parent-display-name"]?.ifBlank { null },
+            replyParentBody = tags["reply-parent-msg-body"]?.ifBlank { null },
         )
     }
 

@@ -113,6 +113,8 @@ data class ChatMessage(
     val isSubscriber: Boolean,
     val isModerator: Boolean,
     val isBroadcaster: Boolean,
+    val replyParentDisplayName: String? = null,
+    val replyParentBody: String? = null,
 )
 
 sealed class MessagePart {
