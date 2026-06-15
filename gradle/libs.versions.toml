@@ -89,6 +89,8 @@ coil-network = { module = "io.coil-kt.coil3:coil-network-ktor3", version.ref = "
 # compiles for. The common-annotations artifact is only needed for Native
 # targets; with JVM+Android, kotlin-test alone resolves the right variants.
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
+ktor-client-mock = { module = "io.ktor:ktor-client-mock", version.ref = "ktor" }
+kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "coroutines" }
 
 [plugins]
 kotlin-multiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }

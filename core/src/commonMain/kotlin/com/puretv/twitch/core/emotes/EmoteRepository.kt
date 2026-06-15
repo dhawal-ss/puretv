@@ -36,11 +36,15 @@ class EmoteRepository(
     suspend fun loadGlobalEmotes(): List<ChannelEmote> {
         if (globalsLoadedThisSession) cache.globalEmotes()?.let { return it }
         return coroutineScope {
-            val bttv = async { runCatching { fetchBttvGlobal() }.getOrDefault(emptyList()) }
-            val seventv = async { runCatching { fetchSevenTvGlobal() }.getOrDefault(emptyList()) }
-            val all = bttv.await() + seventv.await()
-            cache.putGlobalEmotes(all)
-            globalsLoadedThisSession = true
+            val bttvResult = async { runCatching { fetchBttvGlobal() } }
+            val seventvResult = async { runCatching { fetchSevenTvGlobal() } }
+            val bttv = bttvResult.await()
+            val seventv = seventvResult.await()
+            val all = bttv.getOrDefault(emptyList()) + seventv.getOrDefault(emptyList())
+            if (bttv.isSuccess && seventv.isSuccess) {
+                cache.putGlobalEmotes(all)
+                globalsLoadedThisSession = true
+            }
             all
         }
     }
