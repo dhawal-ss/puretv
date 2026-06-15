@@ -310,6 +310,8 @@ class StreamViewModel(
 
     fun setVolume(volume: Int) = vlcPlayer.setVolume(volume)
 
+    fun toggleMute() = vlcPlayer.toggleMute()
+
     fun sendChatMessage(text: String) = scope.launch {
         chatClient.sendMessage(channelLogin, text)
     }

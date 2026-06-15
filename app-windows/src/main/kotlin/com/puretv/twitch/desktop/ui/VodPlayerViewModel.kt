@@ -110,6 +110,7 @@ class VodPlayerViewModel(
     fun seekTo(ms: Long) = player.seekTo(ms)
     fun togglePlayPause() = player.togglePlayPause()
     fun setVolume(v: Int) = player.setVolume(v)
+    fun toggleMute() = player.toggleMute()
 
     // Save before tearing down, then stop the SHARED player singleton (safe because
     // the Stream and Vod routes are mutually exclusive). Mirrors StreamViewModel.
