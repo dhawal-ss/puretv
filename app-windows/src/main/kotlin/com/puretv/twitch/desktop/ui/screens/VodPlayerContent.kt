@@ -69,7 +69,7 @@ import com.puretv.twitch.desktop.ui.PlayerMode
 import com.puretv.twitch.desktop.ui.VodChatViewModel
 import com.puretv.twitch.desktop.ui.VodLaunch
 import com.puretv.twitch.desktop.ui.VodPlayerViewModel
-import com.puretv.twitch.desktop.ui.chat.nextUnread
+import com.puretv.twitch.desktop.ui.chat.scrollAnchor
 import com.puretv.twitch.desktop.ui.chat.shouldStick
 import com.puretv.twitch.desktop.ui.components.ButtonVariant
 import com.puretv.twitch.desktop.ui.components.ChatMessageRow
@@ -221,14 +221,14 @@ fun VodPlayerContent(koin: Koin, launch: VodLaunch, onBack: () -> Unit) {
                             info.totalItemsCount == 0 || lastVisible >= info.totalItemsCount - 2
                         }
                     }
-                    var hasUnread by remember { mutableStateOf(false) }
-                    LaunchedEffect(chatMessages.size) {
+                    // Keyed on the newest message id (scrollAnchor), NOT size — like
+                    // StreamContent: a rolling buffer keeps size constant so a size-keyed
+                    // effect stops firing, freezing auto-scroll.
+                    LaunchedEffect(scrollAnchor(chatMessages)) {
                         if (chatMessages.isEmpty()) return@LaunchedEffect
                         // INSTANT scroll keeps pace as replay appends; only when pinned.
                         if (shouldStick(pinned)) listState.scrollToItem(chatMessages.lastIndex)
-                        hasUnread = nextUnread(pinned, true, hasUnread)
                     }
-                    LaunchedEffect(pinned) { hasUnread = nextUnread(pinned, false, hasUnread) }
 
                     Box(Modifier.weight(1f).fillMaxWidth()) {
                         LazyColumn(
@@ -241,20 +241,19 @@ fun VodPlayerContent(koin: Koin, launch: VodLaunch, onBack: () -> Unit) {
                                 ChatMessageRow(message = msg, showTimestamps = false)
                             }
                         }
-                        if (hasUnread) {
+                        // Twitch parity: paused while scrolled up — resume affordance
+                        // until back at the bottom.
+                        if (!pinned) {
                             Surface(
                                 onClick = {
-                                    scope.launch {
-                                        listState.animateScrollToItem(chatMessages.lastIndex)
-                                        hasUnread = false
-                                    }
+                                    scope.launch { listState.animateScrollToItem(chatMessages.lastIndex) }
                                 },
                                 shape = PureTvShape.pill,
                                 color = c.twitchPurple,
                                 modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 12.dp),
                             ) {
                                 Text(
-                                    "New messages",
+                                    "Chat paused due to scroll",
                                     color = Color.White,
                                     modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
                                     style = MaterialTheme.typography.labelMedium,
