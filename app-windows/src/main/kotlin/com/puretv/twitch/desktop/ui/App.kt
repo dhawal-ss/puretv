@@ -70,6 +70,7 @@ import com.puretv.twitch.desktop.ui.screens.LoginContent
 import com.puretv.twitch.desktop.ui.screens.SearchContent
 import com.puretv.twitch.desktop.ui.screens.SettingsContent
 import com.puretv.twitch.desktop.ui.screens.StreamContent
+import com.puretv.twitch.desktop.ui.screens.VodPlayerContent
 import com.puretv.twitch.desktop.ui.theme.PureTvDesktopTheme
 import com.puretv.twitch.desktop.ui.theme.PureTvTheme
 import com.puretv.twitch.desktop.ui.theme.PureTvType
@@ -91,6 +92,7 @@ private sealed class Route {
     data class Category(val gameId: String, val gameName: String) : Route()
     data class Channel(val login: String) : Route()
     data class Stream(val login: String) : Route()
+    data class Vod(val vodId: String, val channelLogin: String) : Route()
 }
 
 @Composable
@@ -158,10 +160,16 @@ fun App(koin: Koin, windowState: WindowState, onClose: () -> Unit, awtWindow: Aw
                                     channelLogin = r.login,
                                     onBack = { route = Route.Channel(r.login) },
                                 )
+                                is Route.Vod -> VodPlayerContent(
+                                    koin = koin,
+                                    vodId = r.vodId,
+                                    onBack = { route = Route.Channel(r.channelLogin) },
+                                )
                                 is Route.Channel -> ChannelContent(
                                     koin = koin,
                                     channelLogin = r.login,
                                     onWatch = { route = Route.Stream(r.login) },
+                                    onPlayVod = { vodId -> route = Route.Vod(vodId, r.login) },
                                     onBack = { route = Route.Top },
                                 )
                                 is Route.Category -> CategoryContent(
