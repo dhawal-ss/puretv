@@ -41,6 +41,9 @@ class VodResolver(
         return runCatching { StoryboardParser.parse(url, jsonText) }.getOrNull()
     }
 
+    suspend fun videoComments(vodId: String, offsetSeconds: Int): List<ReplayComment> =
+        gqlClient.fetchVideoComments(vodId, offsetSeconds)
+
     companion object {
         fun buildVodMasterUrl(vodId: String, token: StreamToken): String {
             val p = Random.nextInt(100_000, 999_999)

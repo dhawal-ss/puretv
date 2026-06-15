@@ -28,4 +28,7 @@ class VodRepository(
 
     suspend fun loadStoryboard(vodId: String): com.puretv.twitch.core.stream.Storyboard? =
         vodResolver.loadStoryboard(vodId)
+
+    suspend fun videoComments(vodId: String, offsetSeconds: Int): List<com.puretv.twitch.core.stream.ReplayComment> =
+        vodResolver.videoComments(vodId, offsetSeconds)
 }
