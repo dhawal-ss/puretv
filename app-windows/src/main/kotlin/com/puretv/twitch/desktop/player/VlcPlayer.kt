@@ -98,6 +98,18 @@ class VlcPlayer {
             override fun mediaPlayerReady(mediaPlayer: MediaPlayer) {
                 _status.update { it.copy(isReady = true) }
             }
+
+            override fun timeChanged(mediaPlayer: MediaPlayer, newTime: Long) {
+                _status.update { it.copy(positionMs = newTime) }
+            }
+
+            override fun lengthChanged(mediaPlayer: MediaPlayer, newLength: Long) {
+                _status.update { it.copy(durationMs = newLength) }
+            }
+
+            override fun seekableChanged(mediaPlayer: MediaPlayer, newSeekable: Int) {
+                _status.update { it.copy(isSeekable = newSeekable != 0) }
+            }
         })
     }
 
@@ -186,6 +198,14 @@ class VlcPlayer {
         }
     }
 
+    /** Seek to an absolute position. No-op for non-seekable (live) media. */
+    fun seekTo(positionMs: Long) {
+        val mp = mediaPlayer ?: return
+        SwingUtilities.invokeLater {
+            if (mp.status().isSeekable) mp.controls().setTime(positionMs.coerceAtLeast(0))
+        }
+    }
+
     fun resume() {
         val mp = mediaPlayer ?: return
         SwingUtilities.invokeLater {
@@ -263,4 +283,7 @@ data class PlayerStatus(
     val isBuffering: Boolean = false,
     val volume: Int = 100,
     val error: String? = null,
+    val positionMs: Long = 0,
+    val durationMs: Long = 0,
+    val isSeekable: Boolean = false,
 )
