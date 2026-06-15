@@ -113,7 +113,7 @@ class TwitchApiClient(
             VideoType.ARCHIVE -> "archive"
             VideoType.HIGHLIGHT -> "highlight"
             VideoType.UPLOAD -> "upload"
-            else -> "all"
+            VideoType.UNKNOWN, null -> "all"
         }
         val resp: HelixPagedEnvelope<HelixVideo> = withRateLimitRetry {
             authedClient().get("${TwitchConfig.API_BASE}/videos") {

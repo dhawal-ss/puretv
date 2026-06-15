@@ -39,14 +39,17 @@ class VodListViewModel(
     }
 
     private fun load(reset: Boolean) {
-        val s = _state.value
-        _state.value = s.copy(loading = true, error = null)
+        // Capture the cursor for this request up-front (loadMore wants the cursor
+        // at call time); read the filter inside the coroutine so a setFilter that
+        // lands first can never be paged with a stale filter.
+        val cursor = if (reset) null else _state.value.cursor
+        _state.value = _state.value.copy(loading = true, error = null)
         scope.launch {
             runCatching {
                 vodRepository.videosFor(
                     userId = userId,
-                    type = s.filter,
-                    after = if (reset) null else s.cursor,
+                    type = _state.value.filter,
+                    after = cursor,
                 )
             }.onSuccess { page ->
                 _state.value = _state.value.copy(
