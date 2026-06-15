@@ -25,8 +25,10 @@ class VodChatViewModel(
     private val _messages = MutableStateFlow<List<ChatMessage>>(emptyList())
     val messages: StateFlow<List<ChatMessage>> = _messages.asStateFlow()
 
-    private var loading = false
-    private var lastSec = -1L
+    // Touched from collector + load coroutines on a thread-pool dispatcher → @Volatile.
+    @Volatile private var loading = false
+    @Volatile private var lastSec = -1L
+    @Volatile private var exhausted = false   // no more pages after the loaded window
 
     init {
         requestLoad(0)
@@ -42,9 +44,11 @@ class VodChatViewModel(
         val backward = sec < lastSec - 3
         lastSec = sec
         when {
-            backward -> { buffer.reset(); requestLoad(sec.toInt()) }
+            // Backward seek: chat for that point may differ; reload from scratch.
+            backward -> { buffer.reset(); exhausted = false; requestLoad(sec.toInt()) }
             buffer.isEmpty() -> requestLoad(sec.toInt())
-            sec.toInt() >= buffer.maxOffsetSeconds - PREFETCH_LEAD_SECONDS -> requestLoad(buffer.maxOffsetSeconds)
+            !exhausted && sec.toInt() >= buffer.maxOffsetSeconds - PREFETCH_LEAD_SECONDS ->
+                requestLoad(buffer.maxOffsetSeconds)
         }
         _messages.value = buffer.due(sec).takeLast(MAX_VISIBLE).map { it.message }
     }
@@ -55,7 +59,10 @@ class VodChatViewModel(
         loading = true
         scope.launch {
             runCatching { vodRepository.videoComments(vodId, offsetSeconds) }
-                .onSuccess { buffer.add(it) }
+                .onSuccess { batch ->
+                    buffer.add(batch.comments)
+                    if (!batch.hasNextPage) exhausted = true
+                }
             loading = false
             _messages.value = buffer.due(lastSec.coerceAtLeast(0)).takeLast(MAX_VISIBLE).map { it.message }
         }
