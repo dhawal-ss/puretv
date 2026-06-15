@@ -11,6 +11,14 @@ release notes automatically.
 
 ---
 
+## 1.7.2 - 2026-06-15
+
+Streams play again.
+
+### Fixed
+- **Streams load again.** Twitch changed something on their side that stopped PureTV from starting any stream — the player stayed black and the ad-blocker was stuck on "Checking…". PureTV now asks Twitch for streams in a way that doesn't depend on that, so live channels and past broadcasts play normally again.
+- **Clearer when something's wrong.** If a stream genuinely can't be reached, the ad-block badge no longer hangs on "Checking…" forever, so a real outage is easier to spot.
+
 ## 1.7.1 - 2026-06-15
 
 A quick fix for the new chat.

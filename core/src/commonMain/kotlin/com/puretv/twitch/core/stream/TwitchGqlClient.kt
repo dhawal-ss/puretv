@@ -18,16 +18,18 @@ import kotlinx.serialization.json.Json
 /**
  * SECTION 03.4 [CRITICAL] — Helix does not expose a playable stream URL.
  * The only way to obtain one is the undocumented GraphQL `PlaybackAccessToken`
- * persisted query, which returns a signed token that authorizes a single
+ * operation, which returns a signed token that authorizes a single
  * usher.ttvnw.net master-playlist fetch.
  *
- * GOTCHA #1 (Section 14): Twitch occasionally rotates [TwitchConfig.PLAYBACK_ACCESS_TOKEN_HASH].
- * If this starts returning 400/403, refresh the hash from Twitch's web client bundle —
- * see [GqlHashProvider] for the dynamic-lookup strategy this client falls back to.
+ * GOTCHA #1 (Section 14): we send the FULL inline query
+ * ([PLAYBACK_ACCESS_TOKEN_QUERY]) rather than a persisted-query `sha256Hash`.
+ * Twitch rotates persisted-query hashes without notice — a stale hash returns
+ * `PersistedQueryNotFound`, which surfaced as "streams won't load / ad-block
+ * stuck on Checking…". The inline query carries the operation itself, so there
+ * is no hash for Twitch to invalidate.
  */
 class TwitchGqlClient(
     private val httpClient: HttpClient,
-    private val hashProvider: GqlHashProvider = GqlHashProvider(),
     // encodeDefaults = true is LOAD-BEARING: Twitch's GraphQL schema requires
     // isLive/vodID/isVod/playerType as non-null types. With the kotlinx-serialization
     // default of false, our PlaybackAccessTokenVariables data class's default
@@ -48,10 +50,7 @@ class TwitchGqlClient(
         oauthToken: String?,
         playerType: String = "site",
     ): StreamToken {
-        val hash = hashProvider.currentHash()
-        val response = postPersistedQuery(
-            operationName = "PlaybackAccessToken",
-            hash = hash,
+        val response = postPlaybackAccessToken(
             variables = PlaybackAccessTokenVariables(login = channelLogin, playerType = playerType),
             oauthToken = oauthToken,
         )
@@ -59,15 +58,11 @@ class TwitchGqlClient(
         val payload = json.decodeFromString<GqlEnvelope<PlaybackAccessTokenData>>(response)
         val token = payload.data?.streamPlaybackAccessToken
             ?: run {
-                // Hash likely stale — record the failure so GqlHashProvider can
-                // attempt a dynamic refresh on the next call. Surface the raw
-                // GQL body so the real cause (error message, integrity check,
-                // banned channel, etc.) is visible instead of a generic blame.
-                hashProvider.reportFailure(hash)
+                // Surface the raw GQL body so the real cause (schema change,
+                // integrity check, banned channel, etc.) is visible instead of
+                // a generic blame.
                 val truncated = if (response.length > 600) response.substring(0, 600) + "…" else response
-                throw GqlPlaybackTokenException(
-                    "PlaybackAccessToken returned no token. Hash=$hash. GQL response: $truncated",
-                )
+                throw GqlPlaybackTokenException("PlaybackAccessToken returned no token. GQL response: $truncated")
             }
 
         return StreamToken(value = token.value, signature = token.signature)
@@ -75,10 +70,7 @@ class TwitchGqlClient(
 
     /** Fetch a playback token for a VOD instead of a live channel. */
     suspend fun fetchVodToken(vodId: String, oauthToken: String?): StreamToken {
-        val hash = hashProvider.currentHash()
-        val response = postPersistedQuery(
-            operationName = "PlaybackAccessToken",
-            hash = hash,
+        val response = postPlaybackAccessToken(
             variables = PlaybackAccessTokenVariables(login = "", isLive = false, isVod = true, vodID = vodId),
             oauthToken = oauthToken,
         )
@@ -131,36 +123,59 @@ class TwitchGqlClient(
         return parseFollowerCount(response)
     }
 
-    private suspend fun postPersistedQuery(
-        operationName: String,
-        hash: String,
+    private suspend fun postPlaybackAccessToken(
         variables: PlaybackAccessTokenVariables,
         oauthToken: String?,
-    ): String {
-        val body = GqlPersistedQueryRequest(
-            operationName = operationName,
-            variables = variables,
-            extensions = GqlExtensions(persistedQuery = PersistedQuery(version = 1, sha256Hash = hash)),
-        )
-        return httpClient.post(TwitchConfig.GQL_ENDPOINT) {
-            header("Client-ID", TwitchConfig.GQL_CLIENT_ID)
-            oauthToken?.let { header("Authorization", "OAuth $it") }
-            contentType(ContentType.Application.Json)
-            setBody(json.encodeToString(body))
-        }.body()
-    }
+    ): String = httpClient.post(TwitchConfig.GQL_ENDPOINT) {
+        header("Client-ID", TwitchConfig.GQL_CLIENT_ID)
+        oauthToken?.let { header("Authorization", "OAuth $it") }
+        contentType(ContentType.Application.Json)
+        setBody(buildPlaybackAccessTokenBody(variables, json))
+    }.body()
 }
 
 class GqlPlaybackTokenException(message: String) : Exception(message)
 
-// ---- Wire format for the persisted-query POST body ----
+/**
+ * The FULL inline PlaybackAccessToken GraphQL operation (the same one Twitch's
+ * own web client runs). We send this verbatim instead of a persisted-query
+ * `sha256Hash` so there is nothing for Twitch to rotate out from under us —
+ * the cause of GOTCHA #1 (a stale hash → `PersistedQueryNotFound` → no token →
+ * no stream). The `@include(if:)` directives let the single operation serve
+ * both live (`isLive`) and VOD (`isVod`) requests.
+ */
+internal const val PLAYBACK_ACCESS_TOKEN_QUERY =
+    "query PlaybackAccessToken_Template(\$login: String!, \$isLive: Boolean!, \$vodID: ID!, \$isVod: Boolean!, \$playerType: String!) { " +
+        "streamPlaybackAccessToken(channelName: \$login, params: {platform: \"web\", playerBackend: \"mediaplayer\", playerType: \$playerType}) @include(if: \$isLive) { value signature __typename } " +
+        "videoPlaybackAccessToken(id: \$vodID, params: {platform: \"web\", playerBackend: \"mediaplayer\", playerType: \$playerType}) @include(if: \$isVod) { value signature __typename } }"
 
 @Serializable
-data class GqlPersistedQueryRequest(
+internal data class GqlInlineQueryRequest(
     val operationName: String,
+    val query: String,
     val variables: PlaybackAccessTokenVariables,
-    val extensions: GqlExtensions,
 )
+
+/**
+ * Serializes the PlaybackAccessToken request body. Pure (no network) so the
+ * inline-query contract is unit-testable.
+ *
+ * `encodeDefaults = true` is LOAD-BEARING: Twitch's schema types
+ * isLive/isVod/vodID/playerType as non-null, so the data class defaults must be
+ * serialized — otherwise Twitch sees explicit nulls and rejects the query.
+ */
+internal fun buildPlaybackAccessTokenBody(
+    variables: PlaybackAccessTokenVariables,
+    json: Json = Json { encodeDefaults = true },
+): String = json.encodeToString(
+    GqlInlineQueryRequest(
+        operationName = "PlaybackAccessToken_Template",
+        query = PLAYBACK_ACCESS_TOKEN_QUERY,
+        variables = variables,
+    ),
+)
+
+// ---- Wire format for the PlaybackAccessToken POST body ----
 
 @Serializable
 data class PlaybackAccessTokenVariables(
@@ -170,12 +185,6 @@ data class PlaybackAccessTokenVariables(
     val vodID: String = "",
     val playerType: String = "site",
 )
-
-@Serializable
-data class GqlExtensions(val persistedQuery: PersistedQuery)
-
-@Serializable
-data class PersistedQuery(val version: Int, val sha256Hash: String)
 
 // ---- Response envelope ----
 
@@ -225,37 +234,3 @@ internal fun parseFollowerCount(response: String): Long? =
         followerCountJson.decodeFromString<GqlEnvelope<FollowerCountData>>(response)
             .data?.user?.followers?.totalCount
     }.getOrNull()
-
-/**
- * Holds the persisted-query hash and provides a refresh hook for GOTCHA #1.
- *
- * In production this should periodically scrape Twitch's web client JS bundle
- * for the current `PlaybackAccessToken` sha256Hash (it's a stable string literal
- * in the minified bundle) and cache the result, falling back to the pinned
- * constant when scraping fails or is disabled by the user.
- */
-class GqlHashProvider(
-    private var cachedHash: String = TwitchConfig.PLAYBACK_ACCESS_TOKEN_HASH,
-    private val onFailureRefresh: (suspend () -> String?)? = null,
-) {
-    private var consecutiveFailures = 0
-
-    fun currentHash(): String = cachedHash
-
-    fun reportFailure(failedHash: String) {
-        if (failedHash == cachedHash) consecutiveFailures++
-    }
-
-    /** Call from a background worker if [reportFailure] indicates the pinned hash is stale. */
-    suspend fun tryRefresh(): Boolean {
-        val refreshed = onFailureRefresh?.invoke() ?: return false
-        if (refreshed.isNotBlank() && refreshed != cachedHash) {
-            cachedHash = refreshed
-            consecutiveFailures = 0
-            return true
-        }
-        return false
-    }
-
-    fun shouldAttemptRefresh(): Boolean = consecutiveFailures >= 1
-}
