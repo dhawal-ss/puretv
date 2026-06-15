@@ -40,13 +40,11 @@ object TwitchConfig {
      */
     const val GQL_CLIENT_ID = "kimne78kx3ncx6brgo4mv6wki5h1ko"
 
-    /**
-     * Persisted-query hash for the PlaybackAccessToken GQL operation.
-     * Twitch rotates this occasionally — see [com.puretv.twitch.core.stream.GqlHashProvider]
-     * for the dynamic-refresh strategy that should back this constant up.
-     */
-    const val PLAYBACK_ACCESS_TOKEN_HASH =
-        "0828119ded1c13477966434e15800ff57ddacf13ba1911c129dc2200705b0712"
+    // NOTE: the PlaybackAccessToken operation is sent as a FULL INLINE GraphQL
+    // query (see com.puretv.twitch.core.stream.PLAYBACK_ACCESS_TOKEN_QUERY), not
+    // a persisted-query sha256Hash. Twitch rotates persisted hashes without
+    // notice — a stale hash returns PersistedQueryNotFound and breaks all stream
+    // resolution (GOTCHA #1). The inline query has no hash to invalidate.
 
     const val USHER_BASE = "https://usher.ttvnw.net/api/channel/hls"
     const val USHER_VOD_BASE = "https://usher.ttvnw.net/vod"

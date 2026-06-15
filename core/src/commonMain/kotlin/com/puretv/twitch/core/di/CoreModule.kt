@@ -10,7 +10,6 @@ import com.puretv.twitch.core.repository.ChannelRepository
 import com.puretv.twitch.core.repository.ChannelStatsRepository
 import com.puretv.twitch.core.repository.StreamRepository
 import com.puretv.twitch.core.repository.UserRepository
-import com.puretv.twitch.core.stream.GqlHashProvider
 import com.puretv.twitch.core.stream.StreamResolver
 import com.puretv.twitch.core.stream.TwitchGqlClient
 import io.ktor.client.HttpClient
@@ -36,8 +35,7 @@ val coreModule = module {
 
     // Twitch
     single { val holder = get<TokenHolder>(); TwitchApiClient(get()) { holder.current() } }
-    single { GqlHashProvider() }
-    single { TwitchGqlClient(get(), get()) }
+    single { TwitchGqlClient(get()) }
     single { StreamResolver(get(), get()) }
 
     // Ad Block — AdBlockConfig is normally provided per-platform from DataStore/settings;

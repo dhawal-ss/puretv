@@ -175,6 +175,11 @@ class LocalStreamProxy(
                         }
                     }.onFailure { e ->
                         failures.incrementAndGet()
+                        // Resolution threw before resolveCleanStream could run (e.g. the
+                        // GQL token mint failed). resolveCleanStream never set a status, so
+                        // flip the engine off UNKNOWN here — otherwise the pill hangs on
+                        // "Checking…" forever and hides the outage (GOTCHA #1 lesson).
+                        adBlockEngine.reportResolutionFailure()
                         lastFailure.set(
                             FetchSnapshot(
                                 channel = channel,

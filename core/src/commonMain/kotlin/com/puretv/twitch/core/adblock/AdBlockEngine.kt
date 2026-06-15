@@ -100,6 +100,19 @@ class AdBlockEngine(
      */
     fun filterPlaylist(playlistContent: String): FilteredPlaylist = rewriter.filter(playlistContent)
 
+    /**
+     * Called by the transport layer (e.g. `LocalStreamProxy`) when stream
+     * resolution fails BEFORE [resolveCleanStream] can run — typically the GQL
+     * playback-token mint threw (a banned/renamed channel, or Twitch changing
+     * the API as in GOTCHA #1). Without this the status would sit at
+     * [AdBlockStatus.UNKNOWN] ("Checking…") forever, silently masking the
+     * outage; moving it to [AdBlockStatus.AD_BLOCK_OFF] makes the failure
+     * visible in the on-screen pill instead.
+     */
+    fun reportResolutionFailure() {
+        _status.value = AdBlockStatus.AD_BLOCK_OFF
+    }
+
     // ---- Strategy 1: Proxy Router ----
 
     /**
