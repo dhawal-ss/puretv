@@ -18,8 +18,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -107,22 +105,11 @@ fun SettingsContent(koin: Koin, onExit: () -> Unit) {
 
         // ── Ad blocking ──────────────────────────────────────────────────────────
         SettingsSection(title = "Ad blocking") {
-            SettingsRow(
-                label = "Block ads",
-                description = "When on, Twitch ads are blocked across live streams and past videos.",
-            ) {
-                Switch(
-                    checked = state.settings.adBlockEnabled,
-                    onCheckedChange = viewModel::setAdBlockEnabled,
-                    colors = SwitchDefaults.colors(
-                        checkedThumbColor = c.background,
-                        checkedTrackColor = c.twitchPurple,
-                        uncheckedThumbColor = c.textSecondary,
-                        uncheckedTrackColor = c.surfaceVariant,
-                        uncheckedBorderColor = c.hairlineStrong,
-                    ),
-                )
-            }
+            Text(
+                "Always on. Twitch ads are blocked across live streams and past videos.",
+                style = MaterialTheme.typography.bodyLarge,
+                color = c.textSecondary,
+            )
         }
 
         // ── Account ──────────────────────────────────────────────────────────────
