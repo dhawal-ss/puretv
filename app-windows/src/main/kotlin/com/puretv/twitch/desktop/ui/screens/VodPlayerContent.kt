@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -13,8 +14,12 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
@@ -25,6 +30,7 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -37,9 +43,11 @@ import androidx.compose.ui.unit.dp
 import com.puretv.twitch.core.model.StreamQuality
 import com.puretv.twitch.desktop.player.VlcPlayerView
 import com.puretv.twitch.desktop.player.formatTimecode
+import com.puretv.twitch.desktop.ui.VodChatViewModel
 import com.puretv.twitch.desktop.ui.VodLaunch
 import com.puretv.twitch.desktop.ui.VodPlayerViewModel
 import com.puretv.twitch.desktop.ui.components.ButtonVariant
+import com.puretv.twitch.desktop.ui.components.ChatMessageRow
 import com.puretv.twitch.desktop.ui.components.PureButton
 import com.puretv.twitch.desktop.ui.components.SeekPreview
 import com.puretv.twitch.desktop.ui.components.SegmentedControl
@@ -56,8 +64,13 @@ fun VodPlayerContent(koin: Koin, launch: VodLaunch, onBack: () -> Unit) {
     val status by viewModel.status.collectAsState()
     val c = PureTvTheme.colors
 
+    val chatViewModel = rememberDesktopViewModel(launch.vodId) { koin.get<VodChatViewModel> { parametersOf(launch.vodId) } }
+    val chatMessages by chatViewModel.messages.collectAsState()
+    var chatOpen by remember { mutableStateOf(true) }
+
     Box(Modifier.fillMaxSize().background(Color.Black)) {
-        Column(Modifier.fillMaxSize()) {
+        Row(Modifier.fillMaxSize()) {
+            Column(Modifier.weight(1f).fillMaxHeight()) {
             // Top bar
             Row(
                 modifier = Modifier.fillMaxWidth().background(c.surface).padding(horizontal = 8.dp, vertical = 6.dp),
@@ -72,6 +85,13 @@ fun VodPlayerContent(koin: Koin, launch: VodLaunch, onBack: () -> Unit) {
                     color = c.textPrimary,
                     modifier = Modifier.weight(1f).padding(start = 4.dp),
                 )
+                IconButton(onClick = { chatOpen = !chatOpen }) {
+                    Icon(
+                        Icons.AutoMirrored.Filled.Chat,
+                        contentDescription = "Toggle chat",
+                        tint = if (chatOpen) c.twitchPurpleLight else c.textSecondary,
+                    )
+                }
             }
             Box(Modifier.fillMaxWidth().height(1.dp).background(c.hairline))
 
@@ -172,6 +192,24 @@ fun VodPlayerContent(koin: Koin, launch: VodLaunch, onBack: () -> Unit) {
                     )
                 }
             }
-        }
-    }
+            } // end player Column
+            if (chatOpen) {
+                Column(Modifier.width(340.dp).fillMaxHeight().background(c.surface)) {
+                    Box(Modifier.fillMaxWidth().height(1.dp).background(c.hairline))
+                    val listState = rememberLazyListState()
+                    LaunchedEffect(chatMessages.size) {
+                        if (chatMessages.isNotEmpty()) listState.animateScrollToItem(chatMessages.size - 1)
+                    }
+                    LazyColumn(
+                        state = listState,
+                        modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = 10.dp),
+                    ) {
+                        items(chatMessages, key = { it.id }) { msg ->
+                            ChatMessageRow(message = msg, showTimestamps = false, modifier = Modifier.padding(vertical = 2.dp))
+                        }
+                    }
+                }
+            }
+        } // end Row
+    } // end Box
 }
