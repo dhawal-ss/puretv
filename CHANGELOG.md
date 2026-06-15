@@ -11,6 +11,13 @@ release notes automatically.
 
 ---
 
+## 1.7.1 - 2026-06-15
+
+A quick fix for the new chat.
+
+### Fixed
+- **Your own messages now show up.** When you send a message in chat, it appears on your screen right away, with your name, color and badges. Twitch never sends your own messages back to your app, so PureTV now adds them for you.
+
 ## 1.7.0 - 2026-06-15
 
 A big chat upgrade, plus a volume fix.
