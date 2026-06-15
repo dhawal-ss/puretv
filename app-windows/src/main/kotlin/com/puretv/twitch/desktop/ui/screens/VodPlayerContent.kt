@@ -37,6 +37,8 @@ import com.puretv.twitch.desktop.player.VlcPlayerView
 import com.puretv.twitch.desktop.player.formatTimecode
 import com.puretv.twitch.desktop.ui.VodLaunch
 import com.puretv.twitch.desktop.ui.VodPlayerViewModel
+import com.puretv.twitch.desktop.ui.components.ButtonVariant
+import com.puretv.twitch.desktop.ui.components.PureButton
 import com.puretv.twitch.desktop.ui.components.SegmentedControl
 import com.puretv.twitch.desktop.ui.rememberDesktopViewModel
 import com.puretv.twitch.desktop.ui.theme.PureTvTheme
@@ -88,6 +90,22 @@ fun VodPlayerContent(koin: Koin, launch: VodLaunch, onBack: () -> Unit) {
             // Controls
             Box(Modifier.fillMaxWidth().height(1.dp).background(c.hairline))
             Column(Modifier.fillMaxWidth().background(c.surface).padding(horizontal = 12.dp, vertical = 8.dp)) {
+                state.resumeOfferMs?.let { at ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            "Resume from ${formatTimecode(at)}?",
+                            style = PureTvType.data,
+                            color = c.textPrimary,
+                            modifier = Modifier.weight(1f),
+                        )
+                        PureButton(text = "Resume", onClick = viewModel::resume, variant = ButtonVariant.Primary)
+                        Spacer(Modifier.width(8.dp))
+                        PureButton(text = "Start over", onClick = viewModel::startOver, variant = ButtonVariant.Secondary)
+                    }
+                }
                 // Seek bar
                 var dragMs by remember { mutableStateOf<Long?>(null) }
                 val duration = status.durationMs.coerceAtLeast(1)
