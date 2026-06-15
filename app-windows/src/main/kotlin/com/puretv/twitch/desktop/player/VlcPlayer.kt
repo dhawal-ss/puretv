@@ -73,10 +73,18 @@ class VlcPlayer {
 
     private var currentUrl: String? = null
 
+    // Remembers the pre-mute level so unmuting restores it. Touched from the
+    // EDT (slider) and VLC callback threads, hence @Volatile.
+    @Volatile private var preMuteVolume: Int = DEFAULT_VOLUME
+
     init {
         mediaPlayer?.events()?.addMediaPlayerEventListener(object : MediaPlayerEventAdapter() {
             override fun playing(mediaPlayer: MediaPlayer) {
                 _status.update { it.copy(isPlaying = true, isBuffering = false, error = null) }
+                // Assert our volume on playback start so libVLC stops adopting its
+                // own default (~30-50% perceived) until the user first drags the slider.
+                val s = _status.value
+                runCatching { mediaPlayer.audio().setVolume(if (s.isMuted) 0 else s.volume) }
             }
 
             override fun paused(mediaPlayer: MediaPlayer) {
@@ -229,7 +237,8 @@ class VlcPlayer {
     /** [volume] is 0–100, matching VLC's native scale (Section 8.4 volume slider). */
     fun setVolume(volume: Int) {
         val mp = mediaPlayer ?: return
-        val v = volume.coerceIn(0, 100)
+        val next = applyVolumeChange(VolumeState(_status.value.volume, _status.value.isMuted, preMuteVolume), volume)
+        preMuteVolume = next.preMute
         // INSTANT volume — do NOT marshal through SwingUtilities.invokeLater.
         // The slider's onValueChange already runs on the EDT, so invokeLater only
         // *re-queued* this work behind whatever AWT repaint/resize tasks the
@@ -238,8 +247,17 @@ class VlcPlayer {
         // the EDT: libvlc_audio_set_volume is thread-safe, and MutableStateFlow
         // updates are safe from any thread (see class header). Publishing the UI
         // state first keeps the slider glued to the cursor.
-        _status.update { it.copy(volume = v) }
-        runCatching { mp.audio().setVolume(v) }
+        _status.update { it.copy(volume = next.volume, isMuted = next.isMuted) }
+        runCatching { mp.audio().setVolume(next.volume) }
+    }
+
+    /** Toggles mute, remembering the pre-mute level so unmute restores it. */
+    fun toggleMute() {
+        val mp = mediaPlayer ?: return
+        val next = applyMuteToggle(VolumeState(_status.value.volume, _status.value.isMuted, preMuteVolume))
+        preMuteVolume = next.preMute
+        _status.update { it.copy(volume = next.volume, isMuted = next.isMuted) }
+        runCatching { mp.audio().setVolume(next.volume) }
     }
 
     fun release() {
@@ -281,7 +299,8 @@ data class PlayerStatus(
     val isReady: Boolean = false,
     val isPlaying: Boolean = false,
     val isBuffering: Boolean = false,
-    val volume: Int = 100,
+    val volume: Int = DEFAULT_VOLUME,
+    val isMuted: Boolean = false,
     val error: String? = null,
     val positionMs: Long = 0,
     val durationMs: Long = 0,
