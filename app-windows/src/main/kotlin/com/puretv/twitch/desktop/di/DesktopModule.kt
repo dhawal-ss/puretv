@@ -3,6 +3,7 @@ package com.puretv.twitch.desktop.di
 import com.puretv.twitch.desktop.auth.DesktopOAuthManager
 import com.puretv.twitch.desktop.data.DesktopSettingsStore
 import com.puretv.twitch.desktop.data.FollowStore
+import com.puretv.twitch.desktop.data.WatchProgressStore
 import com.puretv.twitch.desktop.player.LocalStreamProxy
 import com.puretv.twitch.desktop.player.VlcPlayer
 import com.puretv.twitch.desktop.update.UpdateManager
@@ -44,6 +45,8 @@ val desktopModule = module {
     single { DesktopSettingsStore(get()) }
     // Local "Following" list (the in-app library) — see FollowStore.
     single { FollowStore() }
+    // Per-VOD playback positions ("continue watching") — see WatchProgressStore.
+    single { WatchProgressStore() }
     // In-app auto-updater (GitHub Releases) — see UpdateManager.
     single { UpdateManager() }
 
