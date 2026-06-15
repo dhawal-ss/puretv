@@ -49,6 +49,7 @@ object TwitchConfig {
         "0828119ded1c13477966434e15800ff57ddacf13ba1911c129dc2200705b0712"
 
     const val USHER_BASE = "https://usher.ttvnw.net/api/channel/hls"
+    const val USHER_VOD_BASE = "https://usher.ttvnw.net/vod"
 
     fun authorizeUrl(redirectUri: String, codeChallenge: String, state: String): String {
         // Fail at OAuth-start time rather than letting Twitch reject the request
