@@ -15,6 +15,7 @@ import com.puretv.twitch.core.emotes.EmoteRepository
 import com.puretv.twitch.core.emotes.PickableEmote
 import com.puretv.twitch.core.emotes.buildPickableEmotes
 import com.puretv.twitch.core.model.AppSettings
+import com.puretv.twitch.core.model.Badge
 import com.puretv.twitch.core.model.ChannelInfo
 import com.puretv.twitch.core.model.ChatEvent
 import com.puretv.twitch.core.model.ChatMessage
@@ -29,6 +30,7 @@ import com.puretv.twitch.desktop.data.FollowStore
 import com.puretv.twitch.desktop.data.FollowedChannel
 import com.puretv.twitch.desktop.player.LocalStreamProxy
 import com.puretv.twitch.desktop.player.VlcPlayer
+import com.puretv.twitch.desktop.ui.chat.buildSelfEcho
 import io.ktor.client.HttpClient
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -259,6 +261,14 @@ class StreamViewModel(
     private val _state = MutableStateFlow(StreamUiState())
     val state: StateFlow<StreamUiState> = _state.asStateFlow()
 
+    // Identity for the optimistic local echo of our own sent messages — Twitch
+    // never echoes your own PRIVMSG back. Captured from USERSTATE/GLOBALUSERSTATE.
+    private var selfLogin: String? = null
+    private var selfDisplayName: String? = null
+    private var selfColor: String? = null
+    private var selfBadges: List<Badge> = emptyList()
+    private var echoCounter = 0
+
     val isFollowed: StateFlow<Boolean> = followStore.followed
         .map { list -> list.any { it.login.equals(channelLogin, ignoreCase = true) } }
         .stateIn(scope, SharingStarted.Eagerly, followStore.isFollowed(channelLogin))
@@ -304,13 +314,20 @@ class StreamViewModel(
             // and the resolved login of the token's owner — Twitch IRC will
             // drop the connection if PASS/NICK don't match.
             val saved = settingsStore.loadTokens()
+            selfLogin = saved?.login
             _state.update { it.copy(canChat = saved?.accessToken != null && saved.login != null) }
             chatClient.connect(channelLogin, saved?.accessToken, saved?.login)
             chatClient.events.collect { event ->
-                if (event is ChatEvent.Message) {
-                    _state.update { current ->
+                when (event) {
+                    is ChatEvent.Message -> _state.update { current ->
                         current.copy(chatMessages = (current.chatMessages + event.message).takeLast(200))
                     }
+                    is ChatEvent.SelfState -> {
+                        event.displayName.ifBlank { null }?.let { selfDisplayName = it }
+                        selfColor = event.color
+                        selfBadges = event.badges
+                    }
+                    else -> {}
                 }
             }
         }
@@ -339,8 +356,24 @@ class StreamViewModel(
     }
 
     fun sendChatMessage(text: String) = scope.launch {
-        chatClient.sendMessage(channelLogin, text, _state.value.replyingTo?.id)
-        _state.update { it.copy(replyingTo = null) }
+        val replyParent = _state.value.replyingTo
+        chatClient.sendMessage(channelLogin, text, replyParent?.id)
+        // Optimistic local echo — Twitch never sends our own message back to us,
+        // so render it ourselves or the sender never sees what they typed.
+        val echo = buildSelfEcho(
+            id = "self-" + (echoCounter++).toString(),
+            login = selfLogin ?: "you",
+            displayName = selfDisplayName,
+            color = selfColor,
+            badges = selfBadges,
+            channel = channelLogin,
+            text = text,
+            timestamp = System.currentTimeMillis(),
+            replyParent = replyParent,
+        )
+        _state.update {
+            it.copy(chatMessages = (it.chatMessages + echo).takeLast(200), replyingTo = null)
+        }
     }
 
     /** Adds/removes this channel from the local Following list (see [FollowStore]). */
