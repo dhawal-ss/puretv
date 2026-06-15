@@ -16,6 +16,7 @@ import com.puretv.twitch.desktop.ui.SearchViewModel
 import com.puretv.twitch.desktop.ui.SettingsViewModel
 import com.puretv.twitch.desktop.ui.StreamViewModel
 import com.puretv.twitch.desktop.ui.VodListViewModel
+import com.puretv.twitch.desktop.ui.VodLaunch
 import com.puretv.twitch.desktop.ui.VodPlayerViewModel
 import io.ktor.client.engine.HttpClientEngine
 import io.ktor.client.engine.okhttp.OkHttp
@@ -76,7 +77,7 @@ val desktopModule = module {
     // resolving the broadcaster's own userId/login via GET /users).
     factory { LoginViewModel(get(), get(), get(), get(), get()) }
     factory { (userId: String) -> VodListViewModel(userId, get()) }
-    factory { (vodId: String) -> VodPlayerViewModel(vodId, get(), get()) }
+    factory { (launch: VodLaunch) -> VodPlayerViewModel(launch, get(), get()) }
 }
 
 /** Convenience for screens: `koin.get<StreamViewModel> { parametersOf(channelLogin) }`. */

@@ -35,6 +35,7 @@ import androidx.compose.ui.unit.dp
 import com.puretv.twitch.core.model.VideoType
 import com.puretv.twitch.desktop.player.formatTimecode
 import com.puretv.twitch.desktop.ui.ChannelViewModel
+import com.puretv.twitch.desktop.ui.VodLaunch
 import com.puretv.twitch.desktop.ui.VodListViewModel
 import com.puretv.twitch.desktop.ui.components.Avatar
 import com.puretv.twitch.desktop.ui.components.BoxScrim
@@ -64,7 +65,7 @@ import org.koin.core.parameter.parametersOf
  * surfaced here because this screen's state never exposes it.
  */
 @Composable
-fun ChannelContent(koin: Koin, channelLogin: String, onWatch: () -> Unit, onPlayVod: (String) -> Unit, onBack: () -> Unit) {
+fun ChannelContent(koin: Koin, channelLogin: String, onWatch: () -> Unit, onPlayVod: (VodLaunch) -> Unit, onBack: () -> Unit) {
     val viewModel = rememberDesktopViewModel(channelLogin) {
         koin.get<ChannelViewModel> { parametersOf(channelLogin) }
     }
@@ -237,7 +238,7 @@ fun ChannelContent(koin: Koin, channelLogin: String, onWatch: () -> Unit, onPlay
 
             channel?.id?.let { userId ->
                 Spacer(Modifier.height(48.dp))
-                PastBroadcastsSection(koin = koin, userId = userId, onPlayVod = onPlayVod)
+                PastBroadcastsSection(koin = koin, userId = userId, channelLogin = channelLogin, onPlayVod = onPlayVod)
             }
 
             Spacer(Modifier.height(48.dp))
@@ -268,7 +269,7 @@ private fun InfoDivider() {
 }
 
 @Composable
-private fun PastBroadcastsSection(koin: Koin, userId: String, onPlayVod: (String) -> Unit) {
+private fun PastBroadcastsSection(koin: Koin, userId: String, channelLogin: String, onPlayVod: (VodLaunch) -> Unit) {
     val vm = rememberDesktopViewModel(userId) { koin.get<VodListViewModel> { parametersOf(userId) } }
     val state by vm.state.collectAsState()
     val c = PureTvTheme.colors
@@ -289,7 +290,7 @@ private fun PastBroadcastsSection(koin: Koin, userId: String, onPlayVod: (String
         }
         state.videos.forEach { v ->
             Column(
-                modifier = Modifier.fillMaxWidth().clickable { onPlayVod(v.id) }.padding(vertical = 10.dp),
+                modifier = Modifier.fillMaxWidth().clickable { onPlayVod(VodLaunch(v.id, channelLogin, v.title, v.thumbnailUrl)) }.padding(vertical = 10.dp),
             ) {
                 Text(
                     v.title.ifBlank { "Untitled" },

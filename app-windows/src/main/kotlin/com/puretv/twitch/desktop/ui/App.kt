@@ -92,7 +92,7 @@ private sealed class Route {
     data class Category(val gameId: String, val gameName: String) : Route()
     data class Channel(val login: String) : Route()
     data class Stream(val login: String) : Route()
-    data class Vod(val vodId: String, val channelLogin: String) : Route()
+    data class Vod(val launch: VodLaunch) : Route()
 }
 
 @Composable
@@ -162,14 +162,14 @@ fun App(koin: Koin, windowState: WindowState, onClose: () -> Unit, awtWindow: Aw
                                 )
                                 is Route.Vod -> VodPlayerContent(
                                     koin = koin,
-                                    vodId = r.vodId,
-                                    onBack = { route = Route.Channel(r.channelLogin) },
+                                    launch = r.launch,
+                                    onBack = { route = Route.Channel(r.launch.channelLogin) },
                                 )
                                 is Route.Channel -> ChannelContent(
                                     koin = koin,
                                     channelLogin = r.login,
                                     onWatch = { route = Route.Stream(r.login) },
-                                    onPlayVod = { vodId -> route = Route.Vod(vodId, r.login) },
+                                    onPlayVod = { launch -> route = Route.Vod(launch) },
                                     onBack = { route = Route.Top },
                                 )
                                 is Route.Category -> CategoryContent(
