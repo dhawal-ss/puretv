@@ -30,7 +30,7 @@ fun accountAgeLabel(createdAtIso: String, now: Instant = Instant.now()): String 
     return when {
         days < 0 -> ""
         days < 30 -> "New"
-        days < 365 -> { val m = (days / 30).toInt(); "" + m + if (m == 1) " month" else " months" }
+        days < 365 -> { val m = (days / 30).toInt().coerceAtMost(11); "" + m + if (m == 1) " month" else " months" }
         else -> { val y = (days / 365).toInt(); "" + y + if (y == 1) " year" else " years" }
     }
 }
