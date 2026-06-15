@@ -54,6 +54,8 @@ import com.puretv.twitch.core.adblock.AdBlockStatus
 import com.puretv.twitch.core.model.ChatMessage
 import com.puretv.twitch.core.model.EmoteLayer
 import com.puretv.twitch.core.model.MessagePart
+import com.puretv.twitch.desktop.ui.emotes.AnimatedEmote
+import com.puretv.twitch.desktop.ui.emotes.LocalEmoteAnimation
 import com.puretv.twitch.desktop.ui.theme.PureTvShape
 import com.puretv.twitch.desktop.ui.theme.PureTvTheme
 import com.puretv.twitch.desktop.ui.theme.PureTvType
@@ -414,9 +416,10 @@ fun ChatMessageRow(
                 is MessagePart.TwitchEmote -> StackedEmote(
                     "https://static-cdn.jtvnw.net/emoticons/v2/${part.id}/default/dark/2.0",
                     part.name,
+                    animated = false,
                     part.overlays,
                 )
-                is MessagePart.ThirdPartyEmote -> StackedEmote(part.url, part.name, part.overlays)
+                is MessagePart.ThirdPartyEmote -> StackedEmote(part.url, part.name, part.animated, part.overlays)
             }
         }
         if (onReply != null) {
@@ -459,14 +462,29 @@ internal fun EmoteImage(url: String, name: String, modifier: Modifier = Modifier
 }
 
 @Composable
-private fun StackedEmote(baseUrl: String, name: String, overlays: List<EmoteLayer>, size: Dp = 28.dp) {
+private fun EmoteGlyph(url: String, name: String, animated: Boolean, size: Dp) {
+    if (animated && LocalEmoteAnimation.current) {
+        AnimatedEmote(url, name, Modifier.size(size)) { u, n, m -> EmoteImage(u, n, m) }
+    } else {
+        EmoteImage(url, name, Modifier.size(size))
+    }
+}
+
+@Composable
+private fun StackedEmote(
+    baseUrl: String,
+    name: String,
+    animated: Boolean,
+    overlays: List<EmoteLayer>,
+    size: Dp = 28.dp,
+) {
     if (overlays.isEmpty()) {
-        EmoteImage(baseUrl, name, Modifier.size(size))
+        EmoteGlyph(baseUrl, name, animated, size)
         return
     }
     Box(contentAlignment = Alignment.Center) {
-        EmoteImage(baseUrl, name, Modifier.size(size))
-        overlays.forEach { layer -> EmoteImage(layer.url, layer.name, Modifier.size(size)) }
+        EmoteGlyph(baseUrl, name, animated, size)
+        overlays.forEach { layer -> EmoteGlyph(layer.url, layer.name, layer.animated, size) }
     }
 }
 
