@@ -39,11 +39,13 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -67,6 +69,8 @@ import com.puretv.twitch.desktop.ui.PlayerMode
 import com.puretv.twitch.desktop.ui.VodChatViewModel
 import com.puretv.twitch.desktop.ui.VodLaunch
 import com.puretv.twitch.desktop.ui.VodPlayerViewModel
+import com.puretv.twitch.desktop.ui.chat.nextUnread
+import com.puretv.twitch.desktop.ui.chat.shouldStick
 import com.puretv.twitch.desktop.ui.components.ButtonVariant
 import com.puretv.twitch.desktop.ui.components.ChatMessageRow
 import com.puretv.twitch.desktop.ui.components.PureButton
@@ -74,6 +78,7 @@ import com.puretv.twitch.desktop.ui.components.SeekPreview
 import com.puretv.twitch.desktop.ui.components.SegmentedControl
 import com.puretv.twitch.desktop.ui.rememberDesktopViewModel
 import com.puretv.twitch.desktop.ui.theme.PureTvMotion
+import com.puretv.twitch.desktop.ui.theme.PureTvShape
 import com.puretv.twitch.desktop.ui.theme.PureTvTheme
 import com.puretv.twitch.desktop.ui.theme.PureTvType
 import kotlinx.coroutines.Job
@@ -207,17 +212,54 @@ fun VodPlayerContent(koin: Koin, launch: VodLaunch, onBack: () -> Unit) {
                 Column(Modifier.width(340.dp).fillMaxHeight().background(c.surface)) {
                     Box(Modifier.fillMaxWidth().height(1.dp).background(c.hairline))
                     val listState = rememberLazyListState()
-                    LaunchedEffect(chatMessages.size) {
-                        if (chatMessages.isNotEmpty()) listState.animateScrollToItem(chatMessages.size - 1)
+                    // "pinned" computed geometrically so the freshly appended (not yet
+                    // measured) row still counts as being at the bottom.
+                    val pinned by remember {
+                        derivedStateOf {
+                            val info = listState.layoutInfo
+                            val lastVisible = info.visibleItemsInfo.lastOrNull()?.index ?: -1
+                            info.totalItemsCount == 0 || lastVisible >= info.totalItemsCount - 2
+                        }
                     }
-                    LazyColumn(
-                        state = listState,
-                        modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = 10.dp),
-                        contentPadding = PaddingValues(vertical = 8.dp),
-                        verticalArrangement = Arrangement.spacedBy(4.dp),
-                    ) {
-                        items(chatMessages, key = { it.id }) { msg: ChatMessage ->
-                            ChatMessageRow(message = msg, showTimestamps = false)
+                    var hasUnread by remember { mutableStateOf(false) }
+                    LaunchedEffect(chatMessages.size) {
+                        if (chatMessages.isEmpty()) return@LaunchedEffect
+                        // INSTANT scroll keeps pace as replay appends; only when pinned.
+                        if (shouldStick(pinned)) listState.scrollToItem(chatMessages.lastIndex)
+                        hasUnread = nextUnread(pinned, true, hasUnread)
+                    }
+                    LaunchedEffect(pinned) { hasUnread = nextUnread(pinned, false, hasUnread) }
+
+                    Box(Modifier.weight(1f).fillMaxWidth()) {
+                        LazyColumn(
+                            state = listState,
+                            modifier = Modifier.fillMaxSize().padding(horizontal = 10.dp),
+                            contentPadding = PaddingValues(vertical = 8.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
+                            items(chatMessages, key = { it.id }) { msg: ChatMessage ->
+                                ChatMessageRow(message = msg, showTimestamps = false)
+                            }
+                        }
+                        if (hasUnread) {
+                            Surface(
+                                onClick = {
+                                    scope.launch {
+                                        listState.animateScrollToItem(chatMessages.lastIndex)
+                                        hasUnread = false
+                                    }
+                                },
+                                shape = PureTvShape.pill,
+                                color = c.twitchPurple,
+                                modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 12.dp),
+                            ) {
+                                Text(
+                                    "New messages",
+                                    color = Color.White,
+                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+                                    style = MaterialTheme.typography.labelMedium,
+                                )
+                            }
                         }
                     }
                 }
