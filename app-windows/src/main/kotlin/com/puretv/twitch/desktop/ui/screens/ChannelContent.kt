@@ -209,31 +209,8 @@ fun ChannelContent(koin: Koin, channelLogin: String, onWatch: () -> Unit, onPlay
                     )
                 }
 
-                // This stream (right, the data panel — real fields only)
-                Column(
-                    modifier = Modifier
-                        .width(280.dp)
-                        .clip(PureTvShape.lg)
-                        .border(1.dp, c.hairline, PureTvShape.lg)
-                        .background(c.surface)
-                        .padding(22.dp),
-                ) {
-                    Kicker("This stream", accent = true)
-                    Spacer(Modifier.height(18.dp))
-                    InfoRow(
-                        label = "Status",
-                        value = if (state.isLive) "Live now" else "Offline",
-                        valueColor = if (state.isLive) c.live else c.textSecondary,
-                    )
-                    channel?.broadcasterType?.takeIf { it.isNotBlank() }?.let {
-                        InfoDivider()
-                        InfoRow(label = "Type", value = it.replaceFirstChar(Char::uppercase))
-                    }
-                    channel?.viewCount?.takeIf { it > 0 }?.let {
-                        InfoDivider()
-                        InfoRow(label = "Total views", value = formatViewerCount(it))
-                    }
-                }
+                // Audience stats (right) — live viewers, followers, tracked history.
+                ChannelStatsPanel(koin = koin, channelLogin = channelLogin)
             }
 
             channel?.id?.let { userId ->
@@ -244,28 +221,6 @@ fun ChannelContent(koin: Koin, channelLogin: String, onWatch: () -> Unit, onPlay
             Spacer(Modifier.height(48.dp))
         }
     }
-}
-
-/** A label/value hairline row inside the "This stream" data panel. */
-@Composable
-private fun InfoRow(
-    label: String,
-    value: String,
-    valueColor: androidx.compose.ui.graphics.Color = PureTvTheme.colors.textPrimary,
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(label.uppercase(), style = PureTvType.dataSmall, color = PureTvTheme.colors.textTertiary)
-        Text(value, style = PureTvType.data, color = valueColor)
-    }
-}
-
-@Composable
-private fun InfoDivider() {
-    Box(Modifier.fillMaxWidth().height(1.dp).background(PureTvTheme.colors.hairline))
 }
 
 @Composable
