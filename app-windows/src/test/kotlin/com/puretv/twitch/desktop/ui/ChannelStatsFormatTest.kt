@@ -20,6 +20,8 @@ class ChannelStatsFormatTest {
     @Test fun accountAgeLabelBuckets() {
         assertEquals("13 years", accountAgeLabel("2012-11-03T15:50:32Z", now))
         assertEquals("4 months", accountAgeLabel("2026-02-01T00:00:00Z", now))
+        // ~360 days: capped at "11 months" so it never reads "12 months" before rolling to "1 year".
+        assertEquals("11 months", accountAgeLabel("2025-06-20T12:00:00Z", now))
         assertEquals("New", accountAgeLabel("2026-06-12T00:00:00Z", now))
         assertEquals("", accountAgeLabel("garbage", now))
     }
