@@ -87,6 +87,18 @@ class TwitchGqlClient(
         return StreamToken(value = token.value, signature = token.signature)
     }
 
+    /** Fetch a VOD's storyboard JSON URL (seekPreviewsURL), or null if it has none. */
+    suspend fun fetchSeekPreviewsUrl(vodId: String): String? {
+        val query = """{"query":"query{video(id:\"$vodId\"){seekPreviewsURL}}"}"""
+        val response: String = httpClient.post(TwitchConfig.GQL_ENDPOINT) {
+            header("Client-ID", TwitchConfig.GQL_CLIENT_ID)
+            contentType(ContentType.Application.Json)
+            setBody(query)
+        }.body()
+        return json.decodeFromString<GqlEnvelope<VideoSeekPreviewsData>>(response)
+            .data?.video?.seekPreviewsURL?.takeIf { it.isNotBlank() }
+    }
+
     private suspend fun postPersistedQuery(
         operationName: String,
         hash: String,
@@ -148,6 +160,14 @@ data class PlaybackAccessTokenData(
 data class PlaybackAccessTokenValue(
     val value: String,
     val signature: String,
+)
+
+@Serializable
+data class VideoSeekPreviewsData(val video: VideoSeekPreviews? = null)
+
+@Serializable
+data class VideoSeekPreviews(
+    @SerialName("seekPreviewsURL") val seekPreviewsURL: String? = null,
 )
 
 /**

@@ -34,6 +34,13 @@ class VodResolver(
     suspend fun resolvePlayableUrl(vodId: String, quality: StreamQuality, oauthToken: String? = null): String =
         playableUrlFor(resolveVodMasterPlaylist(vodId, oauthToken), quality)
 
+    /** Load + parse a VOD's storyboard, or null if it has none / fails. */
+    suspend fun loadStoryboard(vodId: String): Storyboard? {
+        val url = gqlClient.fetchSeekPreviewsUrl(vodId) ?: return null
+        val jsonText = httpClient.get(url).bodyAsText()
+        return runCatching { StoryboardParser.parse(url, jsonText) }.getOrNull()
+    }
+
     companion object {
         fun buildVodMasterUrl(vodId: String, token: StreamToken): String {
             val p = Random.nextInt(100_000, 999_999)
