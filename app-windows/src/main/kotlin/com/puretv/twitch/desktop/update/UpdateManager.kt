@@ -38,6 +38,14 @@ class UpdateManager {
     private val json = Json { ignoreUnknownKeys = true }
     private val http = HttpClient.newBuilder()
         .connectTimeout(Duration.ofSeconds(10))
+        // Force HTTP/1.1. The JDK client defaults to HTTP/2, and GitHub's API +
+        // asset CDN recycle h2 connections aggressively (GOAWAY). The client will
+        // reuse a pooled connection the server has already half-closed and throw
+        // IOException ("GOAWAY received" / "EOF reached") on the NEXT request —
+        // the root cause of "the first download attempt errors, a retry works".
+        // HTTP/1.1 avoids the stale-h2-connection failure mode entirely; the
+        // retry below handles any remaining transient blips.
+        .version(HttpClient.Version.HTTP_1_1)
         // A GitHub release asset URL (browser_download_url) does NOT serve the
         // file: it 302-redirects to a short-lived signed release-assets.github
         // usercontent.com URL. The JDK HttpClient defaults to Redirect.NEVER,
@@ -78,7 +86,13 @@ class UpdateManager {
             .timeout(Duration.ofSeconds(15))
             .GET()
             .build()
-        val response = http.send(request, HttpResponse.BodyHandlers.ofString())
+        val response = withUpdateRetry {
+            val r = http.send(request, HttpResponse.BodyHandlers.ofString())
+            // 5xx is a transient GitHub hiccup worth retrying; 4xx (e.g. rate
+            // limit) is not and falls through to the null-handling below.
+            if (r.statusCode() in 500..599) throw TransientUpdateException("GitHub API ${r.statusCode()}")
+            r
+        }
         if (response.statusCode() != 200) return@withContext null
         val release = json.decodeFromString(GithubRelease.serializer(), response.body())
         if (release.draft || release.prerelease) return@withContext null
@@ -121,30 +135,42 @@ class UpdateManager {
         val ext = if (info.downloadUrl.endsWith(".exe", ignoreCase = true)) "exe" else "msi"
         val target = File(dir, "PureTV-${info.version}.$ext")
 
-        val request = HttpRequest.newBuilder(URI.create(info.downloadUrl))
-            .header("User-Agent", "PureTV-Updater")
-            .GET()
-            .build()
-        val response = http.send(request, HttpResponse.BodyHandlers.ofInputStream())
-        if (response.statusCode() !in 200..299) error("Download failed (HTTP ${response.statusCode()})")
+        // Retry the whole download: a stale connection, reset, or truncation
+        // throws a transient error and we re-attempt from scratch (the file is
+        // re-opened/truncated each time) instead of erroring out to the user.
+        withUpdateRetry {
+            val request = HttpRequest.newBuilder(URI.create(info.downloadUrl))
+                .header("User-Agent", "PureTV-Updater")
+                // Bounds connect + time-to-first-byte so a hung start fails into
+                // a retry rather than hanging the download forever.
+                .timeout(Duration.ofMinutes(5))
+                .GET()
+                .build()
+            val response = http.send(request, HttpResponse.BodyHandlers.ofInputStream())
+            if (response.statusCode() !in 200..299) {
+                throw TransientUpdateException("Download failed (HTTP ${response.statusCode()})")
+            }
 
-        response.body().use { input ->
-            target.outputStream().use { output ->
-                val buffer = ByteArray(64 * 1024)
-                var total = 0L
-                while (true) {
-                    val read = input.read(buffer)
-                    if (read < 0) break
-                    output.write(buffer, 0, read)
-                    total += read
-                    if (info.sizeBytes > 0) {
-                        _state.value = UpdateState.Downloading((total.toFloat() / info.sizeBytes).coerceIn(0f, 1f))
+            response.body().use { input ->
+                target.outputStream().use { output ->
+                    val buffer = ByteArray(64 * 1024)
+                    var total = 0L
+                    while (true) {
+                        val read = input.read(buffer)
+                        if (read < 0) break
+                        output.write(buffer, 0, read)
+                        total += read
+                        if (info.sizeBytes > 0) {
+                            _state.value = UpdateState.Downloading((total.toFloat() / info.sizeBytes).coerceIn(0f, 1f))
+                        }
                     }
                 }
             }
+            if (info.sizeBytes > 0 && target.length() != info.sizeBytes) {
+                throw TransientUpdateException("Download incomplete (${target.length()}/${info.sizeBytes} bytes)")
+            }
+            target
         }
-        if (info.sizeBytes > 0 && target.length() != info.sizeBytes) error("Download incomplete — please retry")
-        target
     }
 
     /**
@@ -175,14 +201,19 @@ class UpdateManager {
         }
     }
 
-    private fun downloadText(url: String): String {
+    private suspend fun downloadText(url: String): String = withUpdateRetry {
         val request = HttpRequest.newBuilder(URI.create(url))
             .header("User-Agent", "PureTV-Updater")
+            .timeout(Duration.ofSeconds(30))
             .GET()
             .build()
         val response = http.send(request, HttpResponse.BodyHandlers.ofString())
-        if (response.statusCode() !in 200..299) error("Signature download failed (HTTP ${response.statusCode()})")
-        return response.body()
+        // Transient so a stale-connection blip on the signature fetch (right
+        // after the big download) retries instead of failing the whole update.
+        if (response.statusCode() !in 200..299) {
+            throw TransientUpdateException("Signature download failed (HTTP ${response.statusCode()})")
+        }
+        response.body()
     }
 
     private fun launchInstaller(installer: File) {
