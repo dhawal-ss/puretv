@@ -9,6 +9,8 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -24,6 +26,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -37,6 +40,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material.icons.filled.FullscreenExit
+import androidx.compose.material.icons.filled.Mood
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Icon
@@ -64,9 +68,16 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.puretv.twitch.core.adblock.AdBlockStatus
@@ -82,8 +93,14 @@ import com.puretv.twitch.desktop.ui.components.AdBlockPill
 import com.puretv.twitch.desktop.ui.components.ChatMessageRow
 import com.puretv.twitch.desktop.ui.components.LiveDot
 import com.puretv.twitch.desktop.ui.components.SegmentedControl
+import com.puretv.twitch.desktop.ui.chat.completeWord
+import com.puretv.twitch.desktop.ui.chat.insertAtCursor
+import com.puretv.twitch.desktop.ui.chat.matchEmotes
 import com.puretv.twitch.desktop.ui.chat.nextUnread
 import com.puretv.twitch.desktop.ui.chat.shouldStick
+import com.puretv.twitch.desktop.ui.chat.wordAtCursor
+import com.puretv.twitch.desktop.ui.components.EmoteImage
+import com.puretv.twitch.core.emotes.PickableEmote
 import com.puretv.twitch.desktop.ui.theme.PureTvMotion
 import com.puretv.twitch.desktop.ui.theme.PureTvShape
 import com.puretv.twitch.desktop.ui.theme.PureTvTheme
@@ -113,7 +130,7 @@ private val CHAT_WIDTH = 360.dp
  *   Esc    exit immersive
  */
 @Composable
-fun StreamContent(koin: Koin, channelLogin: String, onBack: () -> Unit) {
+fun StreamContent(koin: Koin, channelLogin: String, onBack: () -> Unit, onRequestSignIn: () -> Unit = {}) {
     val viewModel = rememberDesktopViewModel(channelLogin) {
         koin.get<StreamViewModel> { parametersOf(channelLogin) }
     }
@@ -322,8 +339,11 @@ fun StreamContent(koin: Koin, channelLogin: String, onBack: () -> Unit) {
                         Box(Modifier.fillMaxWidth().height(1.dp).background(c.hairline))
                         ChatMessageList(messages = state.chatMessages, modifier = Modifier.weight(1f))
                         ChatInputBar(
+                            canChat = state.canChat,
+                            emotes = state.emotes,
                             onSend = viewModel::sendChatMessage,
                             onFocusChanged = { chatInputFocused = it },
+                            onRequestSignIn = onRequestSignIn,
                         )
                     }
                 }
@@ -538,40 +558,144 @@ private fun ChatMessageList(messages: List<ChatMessage>, modifier: Modifier = Mo
 }
 
 @Composable
-private fun ChatInputBar(onSend: (String) -> Unit, onFocusChanged: (Boolean) -> Unit = {}) {
+private fun ChatInputBar(
+    canChat: Boolean,
+    emotes: List<PickableEmote>,
+    onSend: (String) -> Unit,
+    onFocusChanged: (Boolean) -> Unit = {},
+    onRequestSignIn: () -> Unit = {},
+) {
     val c = PureTvTheme.colors
-    var text by remember { mutableStateOf("") }
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(14.dp)
-            .border(1.dp, c.hairline, PureTvShape.lg)
-            .background(c.surfaceVariant, PureTvShape.lg)
-            .padding(horizontal = 13.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box(modifier = Modifier.weight(1f)) {
-            if (text.isEmpty()) {
-                Text("Send a message…", color = c.textMuted, style = MaterialTheme.typography.bodyMedium)
-            }
-            BasicTextField(
-                value = text,
-                onValueChange = { text = it },
-                singleLine = true,
-                textStyle = TextStyle(color = c.textPrimary, fontSize = MaterialTheme.typography.bodyMedium.fontSize),
-                cursorBrush = SolidColor(c.twitchPurple),
-                // Report focus up so the player-hotkey dispatcher stands down while
-                // the user is typing (otherwise f/t/c/space would be eaten).
+
+    // Anonymous (read-only) viewers get a tappable prompt instead of a composer —
+    // sending requires a token + the token-owner's login (see StreamViewModel).
+    if (!canChat) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp)
+                .border(1.dp, c.hairline, PureTvShape.lg)
+                .background(c.surfaceVariant, PureTvShape.lg)
+                .clickable { onRequestSignIn() }
+                .padding(horizontal = 13.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text("Sign in to chat", color = c.textMuted, style = MaterialTheme.typography.bodyMedium)
+        }
+        return
+    }
+
+    var value by remember { mutableStateOf(TextFieldValue("")) }
+    var pickerOpen by remember { mutableStateOf(false) }
+    var fieldFocused by remember { mutableStateOf(false) }
+
+    fun submit() {
+        val trimmed = value.text.trim()
+        if (trimmed.isNotEmpty()) {
+            onSend(trimmed)
+            value = TextFieldValue("")
+        }
+    }
+
+    // Autocomplete suggestions for the word the cursor sits in.
+    val (word, _) = wordAtCursor(value.text, value.selection.start)
+    val suggestions = matchEmotes(word, emotes)
+
+    fun applyCompletion(code: String) {
+        val (t, cur) = completeWord(value.text, value.selection.start, code)
+        value = TextFieldValue(t, TextRange(cur))
+    }
+
+    Column(modifier = Modifier.fillMaxWidth()) {
+        // Emote picker sits directly above the composer when open.
+        if (pickerOpen) {
+            EmotePickerPanel(
+                emotes = emotes,
+                onPick = { e ->
+                    val (t, cur) = insertAtCursor(value.text, value.selection.start, e.code)
+                    value = TextFieldValue(t, TextRange(cur))
+                },
+                onDismiss = { pickerOpen = false },
+            )
+            Spacer(Modifier.height(8.dp))
+        }
+
+        // Autocomplete chip strip — only while typing a recognised partial.
+        if (suggestions.isNotEmpty() && fieldFocused) {
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .onFocusChanged { onFocusChanged(it.isFocused) },
-            )
+                    .padding(horizontal = 14.dp)
+                    .horizontalScroll(rememberScrollState()),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                suggestions.forEach { s ->
+                    Row(
+                        modifier = Modifier
+                            .border(1.dp, c.hairline, PureTvShape.pill)
+                            .background(c.surfaceVariant, PureTvShape.pill)
+                            .clickable { applyCompletion(s.code) }
+                            .padding(horizontal = 8.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        EmoteImage(s.imageUrl, s.code, modifier = Modifier.size(20.dp))
+                        Spacer(Modifier.width(5.dp))
+                        Text(s.code, color = c.textSecondary, style = PureTvType.dataSmall)
+                    }
+                }
+            }
+            Spacer(Modifier.height(8.dp))
         }
-        IconButton(onClick = {
-            val trimmed = text.trim()
-            if (trimmed.isNotEmpty()) { onSend(trimmed); text = "" }
-        }) {
-            Icon(Icons.AutoMirrored.Filled.Send, "Send", tint = c.twitchPurpleLight)
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp)
+                .border(1.dp, c.hairline, PureTvShape.lg)
+                .background(c.surfaceVariant, PureTvShape.lg)
+                .padding(horizontal = 13.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(modifier = Modifier.weight(1f)) {
+                if (value.text.isEmpty()) {
+                    Text("Send a message…", color = c.textMuted, style = MaterialTheme.typography.bodyMedium)
+                }
+                BasicTextField(
+                    value = value,
+                    onValueChange = { value = it },
+                    singleLine = true,
+                    textStyle = TextStyle(color = c.textPrimary, fontSize = MaterialTheme.typography.bodyMedium.fontSize),
+                    cursorBrush = SolidColor(c.twitchPurple),
+                    // Report focus up so the player-hotkey dispatcher stands down while
+                    // the user is typing (otherwise f/t/c/space would be eaten).
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .onFocusChanged {
+                            fieldFocused = it.isFocused
+                            onFocusChanged(it.isFocused)
+                        }
+                        // Tab accepts the first emote suggestion when one is offered.
+                        .onPreviewKeyEvent { ev ->
+                            if (ev.key == Key.Tab && ev.type == KeyEventType.KeyDown && suggestions.isNotEmpty()) {
+                                applyCompletion(suggestions.first().code)
+                                true
+                            } else {
+                                false
+                            }
+                        },
+                )
+            }
+            IconButton(onClick = { pickerOpen = !pickerOpen }) {
+                Icon(
+                    Icons.Filled.Mood,
+                    "Emotes",
+                    tint = if (pickerOpen) c.twitchPurpleLight else c.textSecondary,
+                )
+            }
+            IconButton(onClick = { submit() }) {
+                Icon(Icons.AutoMirrored.Filled.Send, "Send", tint = c.twitchPurpleLight)
+            }
         }
     }
 }
