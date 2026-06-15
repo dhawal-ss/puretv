@@ -3,12 +3,14 @@ package com.puretv.twitch.desktop.di
 import com.puretv.twitch.desktop.auth.DesktopOAuthManager
 import com.puretv.twitch.desktop.data.DesktopSettingsStore
 import com.puretv.twitch.desktop.data.FollowStore
+import com.puretv.twitch.desktop.data.ViewerHistoryStore
 import com.puretv.twitch.desktop.data.WatchProgressStore
 import com.puretv.twitch.desktop.player.LocalStreamProxy
 import com.puretv.twitch.desktop.player.VlcPlayer
 import com.puretv.twitch.desktop.update.UpdateManager
 import com.puretv.twitch.desktop.ui.BrowseViewModel
 import com.puretv.twitch.desktop.ui.CategoryViewModel
+import com.puretv.twitch.desktop.ui.ChannelStatsViewModel
 import com.puretv.twitch.desktop.ui.ChannelViewModel
 import com.puretv.twitch.desktop.ui.HomeViewModel
 import com.puretv.twitch.desktop.ui.LoginViewModel
@@ -49,6 +51,8 @@ val desktopModule = module {
     single { FollowStore() }
     // Per-VOD playback positions ("continue watching") — see WatchProgressStore.
     single { WatchProgressStore() }
+    // Locally-persisted viewer-count history for the channel stats panel — see ViewerHistoryStore.
+    single { ViewerHistoryStore() }
     // In-app auto-updater (GitHub Releases) — see UpdateManager.
     single { UpdateManager() }
 
@@ -72,6 +76,7 @@ val desktopModule = module {
         StreamViewModel(channelLogin, get(), get(), get(), get(), get(), get(), get(), get(), get())
     }
     factory { (channelLogin: String) -> ChannelViewModel(channelLogin, get(), get(), get()) }
+    factory { (channelLogin: String) -> ChannelStatsViewModel(channelLogin, get(), get()) }
     factory { SettingsViewModel(get()) }
     // LoginViewModel collaborators: settingsStore, oauthManager, httpClient,
     // tokenHolder (for "set token BEFORE first authed call"), apiClient (for
