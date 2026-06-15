@@ -236,6 +236,8 @@ data class StreamUiState(
     val adBlockStatus: AdBlockStatus = AdBlockStatus.UNKNOWN,
     val chatMessages: List<ChatMessage> = emptyList(),
     val emotes: List<PickableEmote> = emptyList(),
+    /** True only when we hold both a token and the token-owner's login (can speak). */
+    val canChat: Boolean = false,
     val isLoading: Boolean = true,
 )
 
@@ -300,6 +302,7 @@ class StreamViewModel(
             // and the resolved login of the token's owner — Twitch IRC will
             // drop the connection if PASS/NICK don't match.
             val saved = settingsStore.loadTokens()
+            _state.update { it.copy(canChat = saved?.accessToken != null && saved.login != null) }
             chatClient.connect(channelLogin, saved?.accessToken, saved?.login)
             chatClient.events.collect { event ->
                 if (event is ChatEvent.Message) {

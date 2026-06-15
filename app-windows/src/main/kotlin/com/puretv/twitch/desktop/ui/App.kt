@@ -159,6 +159,10 @@ fun App(koin: Koin, windowState: WindowState, onClose: () -> Unit, awtWindow: Aw
                                     koin = koin,
                                     channelLogin = r.login,
                                     onBack = { route = Route.Channel(r.login) },
+                                    onRequestSignIn = {
+                                        destination = Destination.ACCOUNT
+                                        route = Route.Top
+                                    },
                                 )
                                 is Route.Vod -> VodPlayerContent(
                                     koin = koin,
