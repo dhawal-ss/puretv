@@ -58,6 +58,8 @@ val coreModule = module {
     single { StreamRepository(get(), get()) }
     single { ChannelRepository(get()) }
     single { UserRepository(get()) }
+    single { com.puretv.twitch.core.stream.VodResolver(get(), get()) }
+    single { com.puretv.twitch.core.repository.VodRepository(get(), get()) }
 
     // Token holder — wraps whatever encrypted store the platform uses
     // (EncryptedSharedPreferences on Android/TV, AES-encrypted file on Desktop).

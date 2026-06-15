@@ -2,6 +2,7 @@ package com.puretv.twitch.desktop.ui.screens
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -31,7 +32,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.puretv.twitch.core.model.VideoType
+import com.puretv.twitch.desktop.player.formatTimecode
 import com.puretv.twitch.desktop.ui.ChannelViewModel
+import com.puretv.twitch.desktop.ui.VodListViewModel
 import com.puretv.twitch.desktop.ui.components.Avatar
 import com.puretv.twitch.desktop.ui.components.BoxScrim
 import com.puretv.twitch.desktop.ui.components.ButtonVariant
@@ -60,7 +64,7 @@ import org.koin.core.parameter.parametersOf
  * surfaced here because this screen's state never exposes it.
  */
 @Composable
-fun ChannelContent(koin: Koin, channelLogin: String, onWatch: () -> Unit, onBack: () -> Unit) {
+fun ChannelContent(koin: Koin, channelLogin: String, onWatch: () -> Unit, onPlayVod: (String) -> Unit, onBack: () -> Unit) {
     val viewModel = rememberDesktopViewModel(channelLogin) {
         koin.get<ChannelViewModel> { parametersOf(channelLogin) }
     }
@@ -231,6 +235,11 @@ fun ChannelContent(koin: Koin, channelLogin: String, onWatch: () -> Unit, onBack
                 }
             }
 
+            channel?.id?.let { userId ->
+                Spacer(Modifier.height(48.dp))
+                PastBroadcastsSection(koin = koin, userId = userId, onPlayVod = onPlayVod)
+            }
+
             Spacer(Modifier.height(48.dp))
         }
     }
@@ -256,4 +265,65 @@ private fun InfoRow(
 @Composable
 private fun InfoDivider() {
     Box(Modifier.fillMaxWidth().height(1.dp).background(PureTvTheme.colors.hairline))
+}
+
+@Composable
+private fun PastBroadcastsSection(koin: Koin, userId: String, onPlayVod: (String) -> Unit) {
+    val vm = rememberDesktopViewModel(userId) { koin.get<VodListViewModel> { parametersOf(userId) } }
+    val state by vm.state.collectAsState()
+    val c = PureTvTheme.colors
+
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Kicker("Past broadcasts", rule = true)
+        Spacer(Modifier.height(16.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            VodFilterChip("All", state.filter == null) { vm.setFilter(null) }
+            VodFilterChip("Broadcasts", state.filter == VideoType.ARCHIVE) { vm.setFilter(VideoType.ARCHIVE) }
+            VodFilterChip("Highlights", state.filter == VideoType.HIGHLIGHT) { vm.setFilter(VideoType.HIGHLIGHT) }
+            VodFilterChip("Uploads", state.filter == VideoType.UPLOAD) { vm.setFilter(VideoType.UPLOAD) }
+        }
+        Spacer(Modifier.height(12.dp))
+        when {
+            state.error != null -> Text("Couldn't load videos.", style = PureTvType.data, color = c.textMuted)
+            state.videos.isEmpty() && !state.loading -> Text("No saved videos.", style = PureTvType.data, color = c.textMuted)
+        }
+        state.videos.forEach { v ->
+            Column(
+                modifier = Modifier.fillMaxWidth().clickable { onPlayVod(v.id) }.padding(vertical = 10.dp),
+            ) {
+                Text(
+                    v.title.ifBlank { "Untitled" },
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = c.textPrimary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "${formatTimecode(v.durationSeconds * 1000)}  ·  ${formatViewerCount(v.viewCount)} views  ·  ${v.createdAt.take(10)}",
+                    style = PureTvType.dataSmall,
+                    color = c.textTertiary,
+                )
+            }
+            Box(Modifier.fillMaxWidth().height(1.dp).background(c.hairline))
+        }
+        if (state.cursor != null) {
+            Spacer(Modifier.height(12.dp))
+            PureButton(
+                text = if (state.loading) "Loading…" else "Load more",
+                onClick = vm::loadMore,
+                variant = ButtonVariant.Secondary,
+                enabled = !state.loading,
+            )
+        }
+    }
+}
+
+@Composable
+private fun VodFilterChip(label: String, selected: Boolean, onClick: () -> Unit) {
+    PureButton(
+        text = label,
+        onClick = onClick,
+        variant = if (selected) ButtonVariant.Primary else ButtonVariant.Secondary,
+    )
 }
