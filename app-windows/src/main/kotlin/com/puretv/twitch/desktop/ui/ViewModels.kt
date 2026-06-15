@@ -238,6 +238,8 @@ data class StreamUiState(
     val emotes: List<PickableEmote> = emptyList(),
     /** True only when we hold both a token and the token-owner's login (can speak). */
     val canChat: Boolean = false,
+    /** The message the composer is currently replying to, if any. */
+    val replyingTo: ChatMessage? = null,
     val isLoading: Boolean = true,
 )
 
@@ -328,8 +330,17 @@ class StreamViewModel(
 
     fun toggleMute() = vlcPlayer.toggleMute()
 
+    fun startReply(m: ChatMessage) {
+        _state.update { it.copy(replyingTo = m) }
+    }
+
+    fun cancelReply() {
+        _state.update { it.copy(replyingTo = null) }
+    }
+
     fun sendChatMessage(text: String) = scope.launch {
-        chatClient.sendMessage(channelLogin, text)
+        chatClient.sendMessage(channelLogin, text, _state.value.replyingTo?.id)
+        _state.update { it.copy(replyingTo = null) }
     }
 
     /** Adds/removes this channel from the local Following list (see [FollowStore]). */
