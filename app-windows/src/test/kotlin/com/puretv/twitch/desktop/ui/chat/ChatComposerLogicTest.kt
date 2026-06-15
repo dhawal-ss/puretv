@@ -119,4 +119,24 @@ class ChatComposerLogicTest {
         assertEquals("hi Kappa  there", text)
         assertEquals(9, cursor)
     }
+
+    // ── composerKeyAction (Enter-to-send) ─────────────────────────────────────────
+
+    @Test fun enterSendsTheMessage() {
+        assertEquals(ComposerKeyAction.SEND, composerKeyAction(isEnter = true, isTab = false, hasSuggestions = false))
+    }
+
+    @Test fun enterSendsEvenWhileAutocompleteIsOpen() {
+        // Twitch parity: Tab accepts a suggestion, Enter still sends.
+        assertEquals(ComposerKeyAction.SEND, composerKeyAction(isEnter = true, isTab = false, hasSuggestions = true))
+    }
+
+    @Test fun tabCompletesOnlyWhenSuggestionsExist() {
+        assertEquals(ComposerKeyAction.COMPLETE, composerKeyAction(isEnter = false, isTab = true, hasSuggestions = true))
+        assertEquals(ComposerKeyAction.NONE, composerKeyAction(isEnter = false, isTab = true, hasSuggestions = false))
+    }
+
+    @Test fun otherKeysDoNothingSpecial() {
+        assertEquals(ComposerKeyAction.NONE, composerKeyAction(isEnter = false, isTab = false, hasSuggestions = true))
+    }
 }
