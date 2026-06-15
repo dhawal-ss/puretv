@@ -33,6 +33,7 @@ data class ChannelInfo(
     @SerialName("offline_image_url") val offlineImageUrl: String = "",
     @SerialName("view_count") val viewCount: Int = 0,
     @SerialName("broadcaster_type") val broadcasterType: String = "",
+    @SerialName("created_at") val createdAt: String = "",
 )
 
 @Serializable

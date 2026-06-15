@@ -7,6 +7,7 @@ import com.puretv.twitch.core.chat.TwitchChatClient
 import com.puretv.twitch.core.emotes.EmoteRepository
 import com.puretv.twitch.core.emotes.InMemoryEmoteCache
 import com.puretv.twitch.core.repository.ChannelRepository
+import com.puretv.twitch.core.repository.ChannelStatsRepository
 import com.puretv.twitch.core.repository.StreamRepository
 import com.puretv.twitch.core.repository.UserRepository
 import com.puretv.twitch.core.stream.GqlHashProvider
@@ -58,6 +59,7 @@ val coreModule = module {
     single { StreamRepository(get(), get()) }
     single { ChannelRepository(get()) }
     single { UserRepository(get()) }
+    single { ChannelStatsRepository(get(), get(), get()) }
     single { com.puretv.twitch.core.stream.VodResolver(get(), get()) }
     single { com.puretv.twitch.core.repository.VodRepository(get(), get()) }
 
