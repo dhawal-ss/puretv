@@ -11,6 +11,16 @@ release notes automatically.
 
 ---
 
+## 1.5.0 - 2026-06-15
+
+Fullscreen and theater modes for past videos, and a quieter update.
+
+### New
+- **Fullscreen, theater, and windowed modes for past videos.** The video player now has the same view modes as live streams, with on-screen toggle buttons and keyboard shortcuts: F for fullscreen, T for theater, C for chat, Space for play/pause, and Esc to exit.
+
+### Fixed
+- **Updates no longer leave a command-prompt window open.** Applying an in-app update now runs quietly in the background.
+
 ## 1.4.0 - 2026-06-15
 
 Past broadcasts just got a lot better: pick up where you left off, preview as you scrub, and watch the chat play back.
