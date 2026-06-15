@@ -2,6 +2,7 @@ package com.puretv.twitch.desktop.ui
 
 import com.puretv.twitch.core.model.StreamQuality
 import com.puretv.twitch.core.repository.VodRepository
+import com.puretv.twitch.core.stream.Storyboard
 import com.puretv.twitch.core.stream.VodResolver
 import com.puretv.twitch.desktop.data.ResumePolicy
 import com.puretv.twitch.desktop.data.WatchProgress
@@ -19,6 +20,7 @@ data class VodPlayerState(
     val loading: Boolean = true,
     val error: String? = null,
     val resumeOfferMs: Long? = null,
+    val storyboard: Storyboard? = null,
 )
 
 /**
@@ -43,6 +45,10 @@ class VodPlayerViewModel(
         val resumeAt = store.get(vodId)?.let { ResumePolicy.resumePositionMs(it) }
         _state.value = _state.value.copy(resumeOfferMs = resumeAt)
         play(StreamQuality.AUTO)
+        scope.launch {
+            runCatching { vodRepository.loadStoryboard(vodId) }
+                .onSuccess { sb -> _state.value = _state.value.copy(storyboard = sb) }
+        }
         // Periodic progress save. Cancelled when the screen leaves composition.
         scope.launch {
             while (true) {

@@ -2,12 +2,14 @@ package com.puretv.twitch.desktop.ui.screens
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -39,6 +41,7 @@ import com.puretv.twitch.desktop.ui.VodLaunch
 import com.puretv.twitch.desktop.ui.VodPlayerViewModel
 import com.puretv.twitch.desktop.ui.components.ButtonVariant
 import com.puretv.twitch.desktop.ui.components.PureButton
+import com.puretv.twitch.desktop.ui.components.SeekPreview
 import com.puretv.twitch.desktop.ui.components.SegmentedControl
 import com.puretv.twitch.desktop.ui.rememberDesktopViewModel
 import com.puretv.twitch.desktop.ui.theme.PureTvTheme
@@ -110,6 +113,18 @@ fun VodPlayerContent(koin: Koin, launch: VodLaunch, onBack: () -> Unit) {
                 var dragMs by remember { mutableStateOf<Long?>(null) }
                 val duration = status.durationMs.coerceAtLeast(1)
                 val shown = dragMs ?: status.positionMs
+                if (dragMs != null) {
+                    BoxWithConstraints(Modifier.fillMaxWidth().padding(bottom = 4.dp)) {
+                        val frac = (dragMs!!.toFloat() / duration.toFloat()).coerceIn(0f, 1f)
+                        val x = (maxWidth - 160.dp) * frac
+                        SeekPreview(
+                            koin = koin,
+                            storyboard = state.storyboard,
+                            positionSeconds = dragMs!! / 1000,
+                            modifier = Modifier.offset(x = x),
+                        )
+                    }
+                }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(formatTimecode(shown), style = PureTvType.data, color = c.textSecondary)
                     Slider(
