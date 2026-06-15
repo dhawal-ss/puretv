@@ -16,6 +16,12 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -255,7 +261,7 @@ private fun heroImage(thumbnailUrl: String): String? =
 private fun ContinueWatchingCard(
     progress: WatchProgress,
     onClick: () -> Unit,
-    onRemove: () -> Unit,           // wired for a future remove affordance
+    onRemove: () -> Unit,           // the ✕ remove affordance
     modifier: Modifier = Modifier,
 ) {
     val c = PureTvTheme.colors
@@ -277,6 +283,21 @@ private fun ContinueWatchingCard(
             ) {
                 Box(Modifier.fillMaxWidth(frac).fillMaxHeight().background(c.twitchPurple))
             }
+            IconButton(
+                onClick = onRemove,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(4.dp)
+                    .size(26.dp)
+                    .background(c.background.copy(alpha = 0.6f), CircleShape),
+            ) {
+                Icon(
+                    Icons.Filled.Close,
+                    contentDescription = "Remove from Continue watching",
+                    tint = c.textPrimary,
+                    modifier = Modifier.size(15.dp),
+                )
+            }
         }
         Spacer(Modifier.height(8.dp))
         Text(
@@ -289,7 +310,11 @@ private fun ContinueWatchingCard(
     }
 }
 
-/** Fill Twitch's %{width}x%{height} thumbnail template; null when blank. */
+/**
+ * Fill Twitch's VOD thumbnail template, which uses %{width}/%{height} (percent-brace)
+ * — distinct from stream/game thumbnails which use {width}/{height} (see heroImage).
+ * Null when blank.
+ */
 private fun vodThumbUrl(raw: String): String? =
     raw.takeIf { it.isNotBlank() }?.replace("%{width}", "320")?.replace("%{height}", "180")
 
