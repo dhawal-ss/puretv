@@ -35,6 +35,7 @@ import androidx.compose.ui.unit.dp
 import com.puretv.twitch.core.model.StreamQuality
 import com.puretv.twitch.desktop.player.VlcPlayerView
 import com.puretv.twitch.desktop.player.formatTimecode
+import com.puretv.twitch.desktop.ui.VodLaunch
 import com.puretv.twitch.desktop.ui.VodPlayerViewModel
 import com.puretv.twitch.desktop.ui.components.SegmentedControl
 import com.puretv.twitch.desktop.ui.rememberDesktopViewModel
@@ -44,8 +45,8 @@ import org.koin.core.Koin
 import org.koin.core.parameter.parametersOf
 
 @Composable
-fun VodPlayerContent(koin: Koin, vodId: String, onBack: () -> Unit) {
-    val viewModel = rememberDesktopViewModel(vodId) { koin.get<VodPlayerViewModel> { parametersOf(vodId) } }
+fun VodPlayerContent(koin: Koin, launch: VodLaunch, onBack: () -> Unit) {
+    val viewModel = rememberDesktopViewModel(launch.vodId) { koin.get<VodPlayerViewModel> { parametersOf(launch) } }
     val state by viewModel.state.collectAsState()
     val status by viewModel.status.collectAsState()
     val c = PureTvTheme.colors

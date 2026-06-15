@@ -22,10 +22,12 @@ data class VodPlayerState(
  * step — unlike the live path.
  */
 class VodPlayerViewModel(
-    private val vodId: String,
+    private val launch: VodLaunch,
     val player: VlcPlayer,
     private val vodRepository: VodRepository,
 ) : DesktopViewModel() {
+
+    private val vodId: String get() = launch.vodId
 
     private val _state = MutableStateFlow(VodPlayerState())
     val state: StateFlow<VodPlayerState> = _state.asStateFlow()
