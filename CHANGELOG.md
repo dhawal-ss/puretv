@@ -11,6 +11,16 @@ release notes automatically.
 
 ---
 
+## 1.6.0 - 2026-06-15
+
+See what any channel is up to at a glance, with a new stats panel.
+
+### New
+- **Channel stats.** Open any channel for a live "Audience" panel: how many people are watching right now, the channel's follower count, what they're playing, how long they've been live, how long they've been on Twitch, and whether they're a partner. While you watch, PureTV draws a little chart of the viewer count over time and remembers the peak and average. All of it stays privately on your own computer.
+
+### Improved
+- **Simpler ad-blocking setting.** The ad-blocking section in Settings now just shows that it's always on, without the extra technical options.
+
 ## 1.5.0 - 2026-06-15
 
 Fullscreen and theater modes for past videos, and a quieter update.
