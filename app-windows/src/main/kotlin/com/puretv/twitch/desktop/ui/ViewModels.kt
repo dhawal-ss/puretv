@@ -272,6 +272,10 @@ class StreamViewModel(
     private var selfBadges: List<Badge> = emptyList()
     private var echoCounter = 0
 
+    // Written on the emote-load coroutine, read on the chat-collect + send paths.
+    // Safe as a @Volatile reference because the map is immutable after publish:
+    // buildEmoteIndex returns a fresh map that is never mutated in place. Readers
+    // only ever see a fully-built map — do NOT switch this to in-place mutation.
     @Volatile private var emoteIndex: Map<String, ResolvedEmote> = emptyMap()
 
     val isFollowed: StateFlow<Boolean> = followStore.followed
