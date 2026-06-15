@@ -33,3 +33,19 @@ fun insertAtCursor(text: String, cursor: Int, code: String): Pair<String, Int> {
     val ins = (if (needsLead) " " else "") + code + " "
     return (text.substring(0, at) + ins + text.substring(at)) to (at + ins.length)
 }
+
+/** What a key press in the chat composer should do. */
+enum class ComposerKeyAction { SEND, COMPLETE, NONE }
+
+/**
+ * Maps a composer key press to an action. Enter sends (matching Twitch's web
+ * client, and what users expect instead of clicking the arrow); Tab accepts the
+ * first emote suggestion only when one is offered; anything else falls through
+ * to normal text editing. Enter wins over Tab even while the autocomplete strip
+ * is open — Tab is the completion key, Enter is always "send".
+ */
+fun composerKeyAction(isEnter: Boolean, isTab: Boolean, hasSuggestions: Boolean): ComposerKeyAction = when {
+    isEnter -> ComposerKeyAction.SEND
+    isTab && hasSuggestions -> ComposerKeyAction.COMPLETE
+    else -> ComposerKeyAction.NONE
+}

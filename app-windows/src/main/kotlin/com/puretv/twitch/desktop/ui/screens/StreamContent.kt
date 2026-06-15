@@ -93,7 +93,9 @@ import com.puretv.twitch.desktop.ui.components.AdBlockPill
 import com.puretv.twitch.desktop.ui.components.ChatMessageRow
 import com.puretv.twitch.desktop.ui.components.LiveDot
 import com.puretv.twitch.desktop.ui.components.SegmentedControl
+import com.puretv.twitch.desktop.ui.chat.ComposerKeyAction
 import com.puretv.twitch.desktop.ui.chat.completeWord
+import com.puretv.twitch.desktop.ui.chat.composerKeyAction
 import com.puretv.twitch.desktop.ui.chat.insertAtCursor
 import com.puretv.twitch.desktop.ui.chat.matchEmotes
 import com.puretv.twitch.desktop.ui.chat.nextUnread
@@ -714,13 +716,15 @@ private fun ChatInputBar(
                             fieldFocused = it.isFocused
                             onFocusChanged(it.isFocused)
                         }
-                        // Tab accepts the first emote suggestion when one is offered.
+                        // Enter sends the message; Tab accepts the first emote
+                        // suggestion when one is offered (see composerKeyAction).
                         .onPreviewKeyEvent { ev ->
-                            if (ev.key == Key.Tab && ev.type == KeyEventType.KeyDown && suggestions.isNotEmpty()) {
-                                applyCompletion(suggestions.first().code)
-                                true
-                            } else {
-                                false
+                            if (ev.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                            val isEnter = ev.key == Key.Enter || ev.key == Key.NumPadEnter
+                            when (composerKeyAction(isEnter, ev.key == Key.Tab, suggestions.isNotEmpty())) {
+                                ComposerKeyAction.SEND -> { submit(); true }
+                                ComposerKeyAction.COMPLETE -> { applyCompletion(suggestions.first().code); true }
+                                ComposerKeyAction.NONE -> false
                             }
                         },
                 )
