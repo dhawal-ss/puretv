@@ -123,7 +123,7 @@ sealed class MessagePart {
 
 data class Badge(val setId: String, val version: String)
 
-enum class EmoteProvider { BTTV, FFZ, SEVENTV }
+enum class EmoteProvider { BTTV, FFZ, SEVENTV, TWITCH }
 
 sealed class ChatEvent {
     data class Message(val message: ChatMessage) : ChatEvent()
