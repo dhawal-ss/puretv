@@ -17,6 +17,7 @@ import com.puretv.twitch.desktop.ui.SettingsViewModel
 import com.puretv.twitch.desktop.ui.StreamViewModel
 import com.puretv.twitch.desktop.ui.VodListViewModel
 import com.puretv.twitch.desktop.ui.VodLaunch
+import com.puretv.twitch.desktop.ui.VodChatViewModel
 import com.puretv.twitch.desktop.ui.VodPlayerViewModel
 import io.ktor.client.engine.HttpClientEngine
 import io.ktor.client.engine.okhttp.OkHttp
@@ -78,6 +79,7 @@ val desktopModule = module {
     factory { LoginViewModel(get(), get(), get(), get(), get()) }
     factory { (userId: String) -> VodListViewModel(userId, get()) }
     factory { (launch: VodLaunch) -> VodPlayerViewModel(launch, get(), get(), get()) }
+    factory { (vodId: String) -> VodChatViewModel(vodId, get(), get()) }
 }
 
 /** Convenience for screens: `koin.get<StreamViewModel> { parametersOf(channelLogin) }`. */
