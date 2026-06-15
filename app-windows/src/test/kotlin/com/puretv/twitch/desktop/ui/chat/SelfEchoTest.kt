@@ -56,4 +56,20 @@ class SelfEchoTest {
         assertEquals("Bob", reply.replyParentDisplayName)
         assertEquals("hello", reply.replyParentBody)
     }
+
+    @Test fun echoRendersThirdPartyEmotesWhenIndexProvided() {
+        val index = mapOf(
+            "catJAM" to com.puretv.twitch.core.emotes.ResolvedEmote(
+                "catJAM", "u/catJAM", animated = false,
+                provider = com.puretv.twitch.core.model.EmoteProvider.SEVENTV, zeroWidth = false,
+            ),
+        )
+        val echo = buildSelfEcho(
+            id = "self-1", login = "me", displayName = "Me", color = "#fff",
+            badges = emptyList(), channel = "chan", text = "hi catJAM",
+            timestamp = 0L, emoteIndex = index,
+        )
+        val names = echo.parsedParts.filterIsInstance<com.puretv.twitch.core.model.MessagePart.ThirdPartyEmote>().map { it.name }
+        assertEquals(listOf("catJAM"), names)
+    }
 }

@@ -1,5 +1,7 @@
 package com.puretv.twitch.desktop.ui.chat
 
+import com.puretv.twitch.core.emotes.ResolvedEmote
+import com.puretv.twitch.core.emotes.applyThirdPartyEmotes
 import com.puretv.twitch.core.model.Badge
 import com.puretv.twitch.core.model.ChatMessage
 import com.puretv.twitch.core.model.MessagePart
@@ -24,6 +26,7 @@ fun buildSelfEcho(
     text: String,
     timestamp: Long,
     replyParent: ChatMessage? = null,
+    emoteIndex: Map<String, ResolvedEmote> = emptyMap(),
 ): ChatMessage = ChatMessage(
     id = id,
     channel = channel,
@@ -31,7 +34,7 @@ fun buildSelfEcho(
     displayName = displayName?.ifBlank { null } ?: login,
     color = color?.ifBlank { null } ?: "#9B5DE5",
     message = text,
-    parsedParts = listOf(MessagePart.Text(text)),
+    parsedParts = applyThirdPartyEmotes(listOf(MessagePart.Text(text)), emoteIndex),
     badges = badges,
     timestamp = timestamp,
     isSubscriber = badges.any { it.setId == "subscriber" },

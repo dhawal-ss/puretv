@@ -13,6 +13,9 @@ import com.puretv.twitch.core.chat.TwitchChatClient
 import com.puretv.twitch.core.di.TokenHolder
 import com.puretv.twitch.core.emotes.EmoteRepository
 import com.puretv.twitch.core.emotes.PickableEmote
+import com.puretv.twitch.core.emotes.ResolvedEmote
+import com.puretv.twitch.core.emotes.buildEmoteIndex
+import com.puretv.twitch.core.emotes.applyThirdPartyEmotes
 import com.puretv.twitch.core.emotes.buildPickableEmotes
 import com.puretv.twitch.core.model.AppSettings
 import com.puretv.twitch.core.model.Badge
@@ -269,6 +272,8 @@ class StreamViewModel(
     private var selfBadges: List<Badge> = emptyList()
     private var echoCounter = 0
 
+    @Volatile private var emoteIndex: Map<String, ResolvedEmote> = emptyMap()
+
     val isFollowed: StateFlow<Boolean> = followStore.followed
         .map { list -> list.any { it.login.equals(channelLogin, ignoreCase = true) } }
         .stateIn(scope, SharingStarted.Eagerly, followStore.isFollowed(channelLogin))
@@ -303,7 +308,16 @@ class StreamViewModel(
                 val tpChan = runCatching { emoteRepository.loadChannelEmotes(ch.id, ch.login) }.getOrDefault(emptyList())
                 val tChan = runCatching { apiClient.getChannelTwitchEmotes(ch.id) }.getOrDefault(emptyList())
                 val picks = buildPickableEmotes(tChan, tpChan, tGlobal, tpGlobal)
-                _state.update { it.copy(emotes = picks) }
+                emoteIndex = buildEmoteIndex(tpChan, tpGlobal)
+                _state.update { st ->
+                    st.copy(
+                        emotes = picks,
+                        // Re-map messages already received before emotes finished loading.
+                        chatMessages = st.chatMessages.map {
+                            it.copy(parsedParts = applyThirdPartyEmotes(it.parsedParts, emoteIndex))
+                        },
+                    )
+                }
             }
         }
         scope.launch {
@@ -320,7 +334,10 @@ class StreamViewModel(
             chatClient.events.collect { event ->
                 when (event) {
                     is ChatEvent.Message -> _state.update { current ->
-                        current.copy(chatMessages = (current.chatMessages + event.message).takeLast(200))
+                        val mapped = event.message.copy(
+                            parsedParts = applyThirdPartyEmotes(event.message.parsedParts, emoteIndex),
+                        )
+                        current.copy(chatMessages = (current.chatMessages + mapped).takeLast(200))
                     }
                     is ChatEvent.SelfState -> {
                         event.displayName.ifBlank { null }?.let { selfDisplayName = it }
@@ -370,6 +387,7 @@ class StreamViewModel(
             text = text,
             timestamp = System.currentTimeMillis(),
             replyParent = replyParent,
+            emoteIndex = emoteIndex,
         )
         _state.update {
             it.copy(chatMessages = (it.chatMessages + echo).takeLast(200), replyingTo = null)
