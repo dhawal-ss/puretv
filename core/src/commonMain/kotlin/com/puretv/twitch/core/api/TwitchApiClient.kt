@@ -2,7 +2,11 @@ package com.puretv.twitch.core.api
 
 import com.puretv.twitch.core.model.ChannelInfo
 import com.puretv.twitch.core.model.GameInfo
+import com.puretv.twitch.core.model.MutedSegment
 import com.puretv.twitch.core.model.StreamInfo
+import com.puretv.twitch.core.model.VideoInfo
+import com.puretv.twitch.core.model.VideoType
+import com.puretv.twitch.core.model.parseTwitchDuration
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.plugins.HttpRequestRetry
@@ -12,6 +16,7 @@ import io.ktor.client.request.header
 import io.ktor.client.request.parameter
 import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.delay
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlin.random.Random
 
@@ -95,6 +100,35 @@ class TwitchApiClient(
     suspend fun isChannelLive(userLogin: String): Boolean = getLiveStream(userLogin) != null
 
     /**
+     * GET /videos — a channel's past videos. [type] null => Helix "all"
+     * (archive + highlight + upload). [after] is the pagination cursor.
+     */
+    suspend fun getVideos(
+        userId: String,
+        type: VideoType? = null,
+        first: Int = 20,
+        after: String? = null,
+    ): VideoPage {
+        val typeParam = when (type) {
+            VideoType.ARCHIVE -> "archive"
+            VideoType.HIGHLIGHT -> "highlight"
+            VideoType.UPLOAD -> "upload"
+            else -> "all"
+        }
+        val resp: HelixPagedEnvelope<HelixVideo> = withRateLimitRetry {
+            authedClient().get("${TwitchConfig.API_BASE}/videos") {
+                header("Client-Id", TwitchConfig.CLIENT_ID)
+                tokenProvider()?.let { header("Authorization", "Bearer $it") }
+                parameter("user_id", userId)
+                parameter("type", typeParam)
+                parameter("first", first.toString())
+                if (after != null) parameter("after", after)
+            }.body()
+        }
+        return VideoPage(resp.data.map { it.toDomain() }, resp.pagination.cursor)
+    }
+
+    /**
      * Wraps a Helix call with 429-aware retry: exponential backoff with full jitter,
      * honoring `Ratelimit-Reset` when present. Caps at [maxAttempts].
      */
@@ -119,6 +153,57 @@ class RateLimitedException(val resetEpochSeconds: Long?) : Exception("Twitch Hel
 
 @Serializable
 data class HelixEnvelope<T>(val data: List<T> = emptyList())
+
+@Serializable
+data class HelixPagination(val cursor: String? = null)
+
+@Serializable
+data class HelixPagedEnvelope<T>(
+    val data: List<T> = emptyList(),
+    val pagination: HelixPagination = HelixPagination(),
+)
+
+@Serializable
+data class HelixMutedSegment(val duration: Int = 0, val offset: Int = 0)
+
+@Serializable
+data class HelixVideo(
+    val id: String,
+    @SerialName("user_id") val userId: String = "",
+    @SerialName("user_login") val userLogin: String = "",
+    @SerialName("user_name") val userName: String = "",
+    val title: String = "",
+    val description: String = "",
+    @SerialName("created_at") val createdAt: String = "",
+    @SerialName("published_at") val publishedAt: String = "",
+    @SerialName("thumbnail_url") val thumbnailUrl: String = "",
+    @SerialName("view_count") val viewCount: Int = 0,
+    val type: String = "",
+    val duration: String = "",
+    @SerialName("muted_segments") val mutedSegments: List<HelixMutedSegment>? = null,
+)
+
+fun HelixVideo.toDomain(): VideoInfo =
+    VideoInfo(
+        id = id,
+        userId = userId,
+        userLogin = userLogin,
+        userName = userName,
+        title = title,
+        description = description,
+        type = VideoType.fromApi(type),
+        durationSeconds = parseTwitchDuration(duration),
+        createdAt = createdAt,
+        publishedAt = publishedAt,
+        thumbnailUrl = thumbnailUrl,
+        viewCount = viewCount,
+        mutedSegments = (mutedSegments ?: emptyList()).map {
+            MutedSegment(durationSeconds = it.duration, offsetSeconds = it.offset)
+        },
+    )
+
+/** A page of videos plus the cursor for the next page (null when no more). */
+data class VideoPage(val videos: List<VideoInfo>, val cursor: String?)
 
 @Serializable
 data class FollowedChannel(
