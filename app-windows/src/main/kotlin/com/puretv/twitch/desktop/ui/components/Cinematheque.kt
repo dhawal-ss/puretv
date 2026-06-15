@@ -415,11 +415,11 @@ private fun ChatBadge(text: String, bg: Color, fg: Color) {
 }
 
 @Composable
-private fun EmoteImage(url: String, name: String) {
+internal fun EmoteImage(url: String, name: String, modifier: Modifier = Modifier.size(20.dp)) {
     AsyncImage(
         model = url,
         contentDescription = name,
-        modifier = Modifier.size(20.dp),
+        modifier = modifier,
     )
 }
 
