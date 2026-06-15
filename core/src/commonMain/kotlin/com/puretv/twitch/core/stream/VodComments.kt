@@ -33,6 +33,9 @@ import kotlinx.serialization.Serializable
 /** A historical chat comment placed at [offsetSeconds] into the VOD. */
 data class ReplayComment(val offsetSeconds: Int, val message: ChatMessage)
 
+/** A fetched window of replay comments plus whether more pages exist after it. */
+data class CommentBatch(val comments: List<ReplayComment>, val hasNextPage: Boolean)
+
 /** Pure mapping from GQL comment nodes to the shared [ChatMessage] render model. */
 object CommentMapper {
     fun toReplayComments(connection: VideoCommentConnection): List<ReplayComment> =

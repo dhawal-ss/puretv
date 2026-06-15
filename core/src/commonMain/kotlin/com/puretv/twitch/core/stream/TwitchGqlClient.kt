@@ -100,7 +100,7 @@ class TwitchGqlClient(
     }
 
     /** Fetch the VOD's chat comments starting near [offsetSeconds] (offset-based paging). */
-    suspend fun fetchVideoComments(vodId: String, offsetSeconds: Int): List<ReplayComment> {
+    suspend fun fetchVideoComments(vodId: String, offsetSeconds: Int): CommentBatch {
         val query = """{"query":"query{video(id:\"$vodId\"){comments(contentOffsetSeconds:$offsetSeconds){edges{node{id contentOffsetSeconds commenter{displayName} message{userColor userBadges{setID version} fragments{text emote{emoteID}}}}}pageInfo{hasNextPage}}}}"}"""
         val response: String = httpClient.post(TwitchConfig.GQL_ENDPOINT) {
             header("Client-ID", TwitchConfig.GQL_CLIENT_ID)
@@ -108,8 +108,8 @@ class TwitchGqlClient(
             setBody(query)
         }.body()
         val conn = json.decodeFromString<GqlEnvelope<VideoCommentsData>>(response).data?.video?.comments
-            ?: return emptyList()
-        return CommentMapper.toReplayComments(conn)
+            ?: return CommentBatch(emptyList(), hasNextPage = false)
+        return CommentBatch(CommentMapper.toReplayComments(conn), conn.pageInfo.hasNextPage)
     }
 
     private suspend fun postPersistedQuery(

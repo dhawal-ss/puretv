@@ -41,7 +41,7 @@ class VodResolver(
         return runCatching { StoryboardParser.parse(url, jsonText) }.getOrNull()
     }
 
-    suspend fun videoComments(vodId: String, offsetSeconds: Int): List<ReplayComment> =
+    suspend fun videoComments(vodId: String, offsetSeconds: Int): CommentBatch =
         gqlClient.fetchVideoComments(vodId, offsetSeconds)
 
     companion object {
