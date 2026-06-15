@@ -12,6 +12,8 @@ import com.puretv.twitch.core.api.TwitchApiClient
 import com.puretv.twitch.core.chat.TwitchChatClient
 import com.puretv.twitch.core.di.TokenHolder
 import com.puretv.twitch.core.emotes.EmoteRepository
+import com.puretv.twitch.core.emotes.PickableEmote
+import com.puretv.twitch.core.emotes.buildPickableEmotes
 import com.puretv.twitch.core.model.AppSettings
 import com.puretv.twitch.core.model.ChannelInfo
 import com.puretv.twitch.core.model.ChatEvent
@@ -233,6 +235,7 @@ data class StreamUiState(
     val currentQuality: StreamQuality = StreamQuality.AUTO,
     val adBlockStatus: AdBlockStatus = AdBlockStatus.UNKNOWN,
     val chatMessages: List<ChatMessage> = emptyList(),
+    val emotes: List<PickableEmote> = emptyList(),
     val isLoading: Boolean = true,
 )
 
@@ -247,6 +250,7 @@ class StreamViewModel(
     private val vlcPlayer: VlcPlayer,
     private val localStreamProxy: LocalStreamProxy,
     private val followStore: FollowStore,
+    private val apiClient: TwitchApiClient,
 ) : DesktopViewModel() {
     private val _state = MutableStateFlow(StreamUiState())
     val state: StateFlow<StreamUiState> = _state.asStateFlow()
@@ -276,8 +280,17 @@ class StreamViewModel(
 
             playAt(preferredQuality)
 
-            runCatching { emoteRepository.loadGlobalEmotes() }
-            channel?.let { runCatching { emoteRepository.loadChannelEmotes(it.id, it.login) } }
+            // Assemble the unified pickable-emote list: third-party (BTTV/FFZ/7TV)
+            // globals + first-party Twitch globals, then the channel-specific sets.
+            // Each fetch is best-effort so one provider failing doesn't sink the rest.
+            val tpGlobal = runCatching { emoteRepository.loadGlobalEmotes() }.getOrDefault(emptyList())
+            val tGlobal = runCatching { apiClient.getGlobalEmotes() }.getOrDefault(emptyList())
+            channel?.let { ch ->
+                val tpChan = runCatching { emoteRepository.loadChannelEmotes(ch.id, ch.login) }.getOrDefault(emptyList())
+                val tChan = runCatching { apiClient.getChannelTwitchEmotes(ch.id) }.getOrDefault(emptyList())
+                val picks = buildPickableEmotes(tChan, tpChan, tGlobal, tpGlobal)
+                _state.update { it.copy(emotes = picks) }
+            }
         }
         scope.launch {
             adBlockEngine.status.collect { status -> _state.update { it.copy(adBlockStatus = status) } }
