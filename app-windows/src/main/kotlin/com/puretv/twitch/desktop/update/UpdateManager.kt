@@ -187,31 +187,20 @@ class UpdateManager {
 
     private fun launchInstaller(installer: File) {
         val exe = resolveAppExecutable()
-        val script = File(installer.parentFile, "apply-update.bat")
-        // Quoting lives INSIDE the .bat (paths can contain spaces); we invoke the
-        // bat by path so cmd never mangles quotes. `timeout` lets this process
-        // fully exit so msiexec doesn't hit a locked, still-running app.
-        script.writeText(
-            buildString {
-                appendLine("@echo off")
-                appendLine("timeout /t 2 /nobreak >nul")
-                if (installer.extension.equals("msi", ignoreCase = true)) {
-                    appendLine("msiexec /i \"${installer.absolutePath}\" /passive /norestart")
-                } else {
-                    // Inno Setup installer: silent in-place update, no prompts.
-                    appendLine("\"${installer.absolutePath}\" /VERYSILENT /SUPPRESSMSGBOXES /NORESTART")
-                }
-                if (exe != null) {
-                    // Relaunch the freshly-installed app. The installer upgrades
-                    // in place (same {app} dir — see installer/puretv.iss), so this
-                    // path is still valid after the silent install completes.
-                    appendLine("start \"\" \"$exe\"")
-                }
-            },
+        val batFile = File(installer.parentFile, "apply-update.bat")
+        val vbsFile = File(installer.parentFile, "apply-update.vbs")
+        val scripts = buildUpdateScripts(
+            installerPath = installer.absolutePath,
+            isMsi = installer.extension.equals("msi", ignoreCase = true),
+            appExePath = exe,
+            batPath = batFile.absolutePath,
         )
-        // `start "" /min "<bat>"` spawns an independent process tree that survives
-        // our exit; Java quotes the bat path for us.
-        ProcessBuilder("cmd.exe", "/c", "start", "", "/min", script.absolutePath).start()
+        batFile.writeText(scripts.bat)
+        vbsFile.writeText(scripts.vbs)
+        // wscript.exe is the WINDOWLESS script host; the .vbs runs the .bat with a
+        // hidden window, so applying an update never flashes — or leaves open — a
+        // console window. ProcessBuilder uses a fixed arg array (no shell).
+        ProcessBuilder("wscript.exe", vbsFile.absolutePath).start()
     }
 
     /**
@@ -243,4 +232,46 @@ class UpdateManager {
         /** jpackage launcher name — derives from build.gradle.kts `packageName`. */
         const val LAUNCHER_EXE_NAME = "PureTV for Twitch.exe"
     }
+}
+
+/** The two scripts the updater drops next to the installer. */
+internal data class UpdateScripts(val bat: String, val vbs: String)
+
+/**
+ * Builds the detached self-update scripts.
+ *
+ * The .bat waits (via `ping`, NOT `timeout` — timeout needs console input that a
+ * hidden launch doesn't have), runs the installer silently, relaunches the app,
+ * then exits. The .vbs runs that .bat through a HIDDEN window (style 0) via
+ * WScript.Shell, so the update never shows — or leaves open — a console window.
+ * (The old `cmd /c start "" /min <bat>` left a prompt window sitting open.)
+ *
+ * Built with string concatenation (not templates) and launched via
+ * [ProcessBuilder] with a fixed arg array — no shell, no interpolated command.
+ */
+internal fun buildUpdateScripts(
+    installerPath: String,
+    isMsi: Boolean,
+    appExePath: String?,
+    batPath: String,
+): UpdateScripts {
+    val lines = mutableListOf<String>()
+    lines += "@echo off"
+    // ~2s so this process fully exits before the installer touches locked files.
+    lines += "ping 127.0.0.1 -n 3 >nul"
+    lines += if (isMsi) {
+        "msiexec /i \"" + installerPath + "\" /passive /norestart"
+    } else {
+        "\"" + installerPath + "\" /VERYSILENT /SUPPRESSMSGBOXES /NORESTART"
+    }
+    if (appExePath != null) {
+        lines += "start \"\" \"" + appExePath + "\""
+    }
+    lines += "exit /b 0"
+    val bat = lines.joinToString("\r\n") + "\r\n"
+
+    // VBScript escapes a literal double-quote as a doubled double-quote.
+    val escapedBat = batPath.replace("\"", "\"\"")
+    val vbs = "CreateObject(\"WScript.Shell\").Run \"cmd /c \"\"" + escapedBat + "\"\"\", 0, False"
+    return UpdateScripts(bat = bat, vbs = vbs)
 }
