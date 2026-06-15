@@ -44,11 +44,13 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -80,6 +82,8 @@ import com.puretv.twitch.desktop.ui.components.AdBlockPill
 import com.puretv.twitch.desktop.ui.components.ChatMessageRow
 import com.puretv.twitch.desktop.ui.components.LiveDot
 import com.puretv.twitch.desktop.ui.components.SegmentedControl
+import com.puretv.twitch.desktop.ui.chat.nextUnread
+import com.puretv.twitch.desktop.ui.chat.shouldStick
 import com.puretv.twitch.desktop.ui.theme.PureTvMotion
 import com.puretv.twitch.desktop.ui.theme.PureTvShape
 import com.puretv.twitch.desktop.ui.theme.PureTvTheme
@@ -478,17 +482,58 @@ private fun PlaybackControls(
 
 @Composable
 private fun ChatMessageList(messages: List<ChatMessage>, modifier: Modifier = Modifier) {
+    val c = PureTvTheme.colors
     val listState = rememberLazyListState()
-    LaunchedEffect(messages.size) {
-        if (messages.isNotEmpty()) listState.animateScrollToItem(messages.size - 1)
+    val scope = rememberCoroutineScope()
+
+    // "pinned" computed geometrically so the one-new-item lag (the freshly
+    // appended row not yet measured) still counts as "at the bottom".
+    val pinned by remember {
+        derivedStateOf {
+            val info = listState.layoutInfo
+            val lastVisible = info.visibleItemsInfo.lastOrNull()?.index ?: -1
+            info.totalItemsCount == 0 || lastVisible >= info.totalItemsCount - 2
+        }
     }
-    LazyColumn(
-        state = listState,
-        modifier = modifier.fillMaxWidth().padding(horizontal = 10.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 8.dp),
-    ) {
-        items(messages, key = { it.id }) { ChatMessageRow(message = it) }
+    var hasUnread by remember { mutableStateOf(false) }
+
+    LaunchedEffect(messages.size) {
+        if (messages.isEmpty()) return@LaunchedEffect
+        // INSTANT scroll keeps up with busy chat where animateScrollToItem can't.
+        if (shouldStick(pinned)) listState.scrollToItem(messages.lastIndex)
+        hasUnread = nextUnread(pinned, true, hasUnread)
+    }
+    LaunchedEffect(pinned) { hasUnread = nextUnread(pinned, false, hasUnread) }
+
+    Box(modifier) {
+        LazyColumn(
+            state = listState,
+            modifier = Modifier.fillMaxSize().padding(horizontal = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 8.dp),
+        ) {
+            items(messages, key = { it.id }) { ChatMessageRow(message = it) }
+        }
+        if (hasUnread) {
+            Surface(
+                onClick = {
+                    scope.launch {
+                        listState.animateScrollToItem(messages.lastIndex)
+                        hasUnread = false
+                    }
+                },
+                shape = PureTvShape.pill,
+                color = c.twitchPurple,
+                modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 12.dp),
+            ) {
+                Text(
+                    "New messages",
+                    color = Color.White,
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+                    style = MaterialTheme.typography.labelMedium,
+                )
+            }
+        }
     }
 }
 
