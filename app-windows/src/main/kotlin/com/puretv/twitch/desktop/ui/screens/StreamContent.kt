@@ -337,10 +337,16 @@ fun StreamContent(koin: Koin, channelLogin: String, onBack: () -> Unit, onReques
                             }
                         }
                         Box(Modifier.fillMaxWidth().height(1.dp).background(c.hairline))
-                        ChatMessageList(messages = state.chatMessages, modifier = Modifier.weight(1f))
+                        ChatMessageList(
+                            messages = state.chatMessages,
+                            onReply = viewModel::startReply,
+                            modifier = Modifier.weight(1f),
+                        )
                         ChatInputBar(
                             canChat = state.canChat,
                             emotes = state.emotes,
+                            replyingTo = state.replyingTo,
+                            onCancelReply = viewModel::cancelReply,
                             onSend = viewModel::sendChatMessage,
                             onFocusChanged = { chatInputFocused = it },
                             onRequestSignIn = onRequestSignIn,
@@ -501,7 +507,11 @@ private fun PlaybackControls(
 // ── Chat UI ───────────────────────────────────────────────────────────────────
 
 @Composable
-private fun ChatMessageList(messages: List<ChatMessage>, modifier: Modifier = Modifier) {
+private fun ChatMessageList(
+    messages: List<ChatMessage>,
+    onReply: (ChatMessage) -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val c = PureTvTheme.colors
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
@@ -532,7 +542,7 @@ private fun ChatMessageList(messages: List<ChatMessage>, modifier: Modifier = Mo
             verticalArrangement = Arrangement.spacedBy(4.dp),
             contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 8.dp),
         ) {
-            items(messages, key = { it.id }) { ChatMessageRow(message = it) }
+            items(messages, key = { it.id }) { ChatMessageRow(message = it, onReply = onReply) }
         }
         if (hasUnread) {
             Surface(
@@ -562,6 +572,8 @@ private fun ChatInputBar(
     canChat: Boolean,
     emotes: List<PickableEmote>,
     onSend: (String) -> Unit,
+    replyingTo: ChatMessage? = null,
+    onCancelReply: () -> Unit = {},
     onFocusChanged: (Boolean) -> Unit = {},
     onRequestSignIn: () -> Unit = {},
 ) {
@@ -607,6 +619,33 @@ private fun ChatInputBar(
     }
 
     Column(modifier = Modifier.fillMaxWidth()) {
+        // Reply context bar — shows who we're replying to, with a dismiss button.
+        if (replyingTo != null) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 14.dp, end = 14.dp, top = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    "replying to @" + replyingTo.displayName,
+                    color = c.textMuted,
+                    style = MaterialTheme.typography.labelMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+                IconButton(onClick = onCancelReply, modifier = Modifier.size(20.dp)) {
+                    Icon(
+                        Icons.Filled.Close,
+                        contentDescription = "Cancel reply",
+                        tint = c.textSecondary,
+                        modifier = Modifier.size(16.dp),
+                    )
+                }
+            }
+        }
+
         // Emote picker sits directly above the composer when open.
         if (pickerOpen) {
             EmotePickerPanel(

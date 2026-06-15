@@ -28,7 +28,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Reply
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -364,17 +367,30 @@ fun ChatMessageRow(
     message: ChatMessage,
     modifier: Modifier = Modifier,
     showTimestamps: Boolean = true,
+    onReply: ((ChatMessage) -> Unit)? = null,
 ) {
     val c = PureTvTheme.colors
     val nameColor = remember(message.color) {
         runCatching { Color(AwtColor.decode(message.color).rgb or (0xFF shl 24)) }
             .getOrDefault(c.twitchPurpleLight)
     }
-    FlowRow(
-        modifier = modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
-        verticalArrangement = Arrangement.spacedBy(2.dp),
-    ) {
+    Column(modifier = modifier.fillMaxWidth()) {
+        val parentName = message.replyParentDisplayName
+        if (parentName != null) {
+            Text(
+                "replying to @" + parentName,
+                style = MaterialTheme.typography.labelSmall,
+                color = c.textMuted,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(start = 2.dp, bottom = 1.dp),
+            )
+        }
+        FlowRow(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
         if (showTimestamps) {
             val ts = remember(message.timestamp) { formatClock(message.timestamp) }
             Text(ts, style = PureTvType.dataSmall, color = c.textMuted, modifier = Modifier.padding(end = 2.dp))
@@ -397,6 +413,20 @@ fun ChatMessageRow(
                 is MessagePart.TwitchEmote -> EmoteImage("https://static-cdn.jtvnw.net/emoticons/v2/${part.id}/default/dark/1.0", part.name)
                 is MessagePart.ThirdPartyEmote -> EmoteImage(part.url, part.name)
             }
+        }
+        if (onReply != null) {
+            IconButton(
+                onClick = { onReply(message) },
+                modifier = Modifier.size(18.dp),
+            ) {
+                Icon(
+                    Icons.AutoMirrored.Filled.Reply,
+                    contentDescription = "Reply",
+                    tint = c.textMuted,
+                    modifier = Modifier.size(16.dp),
+                )
+            }
+        }
         }
     }
 }
