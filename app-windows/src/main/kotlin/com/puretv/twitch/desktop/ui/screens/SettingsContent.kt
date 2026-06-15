@@ -29,7 +29,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
-import com.puretv.twitch.core.adblock.AdBlockStrategy
 import com.puretv.twitch.core.model.StreamQuality
 import com.puretv.twitch.desktop.ui.SettingsViewModel
 import com.puretv.twitch.desktop.ui.components.ButtonVariant
@@ -110,7 +109,7 @@ fun SettingsContent(koin: Koin, onExit: () -> Unit) {
         SettingsSection(title = "Ad blocking") {
             SettingsRow(
                 label = "Block ads",
-                description = "Routes playback through the local proxy so Twitch's mid-roll ads never reach the player.",
+                description = "When on, Twitch ads are blocked across live streams and past videos.",
             ) {
                 Switch(
                     checked = state.settings.adBlockEnabled,
@@ -124,33 +123,6 @@ fun SettingsContent(koin: Koin, onExit: () -> Unit) {
                     ),
                 )
             }
-            HairlineDivider()
-            SettingsRow(
-                label = "Strategy",
-                description = "How the proxy neutralises ad segments before they hit VLC.",
-            ) {
-                val selectedStrategy = AdBlockStrategy.entries.firstOrNull {
-                    state.settings.adBlockStrategy.equals(it.name, ignoreCase = true)
-                } ?: AdBlockStrategy.PROXY_PRIMARY
-                SegmentedControl(
-                    options = AdBlockStrategy.entries,
-                    selected = selectedStrategy,
-                    label = { strategyLabel(it) },
-                    onSelect = { viewModel.setAdBlockStrategy(it) },
-                )
-            }
-            Text(
-                "Local proxy on http://localhost:${state.proxyPort}",
-                style = PureTvType.data,
-                color = c.textTertiary,
-                modifier = Modifier.padding(top = 14.dp),
-            )
-            Text(
-                "VLC streams through it, never directly from Twitch's CDN.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = c.textMuted,
-                modifier = Modifier.padding(top = 4.dp),
-            )
         }
 
         // ── Account ──────────────────────────────────────────────────────────────
@@ -224,12 +196,6 @@ fun SettingsContent(koin: Koin, onExit: () -> Unit) {
     }
 }
 
-/** Humanise an [AdBlockStrategy] enum entry into a control label. */
-private fun strategyLabel(strategy: AdBlockStrategy): String =
-    strategy.name.split('_').joinToString(" ") { word ->
-        word.lowercase().replaceFirstChar { it.uppercase() }
-    }
-
 // ── Theme swatch ──────────────────────────────────────────────────────────────────
 
 @Composable
@@ -301,16 +267,4 @@ private fun SettingsRow(label: String, description: String, trailing: @Composabl
         }
         trailing()
     }
-}
-
-@Composable
-private fun HairlineDivider() {
-    val c = PureTvTheme.colors
-    Box(
-        Modifier
-            .fillMaxWidth()
-            .padding(vertical = 16.dp)
-            .height(1.dp)
-            .background(c.hairline),
-    )
 }
