@@ -11,6 +11,18 @@ release notes automatically.
 
 ---
 
+## 1.3.0 - 2026-06-15
+
+Watch a channel's past broadcasts, ad-free.
+
+### New
+- **Past videos.** Open any channel to browse its past broadcasts, highlights, and uploads, then play any of them right inside PureTV.
+- **Seek bar.** Scrub to any moment in a video, with play and pause and the current time and total length shown on screen.
+- **Filter and load more.** Switch between past broadcasts, highlights, and uploads, and keep loading older videos as you go.
+
+### Improved
+- The quality switcher and volume control work on past videos just like they do on live streams.
+
 ## 1.2.0 — 2026-06-14
 
 A complete visual redesign — PureTV now looks like a proper cinema.
