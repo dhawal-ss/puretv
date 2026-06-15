@@ -1,30 +1,49 @@
 package com.puretv.twitch.desktop.ui.screens
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.puretv.twitch.core.model.StreamInfo
+import com.puretv.twitch.desktop.data.WatchProgress
+import com.puretv.twitch.desktop.data.WatchProgressStore
 import com.puretv.twitch.desktop.ui.FollowCardState
 import com.puretv.twitch.desktop.ui.HomeViewModel
-import com.puretv.twitch.desktop.ui.rememberDesktopViewModel
+import com.puretv.twitch.desktop.ui.VodLaunch
 import com.puretv.twitch.desktop.ui.components.CinematicHero
+import com.puretv.twitch.desktop.ui.components.CoverImage
 import com.puretv.twitch.desktop.ui.components.EditorialEmptyState
 import com.puretv.twitch.desktop.ui.components.FollowCard
 import com.puretv.twitch.desktop.ui.components.Kicker
 import com.puretv.twitch.desktop.ui.components.StreamCard
 import com.puretv.twitch.desktop.ui.components.StreamCardSkeleton
 import com.puretv.twitch.desktop.ui.components.formatViewerCount
+import com.puretv.twitch.desktop.ui.rememberDesktopViewModel
+import com.puretv.twitch.desktop.ui.theme.PureTvShape
+import com.puretv.twitch.desktop.ui.theme.PureTvTheme
 import org.koin.core.Koin
 
 /**
@@ -42,9 +61,13 @@ import org.koin.core.Koin
  * verticalScroll.
  */
 @Composable
-fun HomeContent(koin: Koin, onOpenChannel: (String) -> Unit) {
+fun HomeContent(koin: Koin, onOpenChannel: (String) -> Unit, onResumeVod: (VodLaunch) -> Unit) {
     val viewModel = rememberDesktopViewModel { koin.get<HomeViewModel>() }
     val state by viewModel.state.collectAsState()
+
+    val watchStore = remember { koin.get<WatchProgressStore>() }
+    val progressMap by watchStore.progress.collectAsState()
+    val continueItems = remember(progressMap) { watchStore.continueWatching() }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -85,6 +108,28 @@ fun HomeContent(koin: Koin, onOpenChannel: (String) -> Unit) {
                             onWatch = { onOpenChannel(hero.login) },
                             modifier = Modifier.padding(horizontal = SIDE),
                         )
+                    }
+                }
+
+                if (continueItems.isNotEmpty()) {
+                    item {
+                        Kicker("Continue watching", rule = true, modifier = Modifier.padding(horizontal = SIDE))
+                    }
+                    item {
+                        LazyRow(
+                            modifier = Modifier.fillMaxWidth(),
+                            contentPadding = PaddingValues(horizontal = SIDE),
+                            horizontalArrangement = Arrangement.spacedBy(16.dp),
+                        ) {
+                            items(continueItems, key = { it.vodId }) { p ->
+                                ContinueWatchingCard(
+                                    progress = p,
+                                    onClick = { onResumeVod(VodLaunch(p.vodId, p.channelLogin, p.title, p.thumbnailUrl)) },
+                                    onRemove = { watchStore.remove(p.vodId) },
+                                    modifier = Modifier.width(CARD_WIDTH),
+                                )
+                            }
+                        }
                     }
                 }
 
@@ -205,6 +250,48 @@ private fun heroImage(thumbnailUrl: String): String? =
     thumbnailUrl.takeIf { it.isNotBlank() }
         ?.replace("{width}", "1280")
         ?.replace("{height}", "720")
+
+@Composable
+private fun ContinueWatchingCard(
+    progress: WatchProgress,
+    onClick: () -> Unit,
+    onRemove: () -> Unit,           // wired for a future remove affordance
+    modifier: Modifier = Modifier,
+) {
+    val c = PureTvTheme.colors
+    Column(modifier = modifier.clickable(onClick = onClick)) {
+        Box(Modifier.fillMaxWidth().height(118.dp).clip(PureTvShape.lg)) {
+            CoverImage(
+                imageUrl = vodThumbUrl(progress.thumbnailUrl),
+                seed = progress.channelLogin,
+                contentDescription = progress.title,
+                modifier = Modifier.fillMaxSize(),
+            )
+            val frac = (progress.positionMs.toFloat() /
+                progress.durationMs.coerceAtLeast(1).toFloat()).coerceIn(0f, 1f)
+            Box(
+                Modifier.align(Alignment.BottomStart)
+                    .fillMaxWidth()
+                    .height(3.dp)
+                    .background(c.surfaceVariant),
+            ) {
+                Box(Modifier.fillMaxWidth(frac).fillMaxHeight().background(c.twitchPurple))
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+        Text(
+            progress.title.ifBlank { "Past broadcast" },
+            style = MaterialTheme.typography.bodyMedium,
+            color = c.textPrimary,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+/** Fill Twitch's %{width}x%{height} thumbnail template; null when blank. */
+private fun vodThumbUrl(raw: String): String? =
+    raw.takeIf { it.isNotBlank() }?.replace("%{width}", "320")?.replace("%{height}", "180")
 
 private val SIDE = 28.dp
 private val CARD_WIDTH = 210.dp

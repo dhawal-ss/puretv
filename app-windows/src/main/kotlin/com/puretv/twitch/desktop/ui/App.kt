@@ -180,7 +180,11 @@ fun App(koin: Koin, windowState: WindowState, onClose: () -> Unit, awtWindow: Aw
                                     onBack = { route = Route.Top },
                                 )
                                 Route.Top -> when (destination) {
-                                    Destination.HOME -> HomeContent(koin = koin, onOpenChannel = { login -> route = Route.Channel(login) })
+                                    Destination.HOME -> HomeContent(
+                                        koin = koin,
+                                        onOpenChannel = { login -> route = Route.Channel(login) },
+                                        onResumeVod = { launch -> route = Route.Vod(launch) },
+                                    )
                                     Destination.BROWSE -> BrowseContent(koin = koin, onOpenCategory = { gameId, gameName -> route = Route.Category(gameId, gameName) })
                                     Destination.SEARCH -> SearchContent(koin = koin, onOpenChannel = { login -> route = Route.Channel(login) })
                                     Destination.SETTINGS -> SettingsContent(koin = koin, onExit = onClose)
