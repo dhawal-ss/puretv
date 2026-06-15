@@ -11,6 +11,18 @@ release notes automatically.
 
 ---
 
+## 1.7.2 - 2026-06-15
+
+Streams play again, chat gets Enter-to-send, and in-app updates install reliably.
+
+### New
+- **Press Enter to send chat.** Send a message with the Enter key instead of clicking the arrow. Tab still completes an emote suggestion, and the arrow button is still there if you prefer it.
+
+### Fixed
+- **Streams load again.** Twitch changed something on their side that stopped PureTV from starting any stream — the player stayed black and the ad-blocker was stuck on "Checking…". PureTV now asks Twitch for streams in a way that doesn't depend on that, so live channels and past broadcasts play normally again.
+- **Updates install on the first try.** In-app updates often failed the first time (and sometimes the second), and only went through after a few attempts. PureTV now downloads updates over a more reliable connection and retries automatically, so updating works the first time.
+- **Clearer when something's wrong.** If a stream genuinely can't be reached, the ad-block badge no longer hangs on "Checking…" forever, so a real outage is easier to spot.
+
 ## 1.7.1 - 2026-06-15
 
 A quick fix for the new chat.
