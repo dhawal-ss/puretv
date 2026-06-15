@@ -14,6 +14,7 @@ import kotlinx.serialization.json.boolean
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonPrimitive
 
 /**
@@ -116,19 +117,26 @@ class EmoteRepository(
         val emoteSet = raw["emote_set"]?.jsonObject ?: return emptyList()
         return emoteSet["emotes"]?.jsonArray.orEmpty().map { it.jsonObject.toSevenTvEmote() }
     }
+}
 
-    private fun JsonObject.toSevenTvEmote(): ChannelEmote {
-        val id = this["id"]!!.jsonPrimitive.content
-        val name = this["name"]!!.jsonPrimitive.content
-        val animated = this["data"]?.jsonObject?.get("animated")?.jsonPrimitive?.boolean ?: false
-        return ChannelEmote(
-            id = id,
-            name = name,
-            url = "https://cdn.7tv.app/emote/$id/4x.${if (animated) "webp" else "png"}",
-            provider = EmoteProvider.SEVENTV,
-            animated = animated,
-        )
-    }
+internal fun JsonObject.toSevenTvEmote(): ChannelEmote {
+    val id = this["id"]!!.jsonPrimitive.content
+    val name = this["name"]!!.jsonPrimitive.content
+    val data = this["data"]?.jsonObject
+    val animated = data?.get("animated")?.jsonPrimitive?.boolean ?: false
+    // 7TV marks overlays two ways across its API surface: the active-emote
+    // `flags` bit 0, or the emote `data.flags` bit 8 (256). Treat either as zero-width.
+    val activeFlags = this["flags"]?.jsonPrimitive?.intOrNull ?: 0
+    val dataFlags = data?.get("flags")?.jsonPrimitive?.intOrNull ?: 0
+    val zeroWidth = (activeFlags and 0x1) != 0 || (dataFlags and 0x100) != 0
+    return ChannelEmote(
+        id = id,
+        name = name,
+        url = "https://cdn.7tv.app/emote/$id/4x.${if (animated) "webp" else "png"}",
+        provider = EmoteProvider.SEVENTV,
+        animated = animated,
+        zeroWidth = zeroWidth,
+    )
 }
 
 /**
