@@ -98,7 +98,7 @@ import com.puretv.twitch.desktop.ui.chat.completeWord
 import com.puretv.twitch.desktop.ui.chat.composerKeyAction
 import com.puretv.twitch.desktop.ui.chat.insertAtCursor
 import com.puretv.twitch.desktop.ui.chat.matchEmotes
-import com.puretv.twitch.desktop.ui.chat.nextUnread
+import com.puretv.twitch.desktop.ui.chat.scrollAnchor
 import com.puretv.twitch.desktop.ui.chat.shouldStick
 import com.puretv.twitch.desktop.ui.chat.wordAtCursor
 import com.puretv.twitch.desktop.ui.components.EmoteImage
@@ -527,15 +527,14 @@ private fun ChatMessageList(
             info.totalItemsCount == 0 || lastVisible >= info.totalItemsCount - 2
         }
     }
-    var hasUnread by remember { mutableStateOf(false) }
-
-    LaunchedEffect(messages.size) {
+    // Keyed on the newest message id (scrollAnchor), NOT messages.size: the buffer
+    // caps at 200, so size goes constant and a size-keyed effect stops firing —
+    // which froze auto-scroll on any busy channel. The id changes every message.
+    LaunchedEffect(scrollAnchor(messages)) {
         if (messages.isEmpty()) return@LaunchedEffect
         // INSTANT scroll keeps up with busy chat where animateScrollToItem can't.
         if (shouldStick(pinned)) listState.scrollToItem(messages.lastIndex)
-        hasUnread = nextUnread(pinned, true, hasUnread)
     }
-    LaunchedEffect(pinned) { hasUnread = nextUnread(pinned, false, hasUnread) }
 
     Box(modifier) {
         LazyColumn(
@@ -546,20 +545,20 @@ private fun ChatMessageList(
         ) {
             items(messages, key = { it.id }) { ChatMessageRow(message = it, onReply = onReply) }
         }
-        if (hasUnread) {
+        // Twitch parity: while scrolled up, the live feed is paused — show a
+        // resume affordance until the user is back at the bottom. Smooth-scroll
+        // on click; reaching the bottom flips `pinned` true and hides this.
+        if (!pinned) {
             Surface(
                 onClick = {
-                    scope.launch {
-                        listState.animateScrollToItem(messages.lastIndex)
-                        hasUnread = false
-                    }
+                    scope.launch { listState.animateScrollToItem(messages.lastIndex) }
                 },
                 shape = PureTvShape.pill,
                 color = c.twitchPurple,
                 modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 12.dp),
             ) {
                 Text(
-                    "New messages",
+                    "Chat paused due to scroll",
                     color = Color.White,
                     modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
                     style = MaterialTheme.typography.labelMedium,
