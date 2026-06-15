@@ -29,6 +29,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.automirrored.filled.VolumeOff
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AspectRatio
@@ -269,9 +270,11 @@ fun StreamContent(koin: Koin, channelLogin: String, onBack: () -> Unit) {
                     PlaybackControls(
                         isPlaying = playerStatus.isPlaying,
                         volume = playerStatus.volume,
+                        isMuted = playerStatus.isMuted,
                         currentQuality = state.currentQuality,
                         onTogglePlayPause = viewModel::togglePlayPause,
                         onVolumeChange = viewModel::setVolume,
+                        onToggleMute = viewModel::toggleMute,
                         onQualitySelected = viewModel::setQuality,
                     )
                 }
@@ -413,9 +416,11 @@ private fun TopBar(
 private fun PlaybackControls(
     isPlaying: Boolean,
     volume: Int,
+    isMuted: Boolean,
     currentQuality: StreamQuality,
     onTogglePlayPause: () -> Unit,
     onVolumeChange: (Int) -> Unit,
+    onToggleMute: () -> Unit,
     onQualitySelected: (StreamQuality) -> Unit,
 ) {
     val c = PureTvTheme.colors
@@ -434,12 +439,14 @@ private fun PlaybackControls(
                 tint = c.textPrimary,
             )
         }
-        Icon(
-            Icons.AutoMirrored.Filled.VolumeUp,
-            "Volume",
-            tint = c.textSecondary,
-            modifier = Modifier.size(18.dp),
-        )
+        IconButton(onClick = onToggleMute, modifier = Modifier.size(28.dp)) {
+            Icon(
+                if (isMuted || volume == 0) Icons.AutoMirrored.Filled.VolumeOff else Icons.AutoMirrored.Filled.VolumeUp,
+                if (isMuted) "Unmute" else "Mute",
+                tint = c.textSecondary,
+                modifier = Modifier.size(18.dp),
+            )
+        }
         Slider(
             value = volume.toFloat(),
             onValueChange = { onVolumeChange(it.toInt()) },

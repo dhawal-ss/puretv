@@ -27,6 +27,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Chat
+import androidx.compose.material.icons.automirrored.filled.VolumeOff
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.AspectRatio
 import androidx.compose.material.icons.filled.Fullscreen
@@ -323,7 +324,14 @@ private fun VodControls(koin: Koin, viewModel: VodPlayerViewModel) {
                     tint = c.textPrimary,
                 )
             }
-            Icon(Icons.AutoMirrored.Filled.VolumeUp, "Volume", tint = c.textSecondary, modifier = Modifier.size(18.dp))
+            IconButton(onClick = viewModel::toggleMute, modifier = Modifier.size(28.dp)) {
+                Icon(
+                    if (status.isMuted || status.volume == 0) Icons.AutoMirrored.Filled.VolumeOff else Icons.AutoMirrored.Filled.VolumeUp,
+                    if (status.isMuted) "Unmute" else "Mute",
+                    tint = c.textSecondary,
+                    modifier = Modifier.size(18.dp),
+                )
+            }
             Slider(
                 value = status.volume.toFloat(),
                 onValueChange = { viewModel.setVolume(it.toInt()) },
