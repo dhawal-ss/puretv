@@ -11,6 +11,21 @@ release notes automatically.
 
 ---
 
+## 1.7.0 - 2026-06-15
+
+A big chat upgrade, plus a volume fix.
+
+### New
+- **Emotes when you chat.** Open the new emote picker in the chat box to browse and search your channel's emotes, Twitch global emotes, and BTTV, FFZ and 7TV emotes, then click to drop one in. You can also just start typing an emote name and press Tab to complete it.
+- **Reply to messages.** Reply to a chat message directly, the same way you can on Twitch, and replies show who they are answering.
+
+### Improved
+- **Chat scrolling that behaves.** Chat stays pinned to the newest message while you are at the bottom. If you scroll up to read something, it waits instead of yanking you back down, and shows a "New messages" button so you can jump to the latest when you are ready.
+- **Sign-in prompt in chat.** When you are browsing signed out, the chat box now shows a quick "Sign in to chat" prompt instead of quietly doing nothing.
+
+### Fixed
+- **Volume now matches the slider.** Streams start at 50% with the slider actually showing 50%, so the sound no longer jumps the first time you nudge it. The speaker icon mutes and unmutes too, and remembers your level.
+
 ## 1.6.0 - 2026-06-15
 
 See what any channel is up to at a glance, with a new stats panel.
