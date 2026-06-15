@@ -11,6 +11,7 @@ import io.ktor.http.ContentType
 import io.ktor.http.contentType
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
@@ -112,6 +113,24 @@ class TwitchGqlClient(
         return CommentBatch(CommentMapper.toReplayComments(conn), conn.pageInfo.hasNextPage)
     }
 
+    /**
+     * Fetch a channel's total follower count via the private GQL API (no token).
+     * Returns null if unavailable (banned/renamed channel, network error, etc.).
+     */
+    suspend fun fetchFollowerCount(login: String): Long? {
+        val safe = login.filter { it.isLetterOrDigit() || it == '_' }
+        if (safe.isEmpty()) return null
+        val query = """{"query":"query{user(login:\"$safe\"){followers{totalCount}}}"}"""
+        val response: String = runCatching {
+            httpClient.post(TwitchConfig.GQL_ENDPOINT) {
+                header("Client-ID", TwitchConfig.GQL_CLIENT_ID)
+                contentType(ContentType.Application.Json)
+                setBody(query)
+            }.body<String>()
+        }.getOrNull() ?: return null
+        return parseFollowerCount(response)
+    }
+
     private suspend fun postPersistedQuery(
         operationName: String,
         hash: String,
@@ -182,6 +201,30 @@ data class VideoSeekPreviewsData(val video: VideoSeekPreviews? = null)
 data class VideoSeekPreviews(
     @SerialName("seekPreviewsURL") val seekPreviewsURL: String? = null,
 )
+
+// ---- Follower count ----
+
+@Serializable
+data class FollowerCountData(val user: FollowerCountUser? = null)
+
+@Serializable
+data class FollowerCountUser(val followers: FollowerConnection? = null)
+
+@Serializable
+data class FollowerConnection(val totalCount: Long? = null)
+
+private val followerCountJson = Json { ignoreUnknownKeys = true }
+
+/**
+ * Parses a total follower count out of a GQL `user{followers{totalCount}}`
+ * response. Returns null for error bodies, missing users, or malformed JSON —
+ * the follower COUNT is still public even though the follower LIST is gated.
+ */
+internal fun parseFollowerCount(response: String): Long? =
+    runCatching {
+        followerCountJson.decodeFromString<GqlEnvelope<FollowerCountData>>(response)
+            .data?.user?.followers?.totalCount
+    }.getOrNull()
 
 /**
  * Holds the persisted-query hash and provides a refresh hook for GOTCHA #1.
