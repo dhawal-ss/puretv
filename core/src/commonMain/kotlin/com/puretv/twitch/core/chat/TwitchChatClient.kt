@@ -232,6 +232,15 @@ object TwitchIrcParser {
                 color = tags["color"].orEmpty().ifBlank { "#9B5DE5" },
                 badges = parseBadges(tags["badges"]),
             )
+            // USERSTATE is sent on JOIN and after each of our own sends. It carries
+            // our per-channel identity (channel sub/mod badges, color) — more
+            // accurate than GLOBALUSERSTATE for echoing our own messages. Reuse the
+            // same SelfState event; the later USERSTATE refines the global one.
+            "USERSTATE" -> ChatEvent.SelfState(
+                displayName = tags["display-name"].orEmpty(),
+                color = tags["color"].orEmpty().ifBlank { "#9B5DE5" },
+                badges = parseBadges(tags["badges"]),
+            )
             else -> null
         }
     }
