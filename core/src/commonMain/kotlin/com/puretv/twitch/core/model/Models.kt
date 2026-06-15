@@ -117,10 +117,28 @@ data class ChatMessage(
     val replyParentBody: String? = null,
 )
 
+/** A non-base emote drawn over a base emote (7TV zero-width / overlay cosmetics). */
+data class EmoteLayer(
+    val url: String,
+    val name: String,
+    val provider: EmoteProvider,
+    val animated: Boolean = false,
+)
+
 sealed class MessagePart {
     data class Text(val content: String) : MessagePart()
-    data class TwitchEmote(val id: String, val name: String) : MessagePart()
-    data class ThirdPartyEmote(val url: String, val name: String, val provider: EmoteProvider) : MessagePart()
+    data class TwitchEmote(
+        val id: String,
+        val name: String,
+        val overlays: List<EmoteLayer> = emptyList(),
+    ) : MessagePart()
+    data class ThirdPartyEmote(
+        val url: String,
+        val name: String,
+        val provider: EmoteProvider,
+        val animated: Boolean = false,
+        val overlays: List<EmoteLayer> = emptyList(),
+    ) : MessagePart()
 }
 
 data class Badge(val setId: String, val version: String)
@@ -143,6 +161,7 @@ data class ChannelEmote(
     val url: String,
     val provider: EmoteProvider,
     val animated: Boolean,
+    val zeroWidth: Boolean = false,
 )
 
 // ---- Settings ----
