@@ -1,6 +1,8 @@
 package com.puretv.twitch.core.api
 
+import com.puretv.twitch.core.model.ChannelEmote
 import com.puretv.twitch.core.model.ChannelInfo
+import com.puretv.twitch.core.model.EmoteProvider
 import com.puretv.twitch.core.model.GameInfo
 import com.puretv.twitch.core.model.MutedSegment
 import com.puretv.twitch.core.model.StreamInfo
@@ -74,6 +76,36 @@ class TwitchApiClient(
         }
         return resp.data
     }
+
+    /**
+     * GET /chat/emotes/global — Twitch's first-party global emote set.
+     * No extra OAuth scope required (an app/user token works). Best-effort:
+     * any failure yields an empty list so the picker degrades gracefully.
+     */
+    suspend fun getGlobalEmotes(): List<ChannelEmote> = runCatching {
+        val resp: HelixEnvelope<TwitchEmoteDto> = withRateLimitRetry {
+            authedClient().get("${TwitchConfig.API_BASE}/chat/emotes/global") {
+                header("Client-Id", TwitchConfig.CLIENT_ID)
+                tokenProvider()?.let { header("Authorization", "Bearer $it") }
+            }.body()
+        }
+        parseTwitchEmotes(resp)
+    }.getOrDefault(emptyList())
+
+    /**
+     * GET /chat/emotes?broadcaster_id= — a channel's first-party Twitch emotes
+     * (sub/bits/follower). Best-effort: failures degrade to an empty list.
+     */
+    suspend fun getChannelTwitchEmotes(broadcasterId: String): List<ChannelEmote> = runCatching {
+        val resp: HelixEnvelope<TwitchEmoteDto> = withRateLimitRetry {
+            authedClient().get("${TwitchConfig.API_BASE}/chat/emotes") {
+                header("Client-Id", TwitchConfig.CLIENT_ID)
+                tokenProvider()?.let { header("Authorization", "Bearer $it") }
+                parameter("broadcaster_id", broadcasterId)
+            }.body()
+        }
+        parseTwitchEmotes(resp)
+    }.getOrDefault(emptyList())
 
     /** GET /users/follows — channels followed by [userId]. Requires user:read:follows scope. */
     suspend fun getFollowedChannels(userId: String, first: Int = 100): List<FollowedChannel> {
@@ -153,6 +185,27 @@ class RateLimitedException(val resetEpochSeconds: Long?) : Exception("Twitch Hel
 
 @Serializable
 data class HelixEnvelope<T>(val data: List<T> = emptyList())
+
+/** One entry from GET /chat/emotes(/global). `format` carries "static"/"animated". */
+@Serializable
+data class TwitchEmoteDto(
+    val id: String = "",
+    val name: String = "",
+    val format: List<String> = emptyList(),
+)
+
+/** Twitch CDN image URL for an emote id; "animated" variant when the emote has one. */
+internal fun twitchEmoteImageUrl(id: String, animated: Boolean): String {
+    val fmt = if (animated) "animated" else "static"
+    return "https://static-cdn.jtvnw.net/emoticons/v2/" + id + "/" + fmt + "/dark/2.0"
+}
+
+/** Maps a Helix emote envelope to [ChannelEmote]s, dropping blank-id/blank-name entries. */
+internal fun parseTwitchEmotes(env: HelixEnvelope<TwitchEmoteDto>): List<ChannelEmote> =
+    env.data.filter { it.id.isNotBlank() && it.name.isNotBlank() }.map {
+        val animated = it.format.contains("animated")
+        ChannelEmote(it.id, it.name, twitchEmoteImageUrl(it.id, animated), EmoteProvider.TWITCH, animated)
+    }
 
 @Serializable
 data class HelixPagination(val cursor: String? = null)
