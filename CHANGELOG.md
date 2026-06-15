@@ -11,6 +11,15 @@ release notes automatically.
 
 ---
 
+## 1.4.0 - 2026-06-15
+
+Past broadcasts just got a lot better: pick up where you left off, preview as you scrub, and watch the chat play back.
+
+### New
+- **Continue watching.** Past videos remember where you stopped. Reopen one to resume from that spot or start over, and find your in-progress videos in a "Continue watching" row on Home.
+- **Scrub previews.** Drag the seek bar on a past video to see a thumbnail of that moment before you let go.
+- **Chat replay.** The original chat plays back next to a past broadcast, in sync with the video. Toggle it on or off from the player.
+
 ## 1.3.0 - 2026-06-15
 
 Watch a channel's past broadcasts, ad-free.
