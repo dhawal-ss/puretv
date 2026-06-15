@@ -52,6 +52,7 @@ import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.puretv.twitch.core.adblock.AdBlockStatus
 import com.puretv.twitch.core.model.ChatMessage
+import com.puretv.twitch.core.model.EmoteLayer
 import com.puretv.twitch.core.model.MessagePart
 import com.puretv.twitch.desktop.ui.theme.PureTvShape
 import com.puretv.twitch.desktop.ui.theme.PureTvTheme
@@ -410,8 +411,12 @@ fun ChatMessageRow(
         parts.forEach { part ->
             when (part) {
                 is MessagePart.Text -> Text(part.content, color = c.textPrimary, style = MaterialTheme.typography.bodyMedium)
-                is MessagePart.TwitchEmote -> EmoteImage("https://static-cdn.jtvnw.net/emoticons/v2/${part.id}/default/dark/1.0", part.name)
-                is MessagePart.ThirdPartyEmote -> EmoteImage(part.url, part.name)
+                is MessagePart.TwitchEmote -> StackedEmote(
+                    "https://static-cdn.jtvnw.net/emoticons/v2/${part.id}/default/dark/2.0",
+                    part.name,
+                    part.overlays,
+                )
+                is MessagePart.ThirdPartyEmote -> StackedEmote(part.url, part.name, part.overlays)
             }
         }
         if (onReply != null) {
@@ -451,6 +456,18 @@ internal fun EmoteImage(url: String, name: String, modifier: Modifier = Modifier
         contentDescription = name,
         modifier = modifier,
     )
+}
+
+@Composable
+private fun StackedEmote(baseUrl: String, name: String, overlays: List<EmoteLayer>, size: Dp = 28.dp) {
+    if (overlays.isEmpty()) {
+        EmoteImage(baseUrl, name, Modifier.size(size))
+        return
+    }
+    Box(contentAlignment = Alignment.Center) {
+        EmoteImage(baseUrl, name, Modifier.size(size))
+        overlays.forEach { layer -> EmoteImage(layer.url, layer.name, Modifier.size(size)) }
+    }
 }
 
 private val clockFormatter = java.time.format.DateTimeFormatter.ofPattern("HH:mm")
