@@ -187,7 +187,10 @@ fun VodPlayerContent(koin: Koin, launch: VodLaunch, onBack: () -> Unit) {
                     contentAlignment = Alignment.Center,
                 ) {
                     when {
-                        status.error != null && !viewModel.player.isAvailable ->
+                        // Show a player error whenever playback isn't active — covers an
+                        // unavailable engine, an mpv init failure, and a failed start.
+                        // Self-clears on recovery (file-loaded/playing resets error).
+                        status.error != null && !status.isPlaying && !status.isBuffering ->
                             Text(status.error!!, color = c.textSecondary, modifier = Modifier.padding(24.dp))
                         state.error != null ->
                             Text(state.error!!, color = c.textSecondary, modifier = Modifier.padding(24.dp))

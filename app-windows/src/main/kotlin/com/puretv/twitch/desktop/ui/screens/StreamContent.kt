@@ -265,7 +265,11 @@ fun StreamContent(koin: Koin, channelLogin: String, onBack: () -> Unit, onReques
                     contentAlignment = Alignment.Center,
                 ) {
                     when {
-                        playerStatus.error != null && !vlcPlayer.isAvailable -> Text(
+                        // Surface a player error whenever nothing is actively playing —
+                        // covers an unavailable engine (e.g. "switch back to VLC"), an
+                        // mpv init failure, and a failed stream start (bad URL). The
+                        // error self-clears on recovery (playing/file-loaded sets error=null).
+                        playerStatus.error != null && !playerStatus.isPlaying && !playerStatus.isBuffering -> Text(
                             playerStatus.error!!,
                             color = c.textSecondary,
                             modifier = Modifier.padding(24.dp),
