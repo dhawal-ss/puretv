@@ -55,6 +55,7 @@ val desktopModule = module {
     single { ViewerHistoryStore() }
     // In-app auto-updater (GitHub Releases) — see UpdateManager.
     single { UpdateManager() }
+    single { com.puretv.twitch.desktop.ui.emotes.EmoteFrameCache(get()) }
 
     // --- Playback ------------------------------------------------------------
     single { VlcPlayer() }
