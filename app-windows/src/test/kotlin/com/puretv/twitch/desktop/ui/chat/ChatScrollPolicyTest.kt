@@ -9,9 +9,24 @@ import kotlin.test.assertTrue
 
 class ChatScrollPolicyTest {
 
-    @Test fun shouldStickMirrorsAtBottom() {
-        assertTrue(shouldStick(atBottom = true))
-        assertFalse(shouldStick(atBottom = false))
+    @Test fun userScrollingAwayFromBottomPausesFollowing() {
+        assertFalse(nextFollowing(following = true, atBottom = false, userScrolling = true))
+    }
+
+    @Test fun reachingBottomResumesFollowing() {
+        assertTrue(nextFollowing(following = false, atBottom = true, userScrolling = false))
+        // Dragging down INTO the bottom also resumes.
+        assertTrue(nextFollowing(following = false, atBottom = true, userScrolling = true))
+    }
+
+    @Test fun batchAppendWhileFollowingDoesNotPause() {
+        // The VOD bug: a batch of new rows is briefly unmeasured so atBottom reads false,
+        // but the user is NOT scrolling. Following must stay true so auto-scroll keeps firing.
+        assertTrue(nextFollowing(following = true, atBottom = false, userScrolling = false))
+    }
+
+    @Test fun scrolledUpAndIdleStaysPaused() {
+        assertFalse(nextFollowing(following = false, atBottom = false, userScrolling = false))
     }
 
     @Test fun scrollAnchorChangesPerNewMessageEvenAtConstantSize() {
