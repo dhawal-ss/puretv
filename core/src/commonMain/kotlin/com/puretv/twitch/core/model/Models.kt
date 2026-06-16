@@ -184,6 +184,7 @@ data class AppSettings(
     val show7tvEmotes: Boolean = true,
     val showFfzEmotes: Boolean = true,
     val chatTimestamps: Boolean = false,
+    val animateEmotes: Boolean = true,
 
     // UI
     val theme: String = "dark", // dark, darker, purple

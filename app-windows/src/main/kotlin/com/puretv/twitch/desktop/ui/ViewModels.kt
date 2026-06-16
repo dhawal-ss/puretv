@@ -504,6 +504,9 @@ class SettingsViewModel(private val settingsStore: DesktopSettingsStore) : Deskt
     fun setTheme(key: String) =
         settingsStore.updateSettings { it.copy(theme = key) }
 
+    fun setAnimateEmotes(enabled: Boolean) =
+        settingsStore.updateSettings { it.copy(animateEmotes = enabled) }
+
     fun logOut() {
         settingsStore.clearTokens()
     }

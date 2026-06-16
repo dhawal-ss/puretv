@@ -96,6 +96,7 @@ class DesktopSettingsStore(
         val show7tvEmotes: Boolean = true,
         val showFfzEmotes: Boolean = true,
         val chatTimestamps: Boolean = false,
+        val animateEmotes: Boolean = true,
         val theme: String = "dark",
         val compactMode: Boolean = false,
     )
@@ -113,6 +114,7 @@ class DesktopSettingsStore(
         show7tvEmotes = show7tvEmotes,
         showFfzEmotes = showFfzEmotes,
         chatTimestamps = chatTimestamps,
+        animateEmotes = animateEmotes,
         theme = theme,
         compactMode = compactMode,
         // `accessToken`/`username`/`userId` live in the encrypted token store
@@ -132,6 +134,7 @@ class DesktopSettingsStore(
         show7tvEmotes = show7tvEmotes,
         showFfzEmotes = showFfzEmotes,
         chatTimestamps = chatTimestamps,
+        animateEmotes = animateEmotes,
         theme = theme,
         compactMode = compactMode,
     )
