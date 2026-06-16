@@ -2,6 +2,7 @@ package com.puretv.twitch.desktop.data
 
 import com.puretv.twitch.core.di.TokenHolder
 import com.puretv.twitch.core.model.AppSettings
+import com.puretv.twitch.core.model.UpscalingMode
 import com.puretv.twitch.desktop.auth.CURRENT_AUTH_SCHEMA
 import com.puretv.twitch.desktop.auth.needsAuthReset
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -99,6 +100,7 @@ class DesktopSettingsStore(
         val animateEmotes: Boolean = true,
         val theme: String = "dark",
         val compactMode: Boolean = false,
+        val upscalingMode: String = "off",
     )
 
     private fun SettingsDto.toAppSettings() = AppSettings(
@@ -117,6 +119,7 @@ class DesktopSettingsStore(
         animateEmotes = animateEmotes,
         theme = theme,
         compactMode = compactMode,
+        upscalingMode = parseUpscalingMode(upscalingMode),
         // `accessToken`/`username`/`userId` live in the encrypted token store
         // on desktop, not in plaintext settings — left at AppSettings defaults.
     )
@@ -137,6 +140,7 @@ class DesktopSettingsStore(
         animateEmotes = animateEmotes,
         theme = theme,
         compactMode = compactMode,
+        upscalingMode = upscalingMode.name.lowercase(),
     )
 
     fun updateSettings(transform: (AppSettings) -> AppSettings) {
@@ -263,3 +267,7 @@ class DesktopSettingsStore(
         return seed
     }
 }
+
+/** Lenient string -> enum: anything unrecognized (or null/legacy-missing) falls back to OFF. */
+internal fun parseUpscalingMode(raw: String?): UpscalingMode =
+    UpscalingMode.entries.firstOrNull { it.name.equals(raw, ignoreCase = true) } ?: UpscalingMode.OFF
