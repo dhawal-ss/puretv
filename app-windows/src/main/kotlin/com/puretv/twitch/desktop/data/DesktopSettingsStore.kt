@@ -2,6 +2,7 @@ package com.puretv.twitch.desktop.data
 
 import com.puretv.twitch.core.di.TokenHolder
 import com.puretv.twitch.core.model.AppSettings
+import com.puretv.twitch.core.model.PlaybackBackend
 import com.puretv.twitch.core.model.UpscalingMode
 import com.puretv.twitch.desktop.auth.CURRENT_AUTH_SCHEMA
 import com.puretv.twitch.desktop.auth.needsAuthReset
@@ -101,6 +102,7 @@ class DesktopSettingsStore(
         val theme: String = "dark",
         val compactMode: Boolean = false,
         val upscalingMode: String = "off",
+        val playbackBackend: String = "vlc",
     )
 
     private fun SettingsDto.toAppSettings() = AppSettings(
@@ -120,6 +122,7 @@ class DesktopSettingsStore(
         theme = theme,
         compactMode = compactMode,
         upscalingMode = parseUpscalingMode(upscalingMode),
+        playbackBackend = parsePlaybackBackend(playbackBackend),
         // `accessToken`/`username`/`userId` live in the encrypted token store
         // on desktop, not in plaintext settings — left at AppSettings defaults.
     )
@@ -141,6 +144,7 @@ class DesktopSettingsStore(
         theme = theme,
         compactMode = compactMode,
         upscalingMode = upscalingMode.name.lowercase(),
+        playbackBackend = playbackBackend.name.lowercase(),
     )
 
     fun updateSettings(transform: (AppSettings) -> AppSettings) {
@@ -271,3 +275,7 @@ class DesktopSettingsStore(
 /** Lenient string -> enum: anything unrecognized (or null/legacy-missing) falls back to OFF. */
 internal fun parseUpscalingMode(raw: String?): UpscalingMode =
     UpscalingMode.entries.firstOrNull { it.name.equals(raw, ignoreCase = true) } ?: UpscalingMode.OFF
+
+/** Lenient string -> enum: anything unrecognized (or null/legacy-missing) falls back to VLC. */
+internal fun parsePlaybackBackend(raw: String?): PlaybackBackend =
+    PlaybackBackend.entries.firstOrNull { it.name.equals(raw, ignoreCase = true) } ?: PlaybackBackend.VLC
