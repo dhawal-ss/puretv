@@ -1,5 +1,7 @@
 package com.puretv.twitch.core.stream
 
+import com.puretv.twitch.core.emotes.ResolvedEmote
+import com.puretv.twitch.core.emotes.applyThirdPartyEmotes
 import com.puretv.twitch.core.model.Badge
 import com.puretv.twitch.core.model.ChatMessage
 import com.puretv.twitch.core.model.MessagePart
@@ -35,6 +37,14 @@ data class ReplayComment(val offsetSeconds: Int, val message: ChatMessage)
 
 /** A fetched window of replay comments plus whether more pages exist after it. */
 data class CommentBatch(val comments: List<ReplayComment>, val hasNextPage: Boolean)
+
+/**
+ * Tokenizes 7TV/BTTV/FFZ emotes inside each replay comment's parts (Twitch emotes already
+ * arrive tagged from the comments API). Returns the list unchanged when [index] is empty.
+ */
+fun List<ReplayComment>.withThirdPartyEmotes(index: Map<String, ResolvedEmote>): List<ReplayComment> =
+    if (index.isEmpty()) this
+    else map { it.copy(message = it.message.copy(parsedParts = applyThirdPartyEmotes(it.message.parsedParts, index))) }
 
 /** Pure mapping from GQL comment nodes to the shared [ChatMessage] render model. */
 object CommentMapper {

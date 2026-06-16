@@ -102,7 +102,7 @@ fun VodPlayerContent(koin: Koin, launch: VodLaunch, onBack: () -> Unit) {
     val viewModel = rememberDesktopViewModel(launch.vodId) { koin.get<VodPlayerViewModel> { parametersOf(launch) } }
     val state by viewModel.state.collectAsState()
     val status by viewModel.status.collectAsState()
-    val chatViewModel = rememberDesktopViewModel(launch.vodId) { koin.get<VodChatViewModel> { parametersOf(launch.vodId) } }
+    val chatViewModel = rememberDesktopViewModel(launch.vodId) { koin.get<VodChatViewModel> { parametersOf(launch.vodId, launch.channelLogin) } }
     val chatMessages by chatViewModel.messages.collectAsState()
     val shell = LocalAppShell.current
     val mode = shell.playerMode
