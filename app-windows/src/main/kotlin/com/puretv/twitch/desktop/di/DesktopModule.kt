@@ -16,6 +16,7 @@ import com.puretv.twitch.desktop.ui.HomeViewModel
 import com.puretv.twitch.desktop.ui.LoginViewModel
 import com.puretv.twitch.desktop.ui.SearchViewModel
 import com.puretv.twitch.desktop.ui.SettingsViewModel
+import com.puretv.twitch.desktop.ui.emotes.EmoteFrameCache
 import com.puretv.twitch.desktop.ui.StreamViewModel
 import com.puretv.twitch.desktop.ui.VodListViewModel
 import com.puretv.twitch.desktop.ui.VodLaunch
@@ -55,7 +56,7 @@ val desktopModule = module {
     single { ViewerHistoryStore() }
     // In-app auto-updater (GitHub Releases) — see UpdateManager.
     single { UpdateManager() }
-    single { com.puretv.twitch.desktop.ui.emotes.EmoteFrameCache(get()) }
+    single { EmoteFrameCache(get()) }
 
     // --- Playback ------------------------------------------------------------
     single { VlcPlayer() }

@@ -26,6 +26,10 @@ class EmoteFrameCache(
     /** Decoded frames for [url], or null if static / undecodable. Cached (including null). */
     suspend fun frames(url: String): AnimatedEmoteFrames? {
         mutex.withLock { if (cache.containsKey(url)) return cache[url] }
+        // No in-flight de-dup: two coroutines racing the same uncached url both decode and
+        // the second put overwrites with an identical result. Intentional — emotes are
+        // small/idempotent, and holding the lock across the decode would serialize ALL
+        // emote decoding. Do not "optimize" by locking around the IO below.
         val decoded = withContext(Dispatchers.IO) {
             runCatching { decodeAnimatedFrames(httpClient.get(url).body<ByteArray>()) }.getOrNull()
         }
