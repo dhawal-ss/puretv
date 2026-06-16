@@ -22,10 +22,11 @@ import kotlinx.coroutines.launch
  * backward seek. Isolated from [VodPlayerViewModel] so chat is independently
  * cuttable.
  *
- * Third-party (7TV/BTTV/FFZ) emotes are tokenized once per comment as it's
- * buffered, using the broadcaster's emote sets — mirroring live chat. The index
- * loads before the first comment fetch; if it fails, comments still render with
- * Twitch-native emotes only (graceful degradation).
+ * Third-party (7TV/BTTV/FFZ) emotes are tokenized against the broadcaster's emote
+ * sets when the due window is published (only the visible comments, so it stays
+ * cheap). The emote index loads in PARALLEL — chat and position tracking never
+ * block on it; until it lands, comments simply render with Twitch-native emotes
+ * only, then re-emit tokenized once it's ready (mirrors live chat).
  */
 class VodChatViewModel(
     private val vodId: String,
@@ -44,14 +45,19 @@ class VodChatViewModel(
     @Volatile private var loading = false
     @Volatile private var lastSec = -1L
     @Volatile private var exhausted = false   // no more pages after the loaded window
-    // Built once before the first comment fetch; immutable after publish.
+    // Published once when the parallel load finishes; immutable map after publish.
     @Volatile private var emoteIndex: Map<String, ResolvedEmote> = emptyMap()
 
     init {
+        // Load the broadcaster's emote sets in parallel — NEVER block chat/position
+        // tracking on a slow emote provider. Re-emit once it lands so the comments
+        // already on screen pick up their emotes immediately.
         scope.launch {
-            // Resolve the broadcaster's emote sets first so the first comments tokenize.
             emoteIndex = runCatching { loadEmoteIndex() }.getOrDefault(emptyMap())
-            requestLoad(0)
+            emitDue(lastSec.coerceAtLeast(0))
+        }
+        requestLoad(0)
+        scope.launch {
             player.status.collect { st ->
                 val sec = st.positionMs / 1000
                 if (sec != lastSec) onSecond(sec)
@@ -70,6 +76,11 @@ class VodChatViewModel(
         buildEmoteIndex(thirdPartyChannel = channelEmotes.await(), thirdPartyGlobal = global.await())
     }
 
+    /** Publishes the due window, tokenizing only the visible comments against the current index. */
+    private fun emitDue(sec: Long) {
+        _messages.value = buffer.due(sec).takeLast(MAX_VISIBLE).withThirdPartyEmotes(emoteIndex).map { it.message }
+    }
+
     private fun onSecond(sec: Long) {
         val backward = sec < lastSec - 3
         lastSec = sec
@@ -80,7 +91,7 @@ class VodChatViewModel(
             !exhausted && sec.toInt() >= buffer.maxOffsetSeconds - PREFETCH_LEAD_SECONDS ->
                 requestLoad(buffer.maxOffsetSeconds)
         }
-        _messages.value = buffer.due(sec).takeLast(MAX_VISIBLE).map { it.message }
+        emitDue(sec)
     }
 
     /** Fetch a window; guarded so overlapping ticks don't stack requests. */
@@ -90,12 +101,11 @@ class VodChatViewModel(
         scope.launch {
             runCatching { vodRepository.videoComments(vodId, offsetSeconds) }
                 .onSuccess { batch ->
-                    // Tokenize third-party emotes once, here, so due() stays cheap per tick.
-                    buffer.add(batch.comments.withThirdPartyEmotes(emoteIndex))
+                    buffer.add(batch.comments)
                     if (!batch.hasNextPage) exhausted = true
                 }
             loading = false
-            _messages.value = buffer.due(lastSec.coerceAtLeast(0)).takeLast(MAX_VISIBLE).map { it.message }
+            emitDue(lastSec.coerceAtLeast(0))
         }
     }
 
