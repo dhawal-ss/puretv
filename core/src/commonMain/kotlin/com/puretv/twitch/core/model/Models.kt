@@ -166,10 +166,19 @@ data class ChannelEmote(
 
 // ---- Settings ----
 
+/** GPU video upscaling mode. AUTO maps to libVLC 4.0's `--d3d11-upscale-mode=super`
+ *  (NVIDIA RTX VSR / Intel VPE / AMD AMF via the D3D11 VideoProcessor). Inert on
+ *  libVLC 3.0.x (the option doesn't exist there) and when OFF. */
+enum class UpscalingMode(val label: String) {
+    OFF("Off"),
+    AUTO("Auto (GPU)"),
+}
+
 data class AppSettings(
     // Playback
     val preferredQuality: String = "auto",
     val lowLatencyMode: Boolean = true,
+    val upscalingMode: UpscalingMode = UpscalingMode.OFF,
 
     // Ad Block
     val adBlockEnabled: Boolean = true,
