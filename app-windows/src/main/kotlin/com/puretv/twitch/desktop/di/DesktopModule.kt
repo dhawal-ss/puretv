@@ -5,8 +5,10 @@ import com.puretv.twitch.desktop.data.DesktopSettingsStore
 import com.puretv.twitch.desktop.data.FollowStore
 import com.puretv.twitch.desktop.data.ViewerHistoryStore
 import com.puretv.twitch.desktop.data.WatchProgressStore
+import com.puretv.twitch.core.model.PlaybackBackend
 import com.puretv.twitch.desktop.player.DesktopPlayer
 import com.puretv.twitch.desktop.player.LocalStreamProxy
+import com.puretv.twitch.desktop.player.MpvPlayer
 import com.puretv.twitch.desktop.player.VlcPlayer
 import com.puretv.twitch.desktop.update.UpdateManager
 import com.puretv.twitch.desktop.ui.BrowseViewModel
@@ -60,7 +62,10 @@ val desktopModule = module {
     single { EmoteFrameCache(get()) }
 
     // --- Playback ------------------------------------------------------------
-    single<DesktopPlayer> { VlcPlayer() }
+    single<DesktopPlayer> {
+        val store = get<DesktopSettingsStore>()
+        if (store.settings.value.playbackBackend == PlaybackBackend.MPV) MpvPlayer(store) else VlcPlayer()
+    }
     // LocalStreamProxy takes HttpClient (variant fetches) + BackupStreamResolver
     // (the player-type swap that actually removes ads) on top of StreamRepository
     // and AdBlockEngine — see the /variant route.

@@ -115,7 +115,7 @@ fun VlcPlayerView(
         }
         onDispose {
             canvas.removeHierarchyListener(listener)
-            // VlcPlayer is a Koin singleton — released at app shutdown, not per-screen.
+            // The player backend is a Koin singleton — released at app shutdown, not per-screen.
         }
     }
 
