@@ -29,7 +29,7 @@ import javax.swing.SwingUtilities
  * onto the EDT via [SwingUtilities.invokeLater]. [PlayerStatus] updates are
  * safe to publish from any thread since [MutableStateFlow] is thread-safe.
  */
-class VlcPlayer {
+class VlcPlayer : DesktopPlayer {
 
     // Must be initialised before `factory` so jna.library.path is set before
     // VLCJ's JNA binding loads libvlc.dll.  Kotlin initialises properties in
@@ -67,9 +67,9 @@ class VlcPlayer {
             },
         ) else PlayerStatus(),
     )
-    val status: StateFlow<PlayerStatus> = _status.asStateFlow()
+    override val status: StateFlow<PlayerStatus> = _status.asStateFlow()
 
-    val isAvailable: Boolean get() = mediaPlayer != null
+    override val isAvailable: Boolean get() = mediaPlayer != null
 
     private var currentUrl: String? = null
 
@@ -132,7 +132,7 @@ class VlcPlayer {
     // and avoid spurious libvlc churn.
     @Volatile private var attachedComponent: Component? = null
 
-    fun attachToPanel(panel: Component) {
+    override fun attachToPanel(panel: Component) {
         check(SwingUtilities.isEventDispatchThread()) { "attachToPanel must be called on the Swing EDT" }
         if (attachedComponent === panel) return
         val mp = mediaPlayer ?: return
@@ -170,7 +170,7 @@ class VlcPlayer {
      * pane forever — even after the surface eventually binds, libvlc doesn't
      * re-target an already-running session.
      */
-    fun play(streamUrl: String) {
+    override fun play(streamUrl: String) {
         val mp = mediaPlayer ?: return
         currentUrl = streamUrl
         _status.update { it.copy(isBuffering = true, error = null) }
@@ -199,7 +199,7 @@ class VlcPlayer {
         }
     }
 
-    fun pause() {
+    override fun pause() {
         val mp = mediaPlayer ?: return
         SwingUtilities.invokeLater {
             if (mp.status().state() == State.PLAYING) mp.controls().pause()
@@ -207,14 +207,14 @@ class VlcPlayer {
     }
 
     /** Seek to an absolute position. No-op for non-seekable (live) media. */
-    fun seekTo(positionMs: Long) {
+    override fun seekTo(positionMs: Long) {
         val mp = mediaPlayer ?: return
         SwingUtilities.invokeLater {
             if (mp.status().isSeekable) mp.controls().setTime(positionMs.coerceAtLeast(0))
         }
     }
 
-    fun resume() {
+    override fun resume() {
         val mp = mediaPlayer ?: return
         SwingUtilities.invokeLater {
             if (mp.status().state() == State.PAUSED) mp.controls().play()
@@ -222,11 +222,11 @@ class VlcPlayer {
         }
     }
 
-    fun togglePlayPause() {
+    override fun togglePlayPause() {
         if (_status.value.isPlaying) pause() else resume()
     }
 
-    fun stop() {
+    override fun stop() {
         val mp = mediaPlayer ?: return
         SwingUtilities.invokeLater {
             mp.controls().stop()
@@ -235,7 +235,7 @@ class VlcPlayer {
     }
 
     /** [volume] is 0–100, matching VLC's native scale (Section 8.4 volume slider). */
-    fun setVolume(volume: Int) {
+    override fun setVolume(volume: Int) {
         val mp = mediaPlayer ?: return
         val next = applyVolumeChange(VolumeState(_status.value.volume, _status.value.isMuted, preMuteVolume), volume)
         preMuteVolume = next.preMute
@@ -252,7 +252,7 @@ class VlcPlayer {
     }
 
     /** Toggles mute, remembering the pre-mute level so unmute restores it. */
-    fun toggleMute() {
+    override fun toggleMute() {
         val mp = mediaPlayer ?: return
         val next = applyMuteToggle(VolumeState(_status.value.volume, _status.value.isMuted, preMuteVolume))
         preMuteVolume = next.preMute
@@ -260,7 +260,7 @@ class VlcPlayer {
         runCatching { mp.audio().setVolume(next.volume) }
     }
 
-    fun release() {
+    override fun release() {
         val mp = mediaPlayer ?: return
         val f = factory ?: return
         SwingUtilities.invokeLater {
@@ -294,15 +294,3 @@ class VlcPlayer {
         }
     }
 }
-
-data class PlayerStatus(
-    val isReady: Boolean = false,
-    val isPlaying: Boolean = false,
-    val isBuffering: Boolean = false,
-    val volume: Int = DEFAULT_VOLUME,
-    val isMuted: Boolean = false,
-    val error: String? = null,
-    val positionMs: Long = 0,
-    val durationMs: Long = 0,
-    val isSeekable: Boolean = false,
-)
