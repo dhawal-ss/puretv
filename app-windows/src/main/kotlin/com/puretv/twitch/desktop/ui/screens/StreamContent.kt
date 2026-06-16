@@ -84,7 +84,7 @@ import androidx.compose.ui.unit.dp
 import com.puretv.twitch.core.adblock.AdBlockStatus
 import com.puretv.twitch.core.model.ChatMessage
 import com.puretv.twitch.core.model.StreamQuality
-import com.puretv.twitch.desktop.player.VlcPlayer
+import com.puretv.twitch.desktop.player.DesktopPlayer
 import com.puretv.twitch.desktop.player.VlcPlayerView
 import com.puretv.twitch.desktop.ui.LocalAppShell
 import com.puretv.twitch.desktop.ui.PlayerMode
@@ -139,7 +139,7 @@ fun StreamContent(koin: Koin, channelLogin: String, onBack: () -> Unit, onReques
     }
     val state by viewModel.state.collectAsState()
     val isFollowed by viewModel.isFollowed.collectAsState()
-    val vlcPlayer = remember { koin.get<VlcPlayer>() }
+    val vlcPlayer = remember { koin.get<DesktopPlayer>() }
     val playerStatus by vlcPlayer.status.collectAsState()
     val shell = LocalAppShell.current
     val mode = shell.playerMode

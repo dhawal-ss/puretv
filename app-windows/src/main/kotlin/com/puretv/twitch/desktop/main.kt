@@ -11,7 +11,7 @@ import com.puretv.twitch.desktop.data.DesktopSettingsStore
 import com.puretv.twitch.desktop.di.desktopModule
 import com.puretv.twitch.desktop.platform.WindowsNative
 import com.puretv.twitch.desktop.player.LocalStreamProxy
-import com.puretv.twitch.desktop.player.VlcPlayer
+import com.puretv.twitch.desktop.player.DesktopPlayer
 import com.puretv.twitch.desktop.ui.App
 import javax.swing.SwingUtilities
 import kotlinx.coroutines.runBlocking
@@ -26,7 +26,7 @@ fun main() {
 
     koinApp.koin.get<DesktopSettingsStore>()
 
-    val vlcPlayer = koinApp.koin.get<VlcPlayer>()
+    val vlcPlayer = koinApp.koin.get<DesktopPlayer>()
     val localStreamProxy = koinApp.koin.get<LocalStreamProxy>()
     Runtime.getRuntime().addShutdownHook(Thread {
         runCatching { runBlocking { localStreamProxy.stop() } }
