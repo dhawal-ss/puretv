@@ -18,6 +18,11 @@ build/
 # before packaging. See app-windows/build.gradle.kts `bundleVlc` task.
 app-windows/resources/windows/vlc/
 
+# Bundled mpv native library (populated by `gradle :app-windows:bundleMpv`).
+# Large binary (~120 MB libmpv-2.dll) — run bundleMpv on each build machine.
+# The Anime4K shader source lives (committed) in app-windows/shaders/.
+app-windows/resources/windows/mpv/
+
 # Secrets — injected at build time, never committed (see secrets.properties.example)
 secrets.properties
 

@@ -156,6 +156,29 @@ val bundleVlc by tasks.registering(Copy::class) {
     }
 }
 
+// ── mpv bundling ───────────────────────────────────────────────────────────────
+// Mirrors bundleVlc: copies the libmpv runtime + the Anime4K shader into
+// resources/windows/mpv/ (gitignored) for self-contained packaging. The DLL comes
+// from the MPV_DIR env var (set locally or by the release workflow); the shader is
+// committed in app-windows/shaders/. MpvPlayer reads compose.application.resources.dir
+// at runtime to find this dir. Run as a SEPARATE Gradle invocation before
+// createReleaseDistributable (same undeclared-dependency reason as bundleVlc).
+val bundleMpv by tasks.registering(Copy::class) {
+    description = "Copies libmpv-2.dll (from MPV_DIR) + the Anime4K shader into resources/windows/mpv/ for packaging."
+    val mpvDir = System.getenv("MPV_DIR")?.let { File(it) }?.takeIf { File(it, "libmpv-2.dll").exists() }
+    if (mpvDir != null) {
+        from(mpvDir) { include("libmpv-2.dll") }
+    }
+    from(layout.projectDirectory.dir("shaders")) { include("*.glsl"); into("shaders") }
+    into(layout.projectDirectory.dir("resources/windows/mpv"))
+    doFirst {
+        if (mpvDir == null) {
+            throw GradleException("libmpv not found. Download a libmpv build from https://mpv.io/installation/ (or the shinchiro Windows builds) and set the MPV_DIR env var to the directory containing libmpv-2.dll.")
+        }
+        println("[bundleMpv] Copying libmpv from: ${mpvDir.absolutePath}")
+    }
+}
+
 compose.desktop {
     application {
         mainClass = "com.puretv.twitch.desktop.MainKt"
@@ -181,7 +204,8 @@ compose.desktop {
             // Extra resources directory: files in resources/windows/ are copied
             // into the distributable's resources/ folder and available at runtime
             // via System.getProperty("compose.application.resources.dir").
-            // The bundleVlc task populates resources/windows/vlc/ with VLC DLLs.
+            // The bundleVlc task populates resources/windows/vlc/ with VLC DLLs, and
+            // bundleMpv populates resources/windows/mpv/ with libmpv + the Anime4K shader.
             appResourcesRootDir.set(layout.projectDirectory.dir("resources"))
 
             // SECTION 12.4 — both installer formats per the spec; jpackage
