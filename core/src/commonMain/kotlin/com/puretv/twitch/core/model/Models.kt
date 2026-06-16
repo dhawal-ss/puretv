@@ -166,19 +166,25 @@ data class ChannelEmote(
 
 // ---- Settings ----
 
-/** GPU video upscaling mode. AUTO maps to libVLC 4.0's `--d3d11-upscale-mode=super`
- *  (NVIDIA RTX VSR / Intel VPE / AMD AMF via the D3D11 VideoProcessor). Inert on
- *  libVLC 3.0.x (the option doesn't exist there) and when OFF. */
-enum class UpscalingMode(val label: String) {
-    OFF("Off"),
-    AUTO("Auto (GPU)"),
-}
+/** GPU video upscaling mode. STANDARD/ANIME are effective only on the mpv
+ *  backend (VLC ignores them); that gating lives in the player + settings UI,
+ *  not here — this enum is backend-agnostic data.
+ *  - OFF     — no upscaling; native resolution.
+ *  - STANDARD — libplacebo Jinc/spline scaler; good for live sports / general content.
+ *  - ANIME   — Anime4K shader pipeline; line sharpening + artefact reduction for animation. */
+enum class UpscalingMode(val label: String) { OFF("Off"), STANDARD("Standard"), ANIME("Anime") }
+
+/** Selects which media-player backend handles playback.
+ *  VLC  — VLCJ / libVLC (current default; stable, battle-tested).
+ *  MPV  — libmpv via JNA (opt-in; enables GPU upscaling via libplacebo/Anime4K). */
+enum class PlaybackBackend(val label: String) { VLC("VLC"), MPV("mpv") }
 
 data class AppSettings(
     // Playback
     val preferredQuality: String = "auto",
     val lowLatencyMode: Boolean = true,
     val upscalingMode: UpscalingMode = UpscalingMode.OFF,
+    val playbackBackend: PlaybackBackend = PlaybackBackend.VLC,
 
     // Ad Block
     val adBlockEnabled: Boolean = true,
