@@ -57,6 +57,9 @@ import coil3.compose.setSingletonImageLoaderFactory
 import coil3.network.ktor3.KtorNetworkFetcherFactory
 import coil3.request.crossfade
 import com.puretv.twitch.desktop.data.DesktopSettingsStore
+import com.puretv.twitch.desktop.ui.emotes.EmoteFrameCache
+import com.puretv.twitch.desktop.ui.emotes.LocalEmoteAnimation
+import com.puretv.twitch.desktop.ui.emotes.LocalEmoteFrameCache
 import com.puretv.twitch.desktop.platform.WindowsNative
 import com.puretv.twitch.desktop.update.UpdateManager
 import com.puretv.twitch.desktop.update.UpdateState
@@ -115,7 +118,12 @@ fun App(koin: Koin, windowState: WindowState, onClose: () -> Unit, awtWindow: Aw
     LaunchedEffect(Unit) { updateManager.checkForUpdates() }
 
     PureTvDesktopTheme(variant = themeVariant) {
-        CompositionLocalProvider(LocalAppShell provides shell) {
+        val emoteFrameCache = remember { koin.get<EmoteFrameCache>() }
+        CompositionLocalProvider(
+            LocalAppShell provides shell,
+            LocalEmoteAnimation provides settings.animateEmotes,
+            LocalEmoteFrameCache provides emoteFrameCache,
+        ) {
             var destination by remember { mutableStateOf(Destination.HOME) }
             var route by remember { mutableStateOf<Route>(Route.Top) }
             val c = PureTvTheme.colors
