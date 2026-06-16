@@ -25,6 +25,7 @@ import com.puretv.twitch.core.model.ChatMessage
 import com.puretv.twitch.core.model.GameInfo
 import com.puretv.twitch.core.model.StreamInfo
 import com.puretv.twitch.core.model.StreamQuality
+import com.puretv.twitch.core.model.UpscalingMode
 import com.puretv.twitch.core.repository.ChannelRepository
 import com.puretv.twitch.core.repository.StreamRepository
 import com.puretv.twitch.desktop.auth.DesktopOAuthManager
@@ -506,6 +507,9 @@ class SettingsViewModel(private val settingsStore: DesktopSettingsStore) : Deskt
 
     fun setAnimateEmotes(enabled: Boolean) =
         settingsStore.updateSettings { it.copy(animateEmotes = enabled) }
+
+    fun setUpscalingMode(mode: UpscalingMode) =
+        settingsStore.updateSettings { it.copy(upscalingMode = mode) }
 
     fun logOut() {
         settingsStore.clearTokens()

@@ -28,6 +28,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import com.puretv.twitch.core.model.StreamQuality
+import com.puretv.twitch.core.model.UpscalingMode
 import com.puretv.twitch.desktop.ui.SettingsViewModel
 import com.puretv.twitch.desktop.ui.components.ButtonVariant
 import com.puretv.twitch.desktop.ui.components.Kicker
@@ -99,6 +100,17 @@ fun SettingsContent(koin: Koin, onExit: () -> Unit) {
                     selected = selectedQuality,
                     label = { it.label },
                     onSelect = { viewModel.setPreferredQuality(it) },
+                )
+            }
+            SettingsRow(
+                label = "GPU upscaling",
+                description = "Use your GPU's video super-resolution (e.g. NVIDIA RTX VSR) to sharpen sub-native streams. Needs a capable GPU and the libVLC 4.0 build. Takes effect after restart.",
+            ) {
+                SegmentedControl(
+                    options = UpscalingMode.entries,
+                    selected = state.settings.upscalingMode,
+                    label = { it.label },
+                    onSelect = { viewModel.setUpscalingMode(it) },
                 )
             }
         }
