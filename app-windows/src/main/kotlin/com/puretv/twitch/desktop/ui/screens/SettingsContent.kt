@@ -27,6 +27,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
+import com.puretv.twitch.core.model.PlaybackBackend
 import com.puretv.twitch.core.model.StreamQuality
 import com.puretv.twitch.core.model.UpscalingMode
 import com.puretv.twitch.desktop.ui.SettingsViewModel
@@ -103,8 +104,19 @@ fun SettingsContent(koin: Koin, onExit: () -> Unit) {
                 )
             }
             SettingsRow(
+                label = "Playback engine",
+                description = "VLC is the default. mpv enables GPU upscaling (libplacebo / Anime4K). Takes effect after restart.",
+            ) {
+                SegmentedControl(
+                    options = PlaybackBackend.entries,
+                    selected = state.settings.playbackBackend,
+                    label = { it.label },
+                    onSelect = { viewModel.setPlaybackBackend(it) },
+                )
+            }
+            SettingsRow(
                 label = "GPU upscaling",
-                description = "Use your GPU's video super-resolution (e.g. NVIDIA RTX VSR) to sharpen sub-native streams. Needs a capable GPU and the libVLC 4.0 build. Takes effect after restart.",
+                description = "Sharpen sub-native streams with GPU scaling. Standard uses libplacebo; Anime uses Anime4K. Requires the mpv engine (above) and takes effect after restart.",
             ) {
                 SegmentedControl(
                     options = UpscalingMode.entries,
