@@ -72,6 +72,33 @@ jobs:
       - name: Bundle VLC into app resources
         run: .\gradlew.bat :app-windows:bundleVlc
 
+      - name: Download libmpv (bundled for the opt-in mpv playback backend)
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # x86-64-v3 libmpv dev build from shinchiro — the libmpv-2.dll the app loads.
+          # GITHUB_TOKEN has read access to this public repo's releases.
+          # NOTE: this pulls the LATEST shinchiro nightly (no --tag). That's deliberate:
+          # shinchiro garbage-collects old nightlies, so a pinned tag would eventually
+          # 404. The trade-off is non-reproducibility + the small risk that a new
+          # nightly breaks the JNA bindings. Before mpv becomes the DEFAULT backend,
+          # revisit this — e.g. vendor a validated libmpv-2.dll as a PureTV release
+          # asset and download THAT by a fixed URL. (VLC is version-pinned via choco.)
+          gh release download -R shinchiro/mpv-winbuild-cmake --pattern "mpv-dev-x86_64-v3-*.7z" --dir mpvdl --clobber
+          $archive = Get-ChildItem mpvdl\*.7z | Select-Object -First 1
+          if (-not $archive) { throw "No libmpv dev archive was downloaded." }
+          7z x $archive.FullName -ompv-libs -y
+          $dll = Get-ChildItem -Path mpv-libs -Recurse -Filter libmpv-2.dll | Select-Object -First 1
+          if (-not $dll) { throw "libmpv-2.dll not found in the extracted archive." }
+          echo "MPV_DIR=$($dll.Directory.FullName)" >> $env:GITHUB_ENV
+
+      # Separate Gradle invocation from createReleaseDistributable (same
+      # undeclared-input reason as bundleVlc). The Anime4K shader is committed
+      # in-repo (app-windows/shaders/); only the libmpv DLL is downloaded above.
+      - name: Bundle mpv into app resources
+        run: .\gradlew.bat :app-windows:bundleMpv
+
       - name: Build release app image
         env:
           TWITCH_CLIENT_SECRET: ${{ secrets.TWITCH_CLIENT_SECRET }}
