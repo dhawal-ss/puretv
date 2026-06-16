@@ -103,6 +103,21 @@ fun SettingsContent(koin: Koin, onExit: () -> Unit) {
             }
         }
 
+        // ── Chat ─────────────────────────────────────────────────────────────────
+        SettingsSection(title = "Chat") {
+            SettingsRow(
+                label = "Animate emotes",
+                description = "Play animated 7TV / BTTV emotes. Turn off to show a still frame (lighter on the CPU).",
+            ) {
+                SegmentedControl(
+                    options = listOf(true, false),
+                    selected = state.settings.animateEmotes,
+                    label = { if (it) "On" else "Off" },
+                    onSelect = { viewModel.setAnimateEmotes(it) },
+                )
+            }
+        }
+
         // ── Ad blocking ──────────────────────────────────────────────────────────
         SettingsSection(title = "Ad blocking") {
             Text(
