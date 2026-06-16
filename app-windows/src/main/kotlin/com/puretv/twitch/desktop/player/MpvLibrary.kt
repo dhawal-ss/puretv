@@ -29,7 +29,9 @@ interface MpvLibrary : Library {
 
 // mpv_event { int event_id; int error; uint64_t reply_userdata; void* data; }
 @Structure.FieldOrder("event_id", "error", "reply_userdata", "data")
-class MpvEvent : Structure() {
+class MpvEvent : Structure {
+    constructor() : super()
+    constructor(p: Pointer) : super(p)
     @JvmField var event_id: Int = 0
     @JvmField var error: Int = 0
     @JvmField var reply_userdata: Long = 0
