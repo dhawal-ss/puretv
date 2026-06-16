@@ -84,6 +84,8 @@ dependencies {
     // SECTION 08.2 [CRITICAL] — VLCJ wraps either the bundled VLC copy placed by
     // `bundleVlc` (packaged distributable) or the user's system VLC install (dev).
     implementation(libs.vlcj)
+    // JNA for the libmpv bindings (MpvLibrary). vlcj also pulls JNA, but mpv owns its own declaration.
+    implementation(libs.jna)
 
     implementation(libs.coil.compose)
     implementation(libs.coil.network)
