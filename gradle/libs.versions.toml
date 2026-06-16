@@ -16,6 +16,7 @@ exoplayer = "1.4.1"
 leanback = "1.2.0"
 compose-tv = "1.0.0"
 vlcj = "4.8.3"
+jna = "5.14.0"
 okio = "3.9.1"
 workmanager = "2.10.0"
 coil = "3.0.4"
@@ -74,6 +75,10 @@ compose-tv-material = { module = "androidx.tv:tv-material", version.ref = "compo
 
 # VLCJ (Desktop/Windows only)
 vlcj = { module = "uk.co.caprica:vlcj", version.ref = "vlcj" }
+# Use the JPMS-packaged JNA (same artifact vlcj resolves) so the two don't put
+# duplicate `com.sun.jna.*` packages on the classpath. Declared explicitly here
+# because the mpv backend (MpvLibrary) depends on it directly, not just via vlcj.
+jna = { module = "net.java.dev.jna:jna-jpms", version.ref = "jna" }
 
 # WorkManager (Android only)
 workmanager = { module = "androidx.work:work-runtime-ktx", version.ref = "workmanager" }
