@@ -5,6 +5,7 @@ import com.puretv.twitch.desktop.data.DesktopSettingsStore
 import com.puretv.twitch.desktop.data.FollowStore
 import com.puretv.twitch.desktop.data.ViewerHistoryStore
 import com.puretv.twitch.desktop.data.WatchProgressStore
+import com.puretv.twitch.desktop.player.DesktopPlayer
 import com.puretv.twitch.desktop.player.LocalStreamProxy
 import com.puretv.twitch.desktop.player.VlcPlayer
 import com.puretv.twitch.desktop.update.UpdateManager
@@ -59,7 +60,7 @@ val desktopModule = module {
     single { EmoteFrameCache(get()) }
 
     // --- Playback ------------------------------------------------------------
-    single { VlcPlayer() }
+    single<DesktopPlayer> { VlcPlayer() }
     // LocalStreamProxy takes HttpClient (variant fetches) + BackupStreamResolver
     // (the player-type swap that actually removes ads) on top of StreamRepository
     // and AdBlockEngine — see the /variant route.

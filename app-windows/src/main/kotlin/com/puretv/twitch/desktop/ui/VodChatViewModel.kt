@@ -8,7 +8,7 @@ import com.puretv.twitch.core.repository.ChannelRepository
 import com.puretv.twitch.core.repository.VodRepository
 import com.puretv.twitch.core.stream.ReplayBuffer
 import com.puretv.twitch.core.stream.withThirdPartyEmotes
-import com.puretv.twitch.desktop.player.VlcPlayer
+import com.puretv.twitch.desktop.player.DesktopPlayer
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -31,7 +31,7 @@ import kotlinx.coroutines.launch
 class VodChatViewModel(
     private val vodId: String,
     private val channelLogin: String,
-    private val player: VlcPlayer,
+    private val player: DesktopPlayer,
     private val vodRepository: VodRepository,
     private val channelRepository: ChannelRepository,
     private val emoteRepository: EmoteRepository,

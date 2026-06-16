@@ -57,7 +57,7 @@ import javax.swing.SwingUtilities
  */
 @Composable
 fun VlcPlayerView(
-    vlcPlayer: VlcPlayer,
+    vlcPlayer: DesktopPlayer,
     modifier: Modifier = Modifier,
     onUserActivity: () -> Unit = {},
 ) {

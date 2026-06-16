@@ -7,7 +7,7 @@ import com.puretv.twitch.core.stream.VodResolver
 import com.puretv.twitch.desktop.data.ResumePolicy
 import com.puretv.twitch.desktop.data.WatchProgress
 import com.puretv.twitch.desktop.data.WatchProgressStore
-import com.puretv.twitch.desktop.player.VlcPlayer
+import com.puretv.twitch.desktop.player.DesktopPlayer
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -30,7 +30,7 @@ data class VodPlayerState(
  */
 class VodPlayerViewModel(
     private val launch: VodLaunch,
-    val player: VlcPlayer,
+    val player: DesktopPlayer,
     private val vodRepository: VodRepository,
     private val store: WatchProgressStore,
 ) : DesktopViewModel() {

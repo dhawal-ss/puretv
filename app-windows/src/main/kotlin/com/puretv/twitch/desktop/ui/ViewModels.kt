@@ -25,6 +25,7 @@ import com.puretv.twitch.core.model.ChatMessage
 import com.puretv.twitch.core.model.GameInfo
 import com.puretv.twitch.core.model.StreamInfo
 import com.puretv.twitch.core.model.StreamQuality
+import com.puretv.twitch.core.model.PlaybackBackend
 import com.puretv.twitch.core.model.UpscalingMode
 import com.puretv.twitch.core.repository.ChannelRepository
 import com.puretv.twitch.core.repository.StreamRepository
@@ -33,7 +34,7 @@ import com.puretv.twitch.desktop.data.DesktopSettingsStore
 import com.puretv.twitch.desktop.data.FollowStore
 import com.puretv.twitch.desktop.data.FollowedChannel
 import com.puretv.twitch.desktop.player.LocalStreamProxy
-import com.puretv.twitch.desktop.player.VlcPlayer
+import com.puretv.twitch.desktop.player.DesktopPlayer
 import com.puretv.twitch.desktop.ui.chat.buildSelfEcho
 import io.ktor.client.HttpClient
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -49,7 +50,7 @@ import kotlinx.coroutines.launch
 /**
  * SECTION 11 (desktop) — same shape as the phone/TV ViewModels (Section 11),
  * adapted to [DesktopViewModel] (no Android lifecycle) and to desktop-only
- * collaborators: [VlcPlayer]/[LocalStreamProxy] for playback and
+ * collaborators: [DesktopPlayer]/[LocalStreamProxy] for playback and
  * [DesktopSettingsStore]/[DesktopOAuthManager] for persistence and login.
  */
 
@@ -257,7 +258,7 @@ class StreamViewModel(
     private val emoteRepository: EmoteRepository,
     private val adBlockEngine: AdBlockEngine,
     private val settingsStore: DesktopSettingsStore,
-    private val vlcPlayer: VlcPlayer,
+    private val vlcPlayer: DesktopPlayer,
     private val localStreamProxy: LocalStreamProxy,
     private val followStore: FollowStore,
     private val apiClient: TwitchApiClient,
@@ -510,6 +511,9 @@ class SettingsViewModel(private val settingsStore: DesktopSettingsStore) : Deskt
 
     fun setUpscalingMode(mode: UpscalingMode) =
         settingsStore.updateSettings { it.copy(upscalingMode = mode) }
+
+    fun setPlaybackBackend(backend: PlaybackBackend) =
+        settingsStore.updateSettings { it.copy(playbackBackend = backend) }
 
     fun logOut() {
         settingsStore.clearTokens()
