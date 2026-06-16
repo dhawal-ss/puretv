@@ -49,6 +49,7 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
@@ -69,8 +70,8 @@ import com.puretv.twitch.desktop.ui.PlayerMode
 import com.puretv.twitch.desktop.ui.VodChatViewModel
 import com.puretv.twitch.desktop.ui.VodLaunch
 import com.puretv.twitch.desktop.ui.VodPlayerViewModel
+import com.puretv.twitch.desktop.ui.chat.nextFollowing
 import com.puretv.twitch.desktop.ui.chat.scrollAnchor
-import com.puretv.twitch.desktop.ui.chat.shouldStick
 import com.puretv.twitch.desktop.ui.components.ButtonVariant
 import com.puretv.twitch.desktop.ui.components.ChatMessageRow
 import com.puretv.twitch.desktop.ui.components.PureButton
@@ -212,22 +213,26 @@ fun VodPlayerContent(koin: Koin, launch: VodLaunch, onBack: () -> Unit) {
                 Column(Modifier.width(340.dp).fillMaxHeight().background(c.surface)) {
                     Box(Modifier.fillMaxWidth().height(1.dp).background(c.hairline))
                     val listState = rememberLazyListState()
-                    // "pinned" computed geometrically so the freshly appended (not yet
-                    // measured) row still counts as being at the bottom.
-                    val pinned by remember {
+                    // Geometry only DETECTS the bottom; it does NOT gate auto-scroll.
+                    var following by remember { mutableStateOf(true) }
+                    val atBottom by remember {
                         derivedStateOf {
                             val info = listState.layoutInfo
                             val lastVisible = info.visibleItemsInfo.lastOrNull()?.index ?: -1
-                            info.totalItemsCount == 0 || lastVisible >= info.totalItemsCount - 2
+                            info.totalItemsCount == 0 || lastVisible >= info.totalItemsCount - 1
                         }
                     }
-                    // Keyed on the newest message id (scrollAnchor), NOT size — like
-                    // StreamContent: a rolling buffer keeps size constant so a size-keyed
-                    // effect stops firing, freezing auto-scroll.
+                    // Auto-scroll on every new message while FOLLOWING — instant + intent-gated
+                    // so it keeps up with VOD's bursty per-second batch appends (the bug: a batch
+                    // makes the geometry read "not at bottom", which used to skip the scroll).
                     LaunchedEffect(scrollAnchor(chatMessages)) {
-                        if (chatMessages.isEmpty()) return@LaunchedEffect
-                        // INSTANT scroll keeps pace as replay appends; only when pinned.
-                        if (shouldStick(pinned)) listState.scrollToItem(chatMessages.lastIndex)
+                        if (chatMessages.isNotEmpty() && following) listState.scrollToItem(chatMessages.lastIndex)
+                    }
+                    // A user scroll away from the bottom pauses; reaching the bottom resumes.
+                    LaunchedEffect(listState) {
+                        snapshotFlow { atBottom to listState.isScrollInProgress }.collect { (bottom, scrolling) ->
+                            following = nextFollowing(following, atBottom = bottom, userScrolling = scrolling)
+                        }
                     }
 
                     Box(Modifier.weight(1f).fillMaxWidth()) {
@@ -241,12 +246,12 @@ fun VodPlayerContent(koin: Koin, launch: VodLaunch, onBack: () -> Unit) {
                                 ChatMessageRow(message = msg, showTimestamps = false)
                             }
                         }
-                        // Twitch parity: paused while scrolled up — resume affordance
-                        // until back at the bottom.
-                        if (!pinned) {
+                        // Twitch parity: paused while scrolled up. Clicking snaps to the
+                        // bottom and resumes following so replay chat keeps going.
+                        if (!following) {
                             Surface(
                                 onClick = {
-                                    scope.launch { listState.animateScrollToItem(chatMessages.lastIndex) }
+                                    scope.launch { following = true; listState.scrollToItem(chatMessages.lastIndex) }
                                 },
                                 shape = PureTvShape.pill,
                                 color = c.twitchPurple,

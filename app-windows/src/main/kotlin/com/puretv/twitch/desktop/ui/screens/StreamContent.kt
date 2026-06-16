@@ -57,6 +57,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
@@ -98,8 +99,8 @@ import com.puretv.twitch.desktop.ui.chat.completeWord
 import com.puretv.twitch.desktop.ui.chat.composerKeyAction
 import com.puretv.twitch.desktop.ui.chat.insertAtCursor
 import com.puretv.twitch.desktop.ui.chat.matchEmotes
+import com.puretv.twitch.desktop.ui.chat.nextFollowing
 import com.puretv.twitch.desktop.ui.chat.scrollAnchor
-import com.puretv.twitch.desktop.ui.chat.shouldStick
 import com.puretv.twitch.desktop.ui.chat.wordAtCursor
 import com.puretv.twitch.desktop.ui.components.EmoteImage
 import com.puretv.twitch.core.emotes.PickableEmote
@@ -518,22 +519,28 @@ private fun ChatMessageList(
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
 
-    // "pinned" computed geometrically so the one-new-item lag (the freshly
-    // appended row not yet measured) still counts as "at the bottom".
-    val pinned by remember {
+    // Geometry only DETECTS the bottom; it does NOT gate auto-scroll (that's `following`).
+    var following by remember { mutableStateOf(true) }
+    val atBottom by remember {
         derivedStateOf {
             val info = listState.layoutInfo
             val lastVisible = info.visibleItemsInfo.lastOrNull()?.index ?: -1
-            info.totalItemsCount == 0 || lastVisible >= info.totalItemsCount - 2
+            info.totalItemsCount == 0 || lastVisible >= info.totalItemsCount - 1
         }
     }
-    // Keyed on the newest message id (scrollAnchor), NOT messages.size: the buffer
-    // caps at 200, so size goes constant and a size-keyed effect stops firing —
-    // which froze auto-scroll on any busy channel. The id changes every message.
+    // Auto-scroll on every new message while FOLLOWING (keyed on the newest id, since the
+    // buffer caps at 200 so size is constant). Instant + gated on intent, so it keeps up
+    // even when a burst/batch arrives faster than an animated scroll could.
     LaunchedEffect(scrollAnchor(messages)) {
-        if (messages.isEmpty()) return@LaunchedEffect
-        // INSTANT scroll keeps up with busy chat where animateScrollToItem can't.
-        if (shouldStick(pinned)) listState.scrollToItem(messages.lastIndex)
+        if (messages.isNotEmpty() && following) listState.scrollToItem(messages.lastIndex)
+    }
+    // A USER scroll away from the bottom pauses following; reaching the bottom resumes it.
+    // Our scrolls are instant snaps to the bottom (serialized on the main thread), so they
+    // only ever land at-bottom → resume, never falsely pause.
+    LaunchedEffect(listState) {
+        snapshotFlow { atBottom to listState.isScrollInProgress }.collect { (bottom, scrolling) ->
+            following = nextFollowing(following, atBottom = bottom, userScrolling = scrolling)
+        }
     }
 
     Box(modifier) {
@@ -545,13 +552,12 @@ private fun ChatMessageList(
         ) {
             items(messages, key = { it.id }) { ChatMessageRow(message = it, onReply = onReply) }
         }
-        // Twitch parity: while scrolled up, the live feed is paused — show a
-        // resume affordance until the user is back at the bottom. Smooth-scroll
-        // on click; reaching the bottom flips `pinned` true and hides this.
-        if (!pinned) {
+        // Twitch parity: paused while scrolled up. Clicking snaps to the bottom and resumes
+        // following so the feed keeps going seamlessly.
+        if (!following) {
             Surface(
                 onClick = {
-                    scope.launch { listState.animateScrollToItem(messages.lastIndex) }
+                    scope.launch { following = true; listState.scrollToItem(messages.lastIndex) }
                 },
                 shape = PureTvShape.pill,
                 color = c.twitchPurple,
