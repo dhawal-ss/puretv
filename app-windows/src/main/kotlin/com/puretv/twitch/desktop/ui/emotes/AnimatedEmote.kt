@@ -45,7 +45,10 @@ fun AnimatedEmote(
         while (true) {
             withFrameNanos { now ->
                 if (first) { start = now; first = false }
-                index = frameIndexAt((now - start) / 1_000_000, current.durationsMs)
+                // Only write when the frame actually changes (the displayed frame holds
+                // for ~6 vsyncs at 100ms), so we don't churn snapshot state every frame.
+                val next = frameIndexAt((now - start) / 1_000_000, current.durationsMs)
+                if (next != index) index = next
             }
         }
     }

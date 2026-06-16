@@ -22,6 +22,10 @@ fun decodeAnimatedFrames(bytes: ByteArray): AnimatedEmoteFrames? = runCatching {
     for (i in 0 until count) {
         val bmp = Bitmap()
         bmp.allocPixels(info)
+        // The 2-arg readPixels uses priorFrame = NoFrame, so SkCodec recursively decodes
+        // this frame's required-frame chain and composites it (correct GIF/WebP disposal).
+        // The 3-arg priorFrame overload is ONLY a perf optimization — do not switch to it
+        // without seeding the dst with the prior frame's pixels, or compositing breaks.
         codec.readPixels(bmp, i)
         frames += Image.makeFromBitmap(bmp).toComposeImageBitmap()
         durations += codec.framesInfo.getOrNull(i)?.duration ?: 100
