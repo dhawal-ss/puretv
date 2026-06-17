@@ -117,6 +117,30 @@ class TwitchApiClient(
         return resp.data
     }
 
+    /**
+     * GET /channels/followed — ALL channels followed by [userId], following the
+     * Helix pagination cursor until exhausted. Requires user:read:follows scope.
+     * Unlike [getFollowedChannels] (single page), this is for "show me everyone I follow".
+     */
+    suspend fun getAllFollowedChannels(userId: String): List<FollowedChannel> {
+        val all = mutableListOf<FollowedChannel>()
+        var cursor: String? = null
+        do {
+            val resp: HelixPagedEnvelope<FollowedChannel> = withRateLimitRetry {
+                authedClient().get("${TwitchConfig.API_BASE}/channels/followed") {
+                    header("Client-Id", TwitchConfig.CLIENT_ID)
+                    tokenProvider()?.let { header("Authorization", "Bearer $it") }
+                    parameter("user_id", userId)
+                    parameter("first", "100")
+                    if (cursor != null) parameter("after", cursor)
+                }.body()
+            }
+            all += resp.data
+            cursor = resp.pagination.cursor
+        } while (!cursor.isNullOrBlank())
+        return all
+    }
+
     /** GET /games/top — top live categories. */
     suspend fun getTopGames(first: Int = 20): List<GameInfo> {
         val resp: HelixEnvelope<GameInfo> = get("/games/top", mapOf("first" to first.toString()))
