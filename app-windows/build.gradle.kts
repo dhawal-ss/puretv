@@ -91,6 +91,7 @@ dependencies {
     implementation(libs.coil.network)
 
     testImplementation(libs.kotlin.test)
+    testImplementation(libs.kotlinx.coroutines.test)
 }
 
 // ── VLC bundling ─────────────────────────────────────────────────────────────
