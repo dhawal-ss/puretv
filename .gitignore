@@ -33,6 +33,9 @@ secrets.properties
 # Internal build/design docs (specs, plans, prompts) — kept out of the repo.
 docs/superpowers/
 
+# Visual-brainstorm companion scratch (mockups, server state) — local only.
+.superpowers/
+
 # Local-only token store + key material written by DesktopSettingsStore at runtime.
 tokens.enc
 .keyseed
