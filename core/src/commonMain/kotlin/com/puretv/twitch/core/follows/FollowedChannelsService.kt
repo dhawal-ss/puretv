@@ -36,7 +36,13 @@ class FollowedChannelsService(private val api: TwitchApiClient) : FollowedChanne
             .chunked(100)
             .flatMap { api.getStreams(userLogins = it, first = 100) }
 
+        // Only resolve profiles we don't already have. Blank-id refs (e.g. legacy
+        // local pins saved without an id) are skipped — there is nothing to look up
+        // by id, so they render with the initial-avatar fallback.
         val missingIds = refs.filter { profileCache[it.login.lowercase()] == null && it.id.isNotBlank() }.map { it.id }
+        // Best-effort enrichment: if a /users chunk throws, it propagates to the
+        // caller (the rail ViewModel), which keeps the last-known list and retries
+        // on the next poll. Profiles already cached this pass are retained.
         missingIds.chunked(100).forEach { ids ->
             api.getUsers(ids = ids).forEach { ch ->
                 profileCache[ch.login.lowercase()] = Profile(ch.displayName, ch.profileImageUrl)
