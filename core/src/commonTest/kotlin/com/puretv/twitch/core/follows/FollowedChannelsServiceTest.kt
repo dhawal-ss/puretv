@@ -105,4 +105,31 @@ class FollowedChannelsServiceTest {
         assertEquals(2, allLogins.size, "c0 deduped; pinonly added")
         assertEquals(setOf("c0", "pinonly"), allLogins.toSet())
     }
+
+    @Test fun secondLoadReusesCachedProfilesAndSkipsUsersCall() = runTest {
+        var userCalls = 0
+        val engine = MockEngine { request ->
+            val url = request.url
+            when {
+                url.encodedPath.endsWith("/channels/followed") -> respond(followsPage(listOf("c0", "c1"), null), HttpStatusCode.OK, jsonHeaders)
+                url.encodedPath.endsWith("/streams") -> respond(streamsFor(url.parameters.getAll("user_login").orEmpty()), HttpStatusCode.OK, jsonHeaders)
+                url.encodedPath.endsWith("/users") -> {
+                    userCalls++
+                    respond(usersFor(url.parameters.getAll("id").orEmpty()), HttpStatusCode.OK, jsonHeaders)
+                }
+                else -> respond("", HttpStatusCode.NotFound)
+            }
+        }
+        val client = HttpClient(engine) {
+            install(ContentNegotiation) { json(Json { ignoreUnknownKeys = true }) }
+        }
+        val service = FollowedChannelsService(TwitchApiClient(client) { "token" })
+
+        service.load("user123", localPins = emptyList())          // first load populates the profile cache
+        val second = service.load("user123", localPins = emptyList())
+
+        assertEquals(1, userCalls, "profiles are cached: the second load must not re-fetch /users")
+        // The cached profile is still applied on the second pass.
+        assertEquals("http://a/c0.png", (second.live + second.offline).first { it.login == "c0" }.avatarUrl)
+    }
 }
