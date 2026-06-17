@@ -1,8 +1,8 @@
 package com.puretv.twitch.desktop.update
 
+import com.puretv.twitch.desktop.update.UpdateSignatureVerifier.VerifyResult
 import kotlin.test.Test
-import kotlin.test.assertFalse
-import kotlin.test.assertTrue
+import kotlin.test.assertEquals
 
 /**
  * Proves the openssl -> JDK interop the release pipeline depends on. CI signs
@@ -22,12 +22,13 @@ class UpdateSignatureInteropTest {
 
     @Test
     fun jdk_verifier_accepts_an_openssl_ed25519_signature() {
-        assertTrue(UpdateSignatureVerifier.verify(data, opensslSignature, opensslPublicKey))
+        assertEquals(VerifyResult.Valid, UpdateSignatureVerifier.verify(data, opensslSignature, opensslPublicKey))
     }
 
     @Test
     fun jdk_verifier_rejects_tampered_data_against_an_openssl_signature() {
-        assertFalse(
+        assertEquals(
+            VerifyResult.Invalid,
             UpdateSignatureVerifier.verify("puretv-interop-test-vectorX".toByteArray(), opensslSignature, opensslPublicKey),
         )
     }

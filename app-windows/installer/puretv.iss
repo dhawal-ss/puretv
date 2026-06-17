@@ -31,6 +31,14 @@ SolidCompression=yes
 WizardStyle=modern
 ArchitecturesInstallIn64BitMode=x64
 
+[InstallDelete]
+; Wipe the previous app jars BEFORE copying the new ones. jpackage names every
+; jar with a content hash (app-windows-<hash>.jar), so an in-place upgrade would
+; otherwise LEAVE every old version's jars behind — they pile up over upgrades
+; and can confuse the classpath. The dir is repopulated by [Files] below; the
+; runtime/ and launcher have stable names and are overwritten, so only app\ needs this.
+Type: filesandordirs; Name: "{app}\app"
+
 [Files]
 Source: "..\build\compose\binaries\main-release\app\PureTV for Twitch\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs ignoreversion
 

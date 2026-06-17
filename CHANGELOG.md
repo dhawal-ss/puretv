@@ -11,6 +11,15 @@ release notes automatically.
 
 ---
 
+## 1.8.1 - 2026-06-17
+
+Makes in-app updates reliable and self-explaining.
+
+### Fixed
+- **In-app updates that failed with a "signature check failed" error now recover on their own.** If a download arrives corrupted or incomplete (the usual cause), PureTV re-downloads once and tries again instead of giving up — so you shouldn't need to grab updates from the website anymore.
+- **Clear, specific reasons when an update can't proceed.** Instead of one generic error, PureTV now tells you whether the download was bad versus a problem on your PC, and writes the details to a log (`%APPDATA%\PureTwitch\update.log`) so any remaining issue can be pinned down immediately.
+- **Updates no longer leave old files behind.** Installing over a previous version now cleans up the old program files first, so your install doesn't slowly bloat with every update.
+
 ## 1.8.0 - 2026-06-17
 
 GPU upscaling arrives, the emotes you type finally show up, and a big round of reliability and safety fixes under the hood.
