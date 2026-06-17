@@ -132,4 +132,30 @@ class FollowedChannelsServiceTest {
         // The cached profile is still applied on the second pass.
         assertEquals("http://a/c0.png", (second.live + second.offline).first { it.login == "c0" }.avatarUrl)
     }
+
+    @Test fun clearDropsCacheSoNextLoadReFetchesProfiles() = runTest {
+        var userCalls = 0
+        val engine = MockEngine { request ->
+            val url = request.url
+            when {
+                url.encodedPath.endsWith("/channels/followed") -> respond(followsPage(listOf("c0"), null), HttpStatusCode.OK, jsonHeaders)
+                url.encodedPath.endsWith("/streams") -> respond(streamsFor(url.parameters.getAll("user_login").orEmpty()), HttpStatusCode.OK, jsonHeaders)
+                url.encodedPath.endsWith("/users") -> {
+                    userCalls++
+                    respond(usersFor(url.parameters.getAll("id").orEmpty()), HttpStatusCode.OK, jsonHeaders)
+                }
+                else -> respond("", HttpStatusCode.NotFound)
+            }
+        }
+        val client = HttpClient(engine) {
+            install(ContentNegotiation) { json(Json { ignoreUnknownKeys = true }) }
+        }
+        val service = FollowedChannelsService(TwitchApiClient(client) { "token" })
+
+        service.load("user123", localPins = emptyList())   // caches c0's profile
+        service.clear()                                     // sign-out drops the cache
+        service.load("user123", localPins = emptyList())    // must re-fetch
+
+        assertEquals(2, userCalls, "clear() must drop the cache so the next load re-fetches /users")
+    }
 }

@@ -12,11 +12,13 @@ import kotlin.test.assertTrue
 
 private class FakeSource(var result: FollowedList, var fail: Boolean = false) : FollowedChannelsSource {
     var calls = 0
+    var clears = 0
     override suspend fun load(userId: String, localPins: List<FollowedRef>): FollowedList {
         calls++
         if (fail) throw RuntimeException("boom")
         return result
     }
+    override fun clear() { clears++ }
 }
 
 private fun row(login: String, live: Boolean) = FollowRow(login, login, null, live, if (live) 5 else 0, "")
@@ -58,5 +60,13 @@ class FollowedRailViewModelTest {
         assertFalse(vm.state.value.offlineExpanded)
         vm.toggleOffline()
         assertTrue(vm.state.value.offlineExpanded)
+    }
+
+    @Test fun loggedOutClearsTheSourceCache() = runTest {
+        val src = FakeSource(sample)
+        val vm = FollowedRailViewModel(src, loggedInUserId = { null }, localPins = { emptyList() })
+        vm.loadOnce()
+        assertTrue(src.clears >= 1, "a signed-out load must clear the source's profile cache")
+        assertEquals(0, src.calls, "and it must not call load() while signed out")
     }
 }

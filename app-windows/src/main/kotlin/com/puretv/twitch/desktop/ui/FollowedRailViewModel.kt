@@ -41,6 +41,9 @@ class FollowedRailViewModel(
     internal suspend fun loadOnce() {
         val userId = loggedInUserId()
         if (userId.isNullOrBlank()) {
+            // Signed out (manually or via token-expiry): drop cached profiles so a
+            // different account signing in next within this process never reuses them.
+            source.clear()
             _state.update { it.copy(isLoggedIn = false, isLoading = false, live = emptyList(), offline = emptyList()) }
             return
         }
