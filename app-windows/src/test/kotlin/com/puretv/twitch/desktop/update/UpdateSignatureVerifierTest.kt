@@ -1,16 +1,20 @@
 package com.puretv.twitch.desktop.update
 
+import com.puretv.twitch.desktop.update.UpdateSignatureVerifier.VerifyResult
 import java.security.KeyPairGenerator
 import java.security.Signature
 import java.util.Base64
 import kotlin.test.Test
-import kotlin.test.assertFalse
-import kotlin.test.assertTrue
+import kotlin.test.assertEquals
+import kotlin.test.assertIs
 
 /**
  * The update signature gate is the integrity control that makes auto-update
  * safe. The catastrophic failure mode is accepting a tampered/forged installer,
  * so the negative cases (tamper, wrong key, garbage) are the load-bearing tests.
+ *
+ * The result now distinguishes Invalid (crypto ran, didn't match) from Errored
+ * (couldn't run) — see [UpdateSignatureVerifier].
  */
 class UpdateSignatureVerifierTest {
 
@@ -32,42 +36,38 @@ class UpdateSignatureVerifierTest {
         val sig = sign(data, kp.private)
         val pub = b64.encodeToString(kp.public.encoded)
 
-        assertTrue(UpdateSignatureVerifier.verify(data, sig, pub))
+        assertEquals(VerifyResult.Valid, UpdateSignatureVerifier.verify(data, sig, pub))
     }
 
     @Test
-    fun rejectsTamperedData() {
+    fun tamperedDataIsInvalidNotErrored() {
         val kp = keyPair()
         val sig = sign("installer-bytes".toByteArray(), kp.private)
         val pub = b64.encodeToString(kp.public.encoded)
 
-        assertFalse(
-            UpdateSignatureVerifier.verify("installer-bytes-EVIL".toByteArray(), sig, pub),
-            "a signature must not validate against modified bytes",
-        )
+        // Crypto ran and rejected the bytes → Invalid (a corrupted/tampered download), NOT Errored.
+        assertEquals(VerifyResult.Invalid, UpdateSignatureVerifier.verify("installer-bytes-EVIL".toByteArray(), sig, pub))
     }
 
     @Test
-    fun rejectsSignatureFromADifferentKey() {
+    fun signatureFromADifferentKeyIsInvalid() {
         val signer = keyPair()
         val attacker = keyPair()
         val data = "installer-bytes".toByteArray()
         val sig = sign(data, attacker.private)
         val pub = b64.encodeToString(signer.public.encoded)
 
-        assertFalse(
-            UpdateSignatureVerifier.verify(data, sig, pub),
-            "a signature from a key other than the embedded publisher key must be rejected",
-        )
+        assertEquals(VerifyResult.Invalid, UpdateSignatureVerifier.verify(data, sig, pub))
     }
 
     @Test
-    fun rejectsMalformedInputsWithoutThrowing() {
+    fun malformedInputsAreErroredNotInvalid() {
         val pub = b64.encodeToString(keyPair().public.encoded)
         val data = "x".toByteArray()
-        assertFalse(UpdateSignatureVerifier.verify(data, "not-base64!!", pub))
-        assertFalse(UpdateSignatureVerifier.verify(data, "", pub))
-        assertFalse(UpdateSignatureVerifier.verify(data, b64.encodeToString(ByteArray(64)), "not-a-key"))
-        assertFalse(UpdateSignatureVerifier.verify(data, b64.encodeToString(ByteArray(64)), ""))
+        // Bad base64 / unparseable key can't even run the check → Errored (an app/runtime
+        // problem), which must be distinguishable from a genuine mismatch.
+        assertIs<VerifyResult.Errored>(UpdateSignatureVerifier.verify(data, "not-base64!!", pub))
+        assertIs<VerifyResult.Errored>(UpdateSignatureVerifier.verify(data, b64.encodeToString(ByteArray(64)), "not-a-key"))
+        assertIs<VerifyResult.Errored>(UpdateSignatureVerifier.verify(data, b64.encodeToString(ByteArray(64)), ""))
     }
 }

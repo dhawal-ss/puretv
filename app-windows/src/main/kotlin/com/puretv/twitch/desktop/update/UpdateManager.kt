@@ -126,13 +126,15 @@ class UpdateManager {
                 if (!Semver.isNewer(AppBuildConfig.VERSION, info.version)) {
                     error("Refusing to install ${info.version}: not newer than the current ${AppBuildConfig.VERSION}.")
                 }
+                updateLog("=== apply ${AppBuildConfig.VERSION} -> ${info.version}  url=${info.downloadUrl} ===")
                 _state.value = UpdateState.Downloading(0f)
-                val installer = downloadInstaller(info)
-                verifyInstaller(installer, info)
+                val installer = downloadAndVerify(info)
                 launchInstaller(installer)
+                updateLog("installer launched; exiting app to apply")
             }.onSuccess {
                 SwingUtilities.invokeLater { exitApplication() }
             }.onFailure { e ->
+                updateLog("apply FAILED: ${e.message}")
                 _state.value = UpdateState.Error(e.message ?: "Update failed")
             }
         }
@@ -192,30 +194,67 @@ class UpdateManager {
     }
 
     /**
-     * Verifies the downloaded [installer] against the embedded publisher key
-     * before it is allowed to execute. Fail-closed: if signing is not configured,
-     * the release ships no signature, or the signature does not validate, the
-     * installer is deleted and an error is raised — we never run an unverified
-     * binary. This is the integrity gate for the auto-updater.
+     * Downloads the installer and verifies it against the embedded publisher key
+     * before it is allowed to execute. Fail-closed: returns only a verified file.
+     *
+     * Crucially, it distinguishes a signature MISMATCH (the crypto ran and the
+     * bytes didn't validate — almost always a corrupted/truncated download) from
+     * an Errored verify (the runtime can't do Ed25519 / malformed inputs). A
+     * mismatch is RETRIED with a fresh download once (self-healing the most common
+     * real cause); an Errored is NOT retried (re-downloading can't fix a runtime
+     * problem) and surfaces a distinct, reportable message. Every step is written
+     * to %APPDATA%/PureTwitch/update.log so a failure is diagnosable, not a mystery.
      */
-    private suspend fun verifyInstaller(installer: File, info: UpdateInfo): Unit = withContext(Dispatchers.IO) {
+    private suspend fun downloadAndVerify(info: UpdateInfo): File = withContext(Dispatchers.IO) {
+        // Preconditions a re-download can't fix — fail fast with a clear message.
         if (!UpdateSigning.isConfigured) {
-            installer.delete()
+            updateLog("no signing key embedded in this build")
             error("This build can't verify updates (no signing key configured). Download the latest version manually from ${info.htmlUrl}.")
         }
         val signatureUrl = info.signatureUrl ?: run {
-            installer.delete()
+            updateLog("release ${info.version} has no .sig asset")
             error("This release isn't signed — refusing to install an unverified update. Download manually from ${info.htmlUrl}.")
         }
-        val signatureBase64 = downloadText(signatureUrl)
-        val verified = UpdateSignatureVerifier.verify(
-            data = installer.readBytes(),
-            signatureBase64 = signatureBase64,
-            publicKeyBase64 = UpdateSigning.PUBLIC_KEY_BASE64,
-        )
-        if (!verified) {
-            installer.delete()
-            error("Update signature check FAILED — the download may be corrupted or tampered with. Aborting. Get the latest version from ${info.htmlUrl}.")
+
+        var lastReason = "signature did not match"
+        repeat(2) { attempt ->
+            val installer = downloadInstaller(info)
+            val signatureBase64 = downloadText(signatureUrl)
+            val data = installer.readBytes()
+            updateLog("attempt ${attempt + 1}: installer=${installer.length()}B expected=${info.sizeBytes}B sha256=${sha256Hex(data)} sigChars=${signatureBase64.trim().length}")
+            when (val result = UpdateSignatureVerifier.verify(data, signatureBase64, UpdateSigning.PUBLIC_KEY_BASE64)) {
+                UpdateSignatureVerifier.VerifyResult.Valid -> {
+                    updateLog("attempt ${attempt + 1}: signature VALID")
+                    return@withContext installer
+                }
+                UpdateSignatureVerifier.VerifyResult.Invalid -> {
+                    lastReason = "signature did not match (the download looks corrupted or incomplete)"
+                    updateLog("attempt ${attempt + 1}: signature INVALID — ${if (attempt == 0) "re-downloading" else "giving up"}")
+                    installer.delete()
+                    // loop: one fresh download + re-verify
+                }
+                is UpdateSignatureVerifier.VerifyResult.Errored -> {
+                    updateLog("attempt ${attempt + 1}: verification ERRORED — ${result.reason}")
+                    installer.delete()
+                    error("Update verification couldn't run on this PC (${result.reason}). This is an app/runtime problem, not a bad download — please report it with %APPDATA%\\PureTwitch\\update.log. Meanwhile, install manually from ${info.htmlUrl}.")
+                }
+            }
+        }
+        error("Update signature check FAILED even after re-downloading — $lastReason. Get the latest version manually from ${info.htmlUrl} (details in %APPDATA%\\PureTwitch\\update.log).")
+    }
+
+    private fun sha256Hex(bytes: ByteArray): String =
+        java.security.MessageDigest.getInstance("SHA-256").digest(bytes)
+            .joinToString("") { "%02x".format(it.toInt() and 0xFF) }
+
+    /** Append a timestamped line to %APPDATA%/PureTwitch/update.log. Never throws —
+     *  diagnostics must not break the updater. This is the cure for "it just fails":
+     *  the next failure records exactly which step + why. */
+    private fun updateLog(message: String) {
+        runCatching {
+            val dir = File(System.getenv("APPDATA") ?: System.getProperty("user.home"), "PureTwitch")
+            dir.mkdirs()
+            File(dir, "update.log").appendText("${java.time.Instant.now()} [v${AppBuildConfig.VERSION}] $message\n")
         }
     }
 
