@@ -1,8 +1,10 @@
 package com.puretv.twitch.desktop.ui.screens
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
@@ -34,6 +36,7 @@ import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material.icons.filled.FullscreenExit
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -63,6 +66,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.puretv.twitch.core.model.ChatMessage
 import com.puretv.twitch.core.model.StreamQuality
+import com.puretv.twitch.desktop.data.DesktopSettingsStore
 import com.puretv.twitch.desktop.player.VlcPlayerView
 import com.puretv.twitch.desktop.player.formatTimecode
 import com.puretv.twitch.desktop.ui.LocalAppShell
@@ -75,6 +79,7 @@ import com.puretv.twitch.desktop.ui.chat.scrollAnchor
 import com.puretv.twitch.desktop.ui.components.ButtonVariant
 import com.puretv.twitch.desktop.ui.components.ChatMessageRow
 import com.puretv.twitch.desktop.ui.components.PureButton
+import com.puretv.twitch.desktop.ui.components.PlayerSettingsMenu
 import com.puretv.twitch.desktop.ui.components.SeekPreview
 import com.puretv.twitch.desktop.ui.components.SegmentedControl
 import com.puretv.twitch.desktop.ui.rememberDesktopViewModel
@@ -104,6 +109,9 @@ fun VodPlayerContent(koin: Koin, launch: VodLaunch, onBack: () -> Unit) {
     val status by viewModel.status.collectAsState()
     val chatViewModel = rememberDesktopViewModel(launch.vodId) { koin.get<VodChatViewModel> { parametersOf(launch.vodId, launch.channelLogin) } }
     val chatMessages by chatViewModel.messages.collectAsState()
+    val settingsStore = remember { koin.get<DesktopSettingsStore>() }
+    val appSettings by settingsStore.settings.collectAsState()
+    var settingsMenuOpen by remember { mutableStateOf(false) }
     val shell = LocalAppShell.current
     val mode = shell.playerMode
     val isChatOpen = shell.isChatOpen
@@ -203,12 +211,34 @@ fun VodPlayerContent(koin: Koin, launch: VodLaunch, onBack: () -> Unit) {
                     if (state.loading && state.error == null) Text("Loading…", color = c.textSecondary)
                 }
 
+                // Playback menu in the Column (not over the video Canvas), above controls.
+                AnimatedVisibility(
+                    visible = settingsMenuOpen,
+                    enter = expandVertically() + fadeIn(),
+                    exit = shrinkVertically() + fadeOut(),
+                ) {
+                    PlayerSettingsMenu(
+                        currentQuality = state.quality,
+                        onQualitySelected = viewModel::setQuality,
+                        upscalingMode = appSettings.upscalingMode,
+                        onUpscalingSelected = viewModel::setUpscaling,
+                        scalingEnabled = viewModel.player.supportsUpscaling,
+                        backend = appSettings.playbackBackend,
+                        onBackendSelected = viewModel::setPlaybackBackend,
+                    )
+                }
+
                 AnimatedVisibility(
                     visible = controlsVisible || mode == PlayerMode.DEFAULT,
                     enter = slideInVertically { it } + fadeIn(),
                     exit = slideOutVertically { it } + fadeOut(),
                 ) {
-                    VodControls(koin = koin, viewModel = viewModel)
+                    VodControls(
+                        koin = koin,
+                        viewModel = viewModel,
+                        settingsOpen = settingsMenuOpen,
+                        onToggleSettings = { settingsMenuOpen = !settingsMenuOpen },
+                    )
                 }
             }
 
@@ -254,7 +284,9 @@ fun VodPlayerContent(koin: Koin, launch: VodLaunch, onBack: () -> Unit) {
                         if (!following) {
                             Surface(
                                 onClick = {
-                                    scope.launch { following = true; listState.scrollToItem(chatMessages.lastIndex) }
+                                    // Guard scrollToItem(-1): a VOD backward seek can empty the
+                                    // replay buffer while this pill is still shown (audit U3).
+                                    scope.launch { following = true; if (chatMessages.isNotEmpty()) listState.scrollToItem(chatMessages.lastIndex) }
                                 },
                                 shape = PureTvShape.pill,
                                 color = c.twitchPurple,
@@ -321,7 +353,12 @@ private fun VodTopBar(
 }
 
 @Composable
-private fun VodControls(koin: Koin, viewModel: VodPlayerViewModel) {
+private fun VodControls(
+    koin: Koin,
+    viewModel: VodPlayerViewModel,
+    settingsOpen: Boolean,
+    onToggleSettings: () -> Unit,
+) {
     val state by viewModel.state.collectAsState()
     val status by viewModel.status.collectAsState()
     val c = PureTvTheme.colors
@@ -389,12 +426,14 @@ private fun VodControls(koin: Koin, viewModel: VodPlayerViewModel) {
                 colors = SliderDefaults.colors(thumbColor = c.twitchPurple, activeTrackColor = c.twitchPurple, inactiveTrackColor = c.surfaceVariant),
             )
             Spacer(Modifier.weight(1f))
-            SegmentedControl(
-                options = StreamQuality.entries,
-                selected = state.quality,
-                label = { it.label },
-                onSelect = viewModel::setQuality,
-            )
+            IconButton(onClick = onToggleSettings, modifier = Modifier.size(28.dp)) {
+                Icon(
+                    Icons.Filled.Settings,
+                    contentDescription = "Playback settings",
+                    tint = if (settingsOpen) c.twitchPurple else c.textSecondary,
+                    modifier = Modifier.size(18.dp),
+                )
+            }
         }
     }
 }

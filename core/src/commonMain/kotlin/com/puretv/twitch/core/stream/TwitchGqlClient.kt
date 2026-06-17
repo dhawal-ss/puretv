@@ -82,7 +82,12 @@ class TwitchGqlClient(
 
     /** Fetch a VOD's storyboard JSON URL (seekPreviewsURL), or null if it has none. */
     suspend fun fetchSeekPreviewsUrl(vodId: String): String? {
-        val query = """{"query":"query{video(id:\"$vodId\"){seekPreviewsURL}}"}"""
+        // Twitch video IDs are numeric; validate before string-interpolating into
+        // the GQL literal so a stray quote/brace can't break out of the query
+        // (audit F8 — mirrors the sanitization in fetchFollowerCount).
+        val safeId = vodId.filter { it.isDigit() }
+        if (safeId.isEmpty()) return null
+        val query = """{"query":"query{video(id:\"$safeId\"){seekPreviewsURL}}"}"""
         val response: String = httpClient.post(TwitchConfig.GQL_ENDPOINT) {
             header("Client-ID", TwitchConfig.GQL_CLIENT_ID)
             contentType(ContentType.Application.Json)
@@ -94,7 +99,10 @@ class TwitchGqlClient(
 
     /** Fetch the VOD's chat comments starting near [offsetSeconds] (offset-based paging). */
     suspend fun fetchVideoComments(vodId: String, offsetSeconds: Int): CommentBatch {
-        val query = """{"query":"query{video(id:\"$vodId\"){comments(contentOffsetSeconds:$offsetSeconds){edges{node{id contentOffsetSeconds commenter{displayName} message{userColor userBadges{setID version} fragments{text emote{emoteID}}}}}pageInfo{hasNextPage}}}}"}"""
+        val safeId = vodId.filter { it.isDigit() }
+        if (safeId.isEmpty()) return CommentBatch(emptyList(), hasNextPage = false)
+        val safeOffset = offsetSeconds.coerceAtLeast(0)
+        val query = """{"query":"query{video(id:\"$safeId\"){comments(contentOffsetSeconds:$safeOffset){edges{node{id contentOffsetSeconds commenter{displayName} message{userColor userBadges{setID version} fragments{text emote{emoteID}}}}}pageInfo{hasNextPage}}}}"}"""
         val response: String = httpClient.post(TwitchConfig.GQL_ENDPOINT) {
             header("Client-ID", TwitchConfig.GQL_CLIENT_ID)
             contentType(ContentType.Application.Json)

@@ -40,6 +40,11 @@ class FollowStore(
     private val file = File(appDataDir, "following.json")
     private val json = Json { ignoreUnknownKeys = true; prettyPrint = true; encodeDefaults = true }
 
+    // Serializes the read-derive-write critical sections so concurrent
+    // follow/unfollow from different coroutines (Dispatchers.Default) can't lose
+    // an update or interleave writes (audit F2).
+    private val lock = Any()
+
     private val _followed = MutableStateFlow(loadFromDisk())
     val followed: StateFlow<List<FollowedChannel>> = _followed.asStateFlow()
 
@@ -50,25 +55,27 @@ class FollowStore(
     fun isFollowed(login: String): Boolean =
         _followed.value.any { it.login.equals(login, ignoreCase = true) }
 
-    fun follow(channel: FollowedChannel) {
-        if (isFollowed(channel.login)) return
-        persist(_followed.value + channel)
+    fun follow(channel: FollowedChannel) = synchronized(lock) {
+        if (_followed.value.any { it.login.equals(channel.login, ignoreCase = true) }) return
+        persistLocked(_followed.value + channel)
     }
 
-    fun unfollow(login: String) {
-        persist(_followed.value.filterNot { it.login.equals(login, ignoreCase = true) })
+    fun unfollow(login: String) = synchronized(lock) {
+        persistLocked(_followed.value.filterNot { it.login.equals(login, ignoreCase = true) })
     }
 
-    fun toggle(channel: FollowedChannel) {
-        if (isFollowed(channel.login)) unfollow(channel.login) else follow(channel)
-    }
-
-    private fun persist(list: List<FollowedChannel>) {
-        _followed.value = list
-        runCatching {
-            file.parentFile?.mkdirs()
-            file.writeText(json.encodeToString(list))
+    fun toggle(channel: FollowedChannel) = synchronized(lock) {
+        if (_followed.value.any { it.login.equals(channel.login, ignoreCase = true) }) {
+            persistLocked(_followed.value.filterNot { it.login.equals(channel.login, ignoreCase = true) })
+        } else {
+            persistLocked(_followed.value + channel)
         }
+    }
+
+    private fun persistLocked(list: List<FollowedChannel>) {
+        _followed.value = list
+        runCatching { AtomicFile.writeTextAtomically(file, json.encodeToString(list)) }
+            .onFailure { System.err.println("FollowStore: failed to persist following list: ${it.message}") }
     }
 
     private fun loadFromDisk(): List<FollowedChannel> = runCatching {

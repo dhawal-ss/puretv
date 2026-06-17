@@ -33,10 +33,12 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -54,6 +56,15 @@ func main() {
 		port = defaultPort
 	}
 
+	// Default to loopback: the primary use is a localhost sidecar for the desktop
+	// app (http://127.0.0.1:8080/playlist). Public exposure (the Docker image)
+	// must opt in via BIND_ADDR=0.0.0.0 so a multi-homed/LAN machine isn't an
+	// open Twitch relay by default.
+	bindAddr := os.Getenv("BIND_ADDR")
+	if bindAddr == "" {
+		bindAddr = "127.0.0.1"
+	}
+
 	upstreamUserAgent := os.Getenv("UPSTREAM_USER_AGENT")
 	if upstreamUserAgent == "" {
 		// A realistic desktop-browser UA reduces the odds of upstream
@@ -62,15 +73,35 @@ func main() {
 		upstreamUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"
 	}
 
+	// SSRF DEFENCE (audit F1): this server fetches a URL on behalf of anyone who
+	// can reach it. Without restriction it is an open relay AND can be aimed at
+	// the host's own internal network — cloud metadata (169.254.169.254),
+	// 127.0.0.1, 10.x/192.168.x services. Two layers:
+	//   1. hostname allowlist — only Twitch playlist hosts (the proxy's sole job),
+	//      checked on the initial URL and on every redirect hop.
+	//   2. a dial-time Control hook that refuses to connect to any loopback /
+	//      private / link-local IP — defeats DNS rebinding (a twitch-looking host
+	//      that resolves to an internal address).
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.DialContext = (&net.Dialer{
+		Timeout:   upstreamTimeout,
+		KeepAlive: 30 * time.Second,
+		Control:   blockNonPublicAddress,
+	}).DialContext
+
 	srv := &server{
 		client: &http.Client{
-			Timeout: upstreamTimeout,
+			Timeout:   upstreamTimeout,
+			Transport: transport,
 			// Twitch playlist URLs sometimes redirect (CDN edge selection);
-			// follow redirects but cap them so a misbehaving upstream can't
-			// turn one request into an unbounded chain.
+			// follow redirects but cap them, AND re-validate the host of each hop
+			// so a redirect can't bounce us off-Twitch / to an internal host.
 			CheckRedirect: func(req *http.Request, via []*http.Request) error {
 				if len(via) >= 5 {
 					return errors.New("stopped after 5 redirects")
+				}
+				if !isAllowedUpstreamHost(req.URL.Hostname()) {
+					return fmt.Errorf("refusing redirect to untrusted host %q", req.URL.Hostname())
 				}
 				return nil
 			},
@@ -87,12 +118,18 @@ func main() {
 	mux.HandleFunc("/", srv.handleRoot)
 
 	httpServer := &http.Server{
-		Addr:              ":" + port,
+		Addr:              bindAddr + ":" + port,
 		Handler:           logRequests(mux),
 		ReadHeaderTimeout: 5 * time.Second,
+		// Bound the inbound side too: without these a slow-reading client holds a
+		// handler goroutine (and its already-fetched upstream resources) open
+		// indefinitely — slowloris on the response side. The 2 MiB body cap makes
+		// a generous WriteTimeout safe.
+		WriteTimeout: 15 * time.Second,
+		IdleTimeout:  60 * time.Second,
 	}
 
-	log.Printf("PureTV ad-block proxy listening on :%s (contract: GET /playlist/{base64(playlistUrl)})", port)
+	log.Printf("PureTV ad-block proxy listening on %s:%s (contract: GET /playlist/{base64(playlistUrl)})", bindAddr, port)
 	if err := httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		log.Fatalf("server error: %v", err)
 	}
@@ -192,12 +229,49 @@ func decodePlaylistURL(encoded string) (string, error) {
 	for _, enc := range []*base64.Encoding{base64.StdEncoding, base64.URLEncoding, base64.RawStdEncoding, base64.RawURLEncoding} {
 		if decoded, err := enc.DecodeString(encoded); err == nil {
 			candidate := string(decoded)
-			if u, err := url.ParseRequestURI(candidate); err == nil && (u.Scheme == "http" || u.Scheme == "https") {
-				return candidate, nil
+			u, perr := url.ParseRequestURI(candidate)
+			if perr != nil || (u.Scheme != "http" && u.Scheme != "https") {
+				continue
 			}
+			// SSRF allowlist (audit F1): only proxy Twitch playlist hosts.
+			if !isAllowedUpstreamHost(u.Hostname()) {
+				return "", fmt.Errorf("refusing to proxy non-Twitch host %q", u.Hostname())
+			}
+			return candidate, nil
 		}
 	}
-	return "", errors.New("not a valid base64-encoded http(s) URL")
+	return "", errors.New("not a valid base64-encoded http(s) Twitch playlist URL")
+}
+
+// isAllowedUpstreamHost restricts the proxy to Twitch's playlist/CDN domains —
+// usher (`usher.ttvnw.net`), the HLS edges (`*.ttvnw.net`), and `*.twitch.tv`.
+// This is the proxy's only job, so the allowlist costs nothing legitimate while
+// closing the open-relay / internal-network SSRF surface.
+func isAllowedUpstreamHost(host string) bool {
+	host = strings.ToLower(strings.TrimSuffix(host, "."))
+	if h, _, err := net.SplitHostPort(host); err == nil {
+		host = h
+	}
+	return host == "twitch.tv" || strings.HasSuffix(host, ".twitch.tv") ||
+		host == "ttvnw.net" || strings.HasSuffix(host, ".ttvnw.net")
+}
+
+// blockNonPublicAddress is a net.Dialer Control hook that refuses to connect to
+// loopback / private / link-local / unspecified IPs (audit F1, DNS-rebinding
+// defence): even an allowlisted hostname must not resolve to an internal target.
+func blockNonPublicAddress(network, address string, _ syscall.RawConn) error {
+	host, _, err := net.SplitHostPort(address)
+	if err != nil {
+		host = address
+	}
+	ip := net.ParseIP(host)
+	if ip == nil {
+		return nil // not an IP literal; hostname allowlist already vetted it
+	}
+	if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsUnspecified() {
+		return fmt.Errorf("refusing to connect to non-public address %s", address)
+	}
+	return nil
 }
 
 func (s *server) fetchUpstream(ctx context.Context, playlistURL string) (body string, status int, err error) {

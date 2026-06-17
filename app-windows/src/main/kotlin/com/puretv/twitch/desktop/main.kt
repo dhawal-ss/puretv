@@ -13,7 +13,12 @@ import com.puretv.twitch.desktop.platform.WindowsNative
 import com.puretv.twitch.desktop.player.LocalStreamProxy
 import com.puretv.twitch.desktop.player.DesktopPlayer
 import com.puretv.twitch.desktop.ui.App
+import io.ktor.client.HttpClient
 import javax.swing.SwingUtilities
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.koin.core.context.GlobalContext.startKoin
 import org.koin.dsl.koinApplication
@@ -24,7 +29,13 @@ fun main() {
     }
     startKoin(koinApp)
 
-    koinApp.koin.get<DesktopSettingsStore>()
+    val settingsStore = koinApp.koin.get<DesktopSettingsStore>()
+    // Refresh a near-expired access token at startup so the session survives the
+    // ~4h token lifetime instead of silently dying across restarts (audit F2).
+    // Fire-and-forget on a background scope so it never blocks UI startup.
+    CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
+        runCatching { settingsStore.refreshIfNeeded(koinApp.koin.get<HttpClient>()) }
+    }
 
     val vlcPlayer = koinApp.koin.get<DesktopPlayer>()
     val localStreamProxy = koinApp.koin.get<LocalStreamProxy>()

@@ -109,6 +109,9 @@ fun StreamCard(stream: StreamInfo, onClick: () -> Unit, modifier: Modifier = Mod
 }
 
 internal fun formatViewerCount(count: Int): String = when {
+    // Audit U7: without the millions branch, a 1.2M-viewer stream rendered as
+    // the nonsensical "1200.0K".
+    count >= 1_000_000 -> "${count / 1_000_000}.${(count % 1_000_000) / 100_000}M"
     count >= 1_000 -> "${count / 1_000}.${(count % 1_000) / 100}K"
     else -> count.toString()
 }

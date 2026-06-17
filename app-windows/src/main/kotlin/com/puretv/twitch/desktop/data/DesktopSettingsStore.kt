@@ -1,11 +1,14 @@
 package com.puretv.twitch.desktop.data
 
+import com.puretv.twitch.core.api.DeviceAuth
+import com.puretv.twitch.core.api.TokenRefreshException
 import com.puretv.twitch.core.di.TokenHolder
 import com.puretv.twitch.core.model.AppSettings
 import com.puretv.twitch.core.model.PlaybackBackend
 import com.puretv.twitch.core.model.UpscalingMode
 import com.puretv.twitch.desktop.auth.CURRENT_AUTH_SCHEMA
 import com.puretv.twitch.desktop.auth.needsAuthReset
+import io.ktor.client.HttpClient
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -27,11 +30,16 @@ import javax.crypto.spec.SecretKeySpec
  *    ad-block strategy, theme, etc.) — nothing sensitive.
  *  - `tokens.enc`     — AES-256-GCM-encrypted blob holding the OAuth
  *    access/refresh tokens. The key is derived from a per-machine secret
- *    (Section 14 Gotcha #6: true DPAPI requires JNA/JNI we don't depend on
- *    here, so we derive a stable machine key from `HKEY_LOCAL_MACHINE`'s
- *    MachineGuid via `reg query`, falling back to a generated key file with
- *    restrictive ACLs if that fails — "good enough" local-at-rest protection,
- *    NOT a substitute for OS-level credential storage).
+ *    (Section 14 Gotcha #6: true DPAPI requires JNA/JNI; we derive a stable
+ *    machine key from `HKEY_LOCAL_MACHINE`'s MachineGuid via `reg query`,
+ *    falling back to a generated `.keyseed` file if that fails). This is
+ *    encryption-at-rest only — it is NOT a substitute for OS-level credential
+ *    storage, and the derived key is recoverable by another process running as
+ *    the same user (the seed/MachineGuid are not themselves secret). A
+ *    best-effort owner-only permission is applied to the key material, but the
+ *    honest protection here is the AES-GCM envelope, not the file ACL. A future
+ *    hardening is to wrap the blob with Windows DPAPI (`CryptProtectData`) via
+ *    the JNA the app already bundles.
  *
  * This class is intentionally synchronous + file-based: desktop has no
  * DataStore/Room equivalent in this module's dependency set, and settings
@@ -50,6 +58,21 @@ class DesktopSettingsStore(
 
     private val json = Json { ignoreUnknownKeys = true; prettyPrint = true; encodeDefaults = true }
 
+    // Serializes settings + token read-modify-writes so concurrent callers can't
+    // lose an update or interleave writes (audit F2).
+    private val lock = Any()
+
+    // In-memory mirror of session state so hot UI flows don't decrypt the token
+    // file on every emission (audit U9). Updated on init/save/clear.
+    @Volatile private var cachedLoggedIn: Boolean = false
+    @Volatile private var cachedLogin: String? = null
+
+    /** Whether a session token is present — no disk/crypto, safe in hot flows. */
+    val isLoggedIn: Boolean get() = cachedLoggedIn
+
+    /** The logged-in user's login (cached in memory), or null. */
+    val sessionLogin: String? get() = cachedLogin
+
     private val _settings = MutableStateFlow(loadSettingsFromDisk())
     val settings: StateFlow<AppSettings> = _settings.asStateFlow()
 
@@ -60,7 +83,7 @@ class DesktopSettingsStore(
         // TokenHolder so TwitchApiClient/TwitchGqlClient can authenticate on the
         // very first call, before the user has to "log in again" after a restart.
         // Mirrors the Android/TV AppSettingsStore.init pattern.
-        loadTokens()?.let { tokenHolder.update(it.accessToken) }
+        loadTokens()?.let { tokenHolder.update(it.accessToken); cachedLoggedIn = true; cachedLogin = it.login }
     }
 
     /**
@@ -73,7 +96,7 @@ class DesktopSettingsStore(
         if (needsAuthReset(storedSchema, CURRENT_AUTH_SCHEMA, hasSession = tokensFile.exists())) {
             clearTokens()
         }
-        runCatching { authSchemaFile.writeText(CURRENT_AUTH_SCHEMA.toString()) }
+        runCatching { AtomicFile.writeTextAtomically(authSchemaFile, CURRENT_AUTH_SCHEMA.toString()) }
     }
 
     // ---- Settings (plaintext JSON) -----------------------------------------
@@ -147,12 +170,12 @@ class DesktopSettingsStore(
         playbackBackend = playbackBackend.name.lowercase(),
     )
 
-    fun updateSettings(transform: (AppSettings) -> AppSettings) {
+    fun updateSettings(transform: (AppSettings) -> AppSettings) = synchronized(lock) {
         val updated = transform(_settings.value)
         _settings.value = updated
         runCatching {
             appDataDir.mkdirs()
-            settingsFile.writeText(json.encodeToString(updated.toDto()))
+            AtomicFile.writeTextAtomically(settingsFile, json.encodeToString(updated.toDto()))
         }
     }
 
@@ -173,15 +196,20 @@ class DesktopSettingsStore(
     )
 
     fun saveTokens(accessToken: String, refreshToken: String?, expiresAtEpochSeconds: Long, userId: String?, login: String?) {
-        val payload = StoredTokens(accessToken, refreshToken, expiresAtEpochSeconds, userId, login)
-        val plaintext = json.encodeToString(payload).toByteArray(Charsets.UTF_8)
-        runCatching {
-            appDataDir.mkdirs()
-            tokensFile.writeBytes(encrypt(plaintext))
+        synchronized(lock) {
+            val payload = StoredTokens(accessToken, refreshToken, expiresAtEpochSeconds, userId, login)
+            val plaintext = json.encodeToString(payload).toByteArray(Charsets.UTF_8)
+            runCatching {
+                appDataDir.mkdirs()
+                AtomicFile.writeBytesAtomically(tokensFile, encrypt(plaintext))
+                restrictToOwner(tokensFile)
+            }
         }
         // Keep the in-memory holder in lockstep with disk so any API call made
         // immediately after this returns sees the new token.
         tokenHolder.update(accessToken)
+        cachedLoggedIn = true
+        cachedLogin = login
     }
 
     fun loadTokens(): StoredTokensResult? = runCatching {
@@ -198,8 +226,39 @@ class DesktopSettingsStore(
     }.getOrNull()
 
     fun clearTokens() {
-        runCatching { tokensFile.delete() }
+        synchronized(lock) { runCatching { tokensFile.delete() } }
         tokenHolder.update(null)
+        cachedLoggedIn = false
+        cachedLogin = null
+    }
+
+    /**
+     * Refresh the stored access token if it is at/near expiry (audit F2). Twitch
+     * user access tokens live ~4h; without this the desktop session silently
+     * dies and every Helix/GQL call 401s until the user logs out and back in —
+     * even though a valid refresh token is sitting encrypted on disk. Safe to
+     * call at startup: a no-op when not logged in, when there's no refresh token,
+     * or when the token is still fresh (or its expiry is unknown — we never
+     * gamble a working token on a refresh). A genuinely revoked refresh token
+     * (typed [TokenRefreshException]) clears the session so the user is prompted
+     * to sign in again; transient network errors leave the token untouched.
+     */
+    suspend fun refreshIfNeeded(http: HttpClient, nowEpochSeconds: Long = System.currentTimeMillis() / 1000) {
+        val current = loadTokens() ?: return
+        val refresh = current.refreshToken ?: return
+        if (current.expiresAtEpochSeconds <= 0) return
+        if (nowEpochSeconds < current.expiresAtEpochSeconds - REFRESH_LEEWAY_SECONDS) return
+        runCatching { DeviceAuth.refreshToken(http, refresh) }
+            .onSuccess { fresh ->
+                saveTokens(
+                    accessToken = fresh.accessToken,
+                    refreshToken = fresh.refreshToken ?: refresh,
+                    expiresAtEpochSeconds = nowEpochSeconds + fresh.expiresInSeconds,
+                    userId = current.userId,
+                    login = current.login,
+                )
+            }
+            .onFailure { e -> if (e is TokenRefreshException) clearTokens() }
     }
 
     data class StoredTokensResult(
@@ -266,11 +325,30 @@ class DesktopSettingsStore(
         val seed = Base64.getEncoder().encodeToString(ByteArray(32).also { SecureRandom().nextBytes(it) })
         runCatching {
             appDataDir.mkdirs()
-            keyFile.writeText(seed)
+            AtomicFile.writeTextAtomically(keyFile, seed)
+            restrictToOwner(keyFile)
         }
         return seed
     }
+
+    /**
+     * Best-effort owner-only restriction on sensitive key material. On POSIX
+     * this becomes `chmod 600`; on Windows the `File` permission bits are a
+     * no-op for ACLs (the real protection remains the AES-GCM envelope), so this
+     * is defence-in-depth, not the primary control. Never throws.
+     */
+    private fun restrictToOwner(file: File) {
+        runCatching {
+            file.setReadable(false, false)
+            file.setReadable(true, true)
+            file.setWritable(false, false)
+            file.setWritable(true, true)
+        }
+    }
 }
+
+/** Refresh the access token this many seconds before its declared expiry. */
+private const val REFRESH_LEEWAY_SECONDS = 300L
 
 /** Lenient string -> enum: anything unrecognized (or null/legacy-missing) falls back to OFF. */
 internal fun parseUpscalingMode(raw: String?): UpscalingMode =

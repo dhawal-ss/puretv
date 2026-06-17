@@ -104,7 +104,8 @@ class HomeViewModel(
                 .collect { (top, followed, live) ->
                     _state.update {
                         it.copy(
-                            isLoggedIn = settingsStore.loadTokens() != null,
+                            // Audit U9: in-memory flag, not a per-emission token decrypt.
+                            isLoggedIn = settingsStore.isLoggedIn,
                             following = buildFollowingCards(followed, live),
                             topStreams = top,
                         )
@@ -278,7 +279,17 @@ class StreamViewModel(
     // Safe as a @Volatile reference because the map is immutable after publish:
     // buildEmoteIndex returns a fresh map that is never mutated in place. Readers
     // only ever see a fully-built map — do NOT switch this to in-place mutation.
+    //
+    // TWO indices on purpose:
+    //  - emoteIndex (THIRD-PARTY only) tokenizes INCOMING messages. Twitch-native
+    //    emotes already arrive `emotes=`-tagged, so they must NOT be name-matched
+    //    here — otherwise a non-subscriber who merely TYPES a channel sub-emote's
+    //    name would see it wrongly rendered as the emote (Twitch shows it as text).
+    //  - selfEchoIndex (third-party + first-party Twitch) tokenizes only YOUR OWN
+    //    echoed message, which never carries an `emotes=` tag, so a typed Twitch
+    //    emote (Kappa, your sub emotes) can only be resolved here by name.
     @Volatile private var emoteIndex: Map<String, ResolvedEmote> = emptyMap()
+    @Volatile private var selfEchoIndex: Map<String, ResolvedEmote> = emptyMap()
 
     val isFollowed: StateFlow<Boolean> = followStore.followed
         .map { list -> list.any { it.login.equals(channelLogin, ignoreCase = true) } }
@@ -310,11 +321,20 @@ class StreamViewModel(
             // Each fetch is best-effort so one provider failing doesn't sink the rest.
             val tpGlobal = runCatching { emoteRepository.loadGlobalEmotes() }.getOrDefault(emptyList())
             val tGlobal = runCatching { apiClient.getGlobalEmotes() }.getOrDefault(emptyList())
+            // Resolve globals immediately (before channel emotes load): incoming gets
+            // third-party globals; self-echo additionally gets first-party Twitch
+            // globals so a typed emote in your own message renders right away.
+            emoteIndex = buildEmoteIndex(emptyList(), tpGlobal)
+            selfEchoIndex = buildEmoteIndex(emptyList(), tpGlobal, emptyList(), tGlobal)
             channel?.let { ch ->
                 val tpChan = runCatching { emoteRepository.loadChannelEmotes(ch.id, ch.login) }.getOrDefault(emptyList())
                 val tChan = runCatching { apiClient.getChannelTwitchEmotes(ch.id) }.getOrDefault(emptyList())
                 val picks = buildPickableEmotes(tChan, tpChan, tGlobal, tpGlobal)
+                // Incoming: third-party only (Twitch emotes arrive tagged — never
+                // name-match them, or typed sub-emote names mis-render). Self-echo:
+                // add first-party Twitch (your own message has no `emotes=` tag).
                 emoteIndex = buildEmoteIndex(tpChan, tpGlobal)
+                selfEchoIndex = buildEmoteIndex(tpChan, tpGlobal, tChan, tGlobal)
                 _state.update { st ->
                     st.copy(
                         emotes = picks,
@@ -332,8 +352,10 @@ class StreamViewModel(
         scope.launch {
             // Anonymous (read-only) IRC identity unless we have BOTH a token
             // and the resolved login of the token's owner — Twitch IRC will
-            // drop the connection if PASS/NICK don't match.
-            val saved = settingsStore.loadTokens()
+            // drop the connection if PASS/NICK don't match. Guard the decrypt so
+            // a token-store read error degrades to anonymous chat instead of
+            // silently killing the whole chat coroutine (audit U5).
+            val saved = runCatching { settingsStore.loadTokens() }.getOrNull()
             selfLogin = saved?.login
             _state.update { it.copy(canChat = saved?.accessToken != null && saved.login != null) }
             chatClient.connect(channelLogin, saved?.accessToken, saved?.login)
@@ -364,6 +386,21 @@ class StreamViewModel(
 
     fun setQuality(quality: StreamQuality) = playAt(quality)
 
+    /** Live-apply the scaler to the running player AND persist it. The whole point:
+     *  it changes the picture mid-stream, not just on restart. */
+    fun setUpscaling(mode: UpscalingMode) {
+        vlcPlayer.setUpscaling(mode)
+        settingsStore.updateSettings { it.copy(upscalingMode = mode) }
+    }
+
+    /** Apply a scaler to the running player WITHOUT persisting — drives the
+     *  hold-to-compare A/B (preview Off while held, restore the saved mode on release). */
+    fun previewUpscaling(mode: UpscalingMode) = vlcPlayer.setUpscaling(mode)
+
+    /** Persist the backend choice; takes effect on next launch (restart-gated). */
+    fun setPlaybackBackend(backend: PlaybackBackend) =
+        settingsStore.updateSettings { it.copy(playbackBackend = backend) }
+
     fun togglePlayPause() = vlcPlayer.togglePlayPause()
 
     fun setVolume(volume: Int) = vlcPlayer.setVolume(volume)
@@ -393,7 +430,7 @@ class StreamViewModel(
             text = text,
             timestamp = System.currentTimeMillis(),
             replyParent = replyParent,
-            emoteIndex = emoteIndex,
+            emoteIndex = selfEchoIndex,
         )
         _state.update {
             it.copy(chatMessages = (it.chatMessages + echo).takeLast(200), replyingTo = null)
@@ -479,12 +516,12 @@ class SettingsViewModel(private val settingsStore: DesktopSettingsStore) : Deskt
     init {
         scope.launch {
             settingsStore.settings.collect { settings ->
-                val tokens = settingsStore.loadTokens()
                 _state.update {
                     it.copy(
                         settings = settings,
-                        isLoggedIn = tokens != null,
-                        loginUsername = tokens?.login,
+                        // Audit U9: cached session state, no per-emission token decrypt.
+                        isLoggedIn = settingsStore.isLoggedIn,
+                        loginUsername = settingsStore.sessionLogin,
                     )
                 }
             }
@@ -509,11 +546,9 @@ class SettingsViewModel(private val settingsStore: DesktopSettingsStore) : Deskt
     fun setAnimateEmotes(enabled: Boolean) =
         settingsStore.updateSettings { it.copy(animateEmotes = enabled) }
 
-    fun setUpscalingMode(mode: UpscalingMode) =
-        settingsStore.updateSettings { it.copy(upscalingMode = mode) }
-
-    fun setPlaybackBackend(backend: PlaybackBackend) =
-        settingsStore.updateSettings { it.copy(playbackBackend = backend) }
+    // upscalingMode + playbackBackend are now owned by the in-player gear menu
+    // (StreamViewModel/VodPlayerViewModel.setUpscaling/setPlaybackBackend) — single
+    // write path, so the old SettingsViewModel setters were removed.
 
     fun logOut() {
         settingsStore.clearTokens()

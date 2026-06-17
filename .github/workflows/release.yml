@@ -100,8 +100,14 @@ jobs:
         run: .\gradlew.bat :app-windows:bundleMpv
 
       - name: Build release app image
-        env:
-          TWITCH_CLIENT_SECRET: ${{ secrets.TWITCH_CLIENT_SECRET }}
+        # SECURITY (audit P0-1): do NOT inject TWITCH_CLIENT_SECRET here. The
+        # desktop app authenticates via the Device Code Grant (a PUBLIC client —
+        # it sends no client_secret; see DeviceAuth). The secret is only used by
+        # the Android/TV authorization_code flow (PkceAuth). Injecting it baked a
+        # recoverable client_secret into the publicly-downloadable desktop jar
+        # for zero functional benefit. The build falls back to the placeholder,
+        # which desktop never uses. (If an Android/TV release job is added later,
+        # inject the secret into THAT job only.)
         run: .\gradlew.bat :app-windows:createReleaseDistributable
 
       # --- Code signing (disabled until a cert exists) ---

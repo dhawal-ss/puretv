@@ -46,4 +46,14 @@ class StoryboardTest {
         assertEquals("https://b/2728868434-high-1.jpg", tile.imageUrl)
         assertEquals(0, tile.srcXPx); assertEquals(5 * 124, tile.srcYPx)
     }
+
+    @Test fun tileAtDoesNotCrashOnZeroColsFromMalformedJson() {
+        // A storyboard -info.json is untrusted remote data; a variant with
+        // "cols":0 must NOT divide-by-zero when the user hovers the scrubber
+        // (audit P0-4). Any finite, in-bounds tile is acceptable.
+        val malformed = StoryboardSpec(quality = "low", count = 10, cols = 0, rows = 0, width = 160, height = 90, interval = 0, images = listOf("a.jpg"))
+        val tile = StoryboardParser.tileAt(malformed, "https://b", positionSeconds = 42)
+        assertEquals("https://b/a.jpg", tile.imageUrl)
+        assertEquals(0, tile.srcXPx); assertEquals(0, tile.srcYPx)
+    }
 }

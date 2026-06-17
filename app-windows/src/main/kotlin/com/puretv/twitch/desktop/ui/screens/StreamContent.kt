@@ -3,8 +3,10 @@ package com.puretv.twitch.desktop.ui.screens
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
@@ -43,6 +45,7 @@ import androidx.compose.material.icons.filled.FullscreenExit
 import androidx.compose.material.icons.filled.Mood
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -84,8 +87,10 @@ import androidx.compose.ui.unit.dp
 import com.puretv.twitch.core.adblock.AdBlockStatus
 import com.puretv.twitch.core.model.ChatMessage
 import com.puretv.twitch.core.model.StreamQuality
+import com.puretv.twitch.desktop.data.DesktopSettingsStore
 import com.puretv.twitch.desktop.player.DesktopPlayer
 import com.puretv.twitch.desktop.player.VlcPlayerView
+import com.puretv.twitch.desktop.ui.components.PlayerSettingsMenu
 import com.puretv.twitch.desktop.ui.LocalAppShell
 import com.puretv.twitch.desktop.ui.PlayerMode
 import com.puretv.twitch.desktop.ui.StreamViewModel
@@ -115,6 +120,7 @@ import org.koin.core.Koin
 import org.koin.core.parameter.parametersOf
 import java.awt.KeyEventDispatcher
 import java.awt.KeyboardFocusManager
+import com.puretv.twitch.core.model.UpscalingMode
 import java.awt.event.KeyEvent
 
 private val CHAT_WIDTH = 360.dp
@@ -130,7 +136,7 @@ private val CHAT_WIDTH = 360.dp
  *
  *   F      toggle fullscreen      T  toggle theater
  *   C      toggle chat            Space  play/pause
- *   Esc    exit immersive
+ *   F3     upscaling stats (mpv)  Esc    exit immersive
  */
 @Composable
 fun StreamContent(koin: Koin, channelLogin: String, onBack: () -> Unit, onRequestSignIn: () -> Unit = {}) {
@@ -141,6 +147,8 @@ fun StreamContent(koin: Koin, channelLogin: String, onBack: () -> Unit, onReques
     val isFollowed by viewModel.isFollowed.collectAsState()
     val vlcPlayer = remember { koin.get<DesktopPlayer>() }
     val playerStatus by vlcPlayer.status.collectAsState()
+    val settingsStore = remember { koin.get<DesktopSettingsStore>() }
+    val appSettings by settingsStore.settings.collectAsState()
     val shell = LocalAppShell.current
     val mode = shell.playerMode
     val isChatOpen = shell.isChatOpen
@@ -182,10 +190,30 @@ fun StreamContent(koin: Koin, channelLogin: String, onBack: () -> Unit, onReques
     var chatInputFocused by remember { mutableStateOf(false) }
     val latestMode = rememberUpdatedState(mode)
     val latestChatFocused = rememberUpdatedState(chatInputFocused)
+    val latestUpscaling = rememberUpdatedState(appSettings.upscalingMode)
+    // F3 toggles the mpv upscaling stats overlay. It's drawn by mpv's own OSD (the
+    // heavyweight video Canvas paints above Compose, so a Compose overlay can't sit
+    // on the video). No-op on the VLC backend.
+    var showStats by remember { mutableStateOf(false) }
+    // In-player Playback menu (gear): resolution / scaling / engine.
+    var settingsMenuOpen by remember { mutableStateOf(false) }
     DisposableEffect(Unit) {
         val dispatcher = KeyEventDispatcher { e ->
-            if (e.id != KeyEvent.KEY_PRESSED) return@KeyEventDispatcher false
             if (latestChatFocused.value) return@KeyEventDispatcher false
+            // Hold-to-compare (X): preview Off while held, restore the saved mode on
+            // release — instant live A/B of the upscaler. Handled before the
+            // KEY_PRESSED gate so we also see KEY_RELEASED. (Windows AWT doesn't
+            // interleave KEY_RELEASED with key auto-repeat, so a held X stays Off
+            // without flicker; preview does NOT persist, so the saved mode is intact.)
+            if (e.keyCode == KeyEvent.VK_X) {
+                when (e.id) {
+                    KeyEvent.KEY_PRESSED -> viewModel.previewUpscaling(UpscalingMode.OFF)
+                    KeyEvent.KEY_RELEASED -> viewModel.previewUpscaling(latestUpscaling.value)
+                    else -> return@KeyEventDispatcher false
+                }
+                return@KeyEventDispatcher true
+            }
+            if (e.id != KeyEvent.KEY_PRESSED) return@KeyEventDispatcher false
             val m = latestMode.value
             when (e.keyCode) {
                 KeyEvent.VK_F -> { shell.setPlayerMode(if (m == PlayerMode.FULLSCREEN) PlayerMode.DEFAULT else PlayerMode.FULLSCREEN); true }
@@ -195,12 +223,30 @@ fun StreamContent(koin: Koin, channelLogin: String, onBack: () -> Unit, onReques
                 // Esc only acts when immersive, so it doesn't swallow a stray Esc
                 // elsewhere; in DEFAULT mode it passes through untouched.
                 KeyEvent.VK_ESCAPE -> if (m != PlayerMode.DEFAULT) { shell.exitImmersive(); true } else false
+                KeyEvent.VK_F3 -> { showStats = !showStats; true }
                 else -> false
             }
         }
         val kfm = KeyboardFocusManager.getCurrentKeyboardFocusManager()
         kfm.addKeyEventDispatcher(dispatcher)
         onDispose { kfm.removeKeyEventDispatcher(dispatcher) }
+    }
+
+    // Drive the mpv stats overlay: while toggled on, re-push every second so mpv's
+    // OSD text (2s duration) never lapses; on toggle-off, clear it once. Runs on the
+    // Compose/EDT dispatcher, the same thread as the player's surface lifecycle.
+    LaunchedEffect(showStats) {
+        if (!showStats) {
+            vlcPlayer.renderStatsOverlay(false)
+            return@LaunchedEffect
+        }
+        while (true) {
+            // Guard each tick: a thrown renderStatsOverlay would otherwise
+            // silently kill the loop and freeze the overlay (mirrors the VOD
+            // progress loop's per-iteration guard).
+            runCatching { vlcPlayer.renderStatsOverlay(true) }
+            delay(1000)
+        }
     }
 
     Box(
@@ -289,6 +335,25 @@ fun StreamContent(koin: Koin, channelLogin: String, onBack: () -> Unit, onReques
                     }
                 }
 
+                // Playback menu — lives in the Column (NOT over the video; the
+                // heavyweight Canvas paints above Compose), between video and controls.
+                // Opening it pushes the video up, the same way the controls bar does.
+                AnimatedVisibility(
+                    visible = settingsMenuOpen,
+                    enter = expandVertically() + fadeIn(),
+                    exit = shrinkVertically() + fadeOut(),
+                ) {
+                    PlayerSettingsMenu(
+                        currentQuality = state.currentQuality,
+                        onQualitySelected = viewModel::setQuality,
+                        upscalingMode = appSettings.upscalingMode,
+                        onUpscalingSelected = viewModel::setUpscaling,
+                        scalingEnabled = vlcPlayer.supportsUpscaling,
+                        backend = appSettings.playbackBackend,
+                        onBackendSelected = viewModel::setPlaybackBackend,
+                    )
+                }
+
                 // Controls bar — always in DEFAULT, slides down when idle in THEATER/FULLSCREEN
                 AnimatedVisibility(
                     visible = controlsVisible || mode == PlayerMode.DEFAULT,
@@ -299,11 +364,11 @@ fun StreamContent(koin: Koin, channelLogin: String, onBack: () -> Unit, onReques
                         isPlaying = playerStatus.isPlaying,
                         volume = playerStatus.volume,
                         isMuted = playerStatus.isMuted,
-                        currentQuality = state.currentQuality,
+                        settingsOpen = settingsMenuOpen,
                         onTogglePlayPause = viewModel::togglePlayPause,
                         onVolumeChange = viewModel::setVolume,
                         onToggleMute = viewModel::toggleMute,
-                        onQualitySelected = viewModel::setQuality,
+                        onToggleSettings = { settingsMenuOpen = !settingsMenuOpen },
                     )
                 }
             }
@@ -454,11 +519,11 @@ private fun PlaybackControls(
     isPlaying: Boolean,
     volume: Int,
     isMuted: Boolean,
-    currentQuality: StreamQuality,
+    settingsOpen: Boolean,
     onTogglePlayPause: () -> Unit,
     onVolumeChange: (Int) -> Unit,
     onToggleMute: () -> Unit,
-    onQualitySelected: (StreamQuality) -> Unit,
+    onToggleSettings: () -> Unit,
 ) {
     val c = PureTvTheme.colors
     Box(Modifier.fillMaxWidth().height(1.dp).background(c.hairline))
@@ -501,13 +566,15 @@ private fun PlaybackControls(
             Spacer(Modifier.width(6.dp))
             Text("LIVE", style = PureTvType.data, color = c.textSecondary)
         }
-        Spacer(Modifier.width(14.dp))
-        SegmentedControl(
-            options = StreamQuality.entries,
-            selected = currentQuality,
-            label = { it.label },
-            onSelect = onQualitySelected,
-        )
+        Spacer(Modifier.width(8.dp))
+        IconButton(onClick = onToggleSettings, modifier = Modifier.size(28.dp)) {
+            Icon(
+                Icons.Filled.Settings,
+                contentDescription = "Playback settings",
+                tint = if (settingsOpen) c.twitchPurple else c.textSecondary,
+                modifier = Modifier.size(18.dp),
+            )
+        }
     }
 }
 
@@ -561,7 +628,8 @@ private fun ChatMessageList(
         if (!following) {
             Surface(
                 onClick = {
-                    scope.launch { following = true; listState.scrollToItem(messages.lastIndex) }
+                    // Guard scrollToItem(-1) when the message list is momentarily empty (audit U3).
+                    scope.launch { following = true; if (messages.isNotEmpty()) listState.scrollToItem(messages.lastIndex) }
                 },
                 shape = PureTvShape.pill,
                 color = c.twitchPurple,

@@ -161,6 +161,14 @@ class VlcPlayer : DesktopPlayer {
     }
 
     /**
+     * No-op for VLC. VLCJ tolerates its embedded surface's native peer being
+     * destroyed and re-binds to a fresh Canvas on the next [attachToPanel] (a new
+     * component fails the `attachedComponent` short-circuit). The interface
+     * requires this hook for mpv, whose set-once `wid` cannot survive HWND teardown.
+     */
+    override fun detachFromPanel() { /* VLC re-attaches; nothing to release early. */ }
+
+    /**
      * Starts playback of [streamUrl] — typically the local proxy's `/stream?...` URL (Section 8.3).
      *
      * If the video surface hasn't been attached yet (Compose hasn't laid out

@@ -61,7 +61,21 @@ fun VlcPlayerView(
     modifier: Modifier = Modifier,
     onUserActivity: () -> Unit = {},
 ) {
-    val canvas = remember { Canvas().apply { background = Color.BLACK; isFocusable = false } }
+    // Override removeNotify so the backend releases this surface BEFORE the native
+    // peer (HWND) is destroyed. mpv binds its `wid` once and keeps rendering into
+    // that HWND on a native VO thread; when Compose unmounts the stream screen
+    // (e.g. tab change) the HWND is torn down — and rendering into a dead window
+    // wedges the GPU/render path, freezing the whole window. removeNotify runs on
+    // the EDT immediately before peer disposal, so detaching here stops mpv in
+    // time. For VLC this is a no-op (it tolerates re-attach).
+    val canvas = remember {
+        object : Canvas() {
+            override fun removeNotify() {
+                vlcPlayer.detachFromPanel()
+                super.removeNotify()
+            }
+        }.apply { background = Color.BLACK; isFocusable = false }
+    }
     val panel = remember {
         JPanel(BorderLayout()).apply {
             background = Color.BLACK
@@ -115,7 +129,11 @@ fun VlcPlayerView(
         }
         onDispose {
             canvas.removeHierarchyListener(listener)
-            // The player backend is a Koin singleton — released at app shutdown, not per-screen.
+            // The player backend is a Koin singleton — released at app shutdown, not
+            // per-screen. But its SURFACE must be released now: belt-and-suspenders
+            // alongside the Canvas's removeNotify, in case this composable leaves
+            // without removeNotify firing. Idempotent — detach no-ops if already done.
+            vlcPlayer.detachFromPanel()
         }
     }
 

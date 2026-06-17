@@ -15,17 +15,24 @@ data class ResolvedEmote(
 )
 
 /**
- * Builds a code -> emote lookup used to tokenize incoming chat. Only third-party
- * emotes are indexed — Twitch-native emotes already arrive tagged via IRC.
- * Channel sets win over globals (first occurrence wins); blank codes are skipped.
- * Matching is case-sensitive (catJAM != catjam).
+ * Builds a code -> emote lookup used to tokenize chat. Third-party emotes are the
+ * common case (incoming Twitch-native emotes arrive tagged via IRC, so they don't
+ * need this). First-party Twitch emotes are OPTIONAL and only needed for the
+ * self-echo path — your OWN message never carries an `emotes=` tag, so a typed
+ * Twitch emote (Kappa, a sub emote) can only be resolved here by name.
+ *
+ * Priority on a name collision: third-party over Twitch, channel over global
+ * (first occurrence wins). Blank codes skipped. Case-sensitive (catJAM != catjam).
+ * Defaulting the twitch params keeps existing third-party-only callers unchanged.
  */
 fun buildEmoteIndex(
     thirdPartyChannel: List<ChannelEmote>,
     thirdPartyGlobal: List<ChannelEmote>,
+    twitchChannel: List<ChannelEmote> = emptyList(),
+    twitchGlobal: List<ChannelEmote> = emptyList(),
 ): Map<String, ResolvedEmote> {
     val out = LinkedHashMap<String, ResolvedEmote>()
-    for (emote in thirdPartyChannel + thirdPartyGlobal) {
+    for (emote in thirdPartyChannel + thirdPartyGlobal + twitchChannel + twitchGlobal) {
         if (emote.name.isBlank() || out.containsKey(emote.name)) continue
         out[emote.name] = ResolvedEmote(emote.name, emote.url, emote.animated, emote.provider, emote.zeroWidth)
     }

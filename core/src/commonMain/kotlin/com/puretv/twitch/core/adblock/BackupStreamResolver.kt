@@ -39,6 +39,14 @@ class BackupStreamResolver(
      */
     private val backupPlayerTypes: List<String> = listOf("embed", "popout"),
     private val cacheTtlMs: Long = 90_000,
+    /**
+     * Hard cap on cached masters. Only the active channel's entries matter, so a
+     * small cap is plenty; without it the map grew one entry per
+     * `channel|playerType` ever visited (each holding a full master playlist) and
+     * was never evicted by size — an unbounded leak over a long channel-surfing
+     * session.
+     */
+    private val maxEntries: Int = 32,
 ) {
     private data class CachedMaster(val master: String, val fetchedAtMs: Long)
 
@@ -87,13 +95,32 @@ class BackupStreamResolver(
     ): String? {
         val key = "$channelLogin|$playerType"
         cacheLock.withLock {
-            masterCache[key]?.let { if (nowMs - it.fetchedAtMs < cacheTtlMs) return it.master }
+            val cached = masterCache[key]
+            if (cached != null) {
+                if (nowMs - cached.fetchedAtMs < cacheTtlMs) return cached.master
+                // Stale — drop it so the map doesn't accumulate dead entries.
+                masterCache.remove(key)
+            }
         }
         val master = runCatching {
             streamResolver.resolveMasterPlaylist(channelLogin, oauthToken, playerType).rawContent
         }.getOrNull() ?: return null
-        cacheLock.withLock { masterCache[key] = CachedMaster(master, nowMs) }
+        cacheLock.withLock {
+            masterCache[key] = CachedMaster(master, nowMs)
+            pruneLocked(nowMs)
+        }
         return master
+    }
+
+    /** Caller must hold [cacheLock]. Drop expired entries, then evict oldest down to [maxEntries]. */
+    private fun pruneLocked(nowMs: Long) {
+        masterCache.entries.removeAll { nowMs - it.value.fetchedAtMs >= cacheTtlMs }
+        if (masterCache.size > maxEntries) {
+            masterCache.entries
+                .sortedBy { it.value.fetchedAtMs }
+                .take(masterCache.size - maxEntries)
+                .forEach { masterCache.remove(it.key) }
+        }
     }
 
     private suspend fun invalidate(channelLogin: String, playerType: String) {

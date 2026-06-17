@@ -118,6 +118,14 @@ class UpdateManager {
     fun downloadAndInstall(info: UpdateInfo, exitApplication: () -> Unit) {
         scope.launch {
             runCatching {
+                // Anti-rollback (audit F2): refuse to install a version that is not
+                // strictly newer than the running one — even a validly-signed older
+                // build. Ed25519 signing prevents forgery but NOT replay of a
+                // genuinely-signed, known-vulnerable old artifact. checkForUpdates
+                // only gates the banner; this gates the actual install.
+                if (!Semver.isNewer(AppBuildConfig.VERSION, info.version)) {
+                    error("Refusing to install ${info.version}: not newer than the current ${AppBuildConfig.VERSION}.")
+                }
                 _state.value = UpdateState.Downloading(0f)
                 val installer = downloadInstaller(info)
                 verifyInstaller(installer, info)
@@ -131,7 +139,17 @@ class UpdateManager {
     }
 
     private suspend fun downloadInstaller(info: UpdateInfo): File = withContext(Dispatchers.IO) {
-        val dir = File(System.getProperty("java.io.tmpdir"), "PureTV-update").apply { mkdirs() }
+        // Reject artifacts hosted anywhere but GitHub before fetching a byte
+        // (audit F3). Signature verification is the decisive control, but this
+        // removes the cheapest backstop being bypassed by a substituted URL.
+        requireTrustedAssetHost(info.downloadUrl)
+        // Audit P0-7 (TOCTOU): use a fresh, RANDOM per-run directory instead of
+        // the predictable %TEMP%\PureTV-update. The old fixed path let a local
+        // process pre-plant or swap the installer/scripts between verify and
+        // execute. A random name (plus owner-default ACL) makes the path
+        // unguessable so it can't be staged ahead of time.
+        val dir = java.nio.file.Files.createTempDirectory("PureTV-update-").toFile()
+        runCatching { hardenDirOwnerOnly(dir) }
         val ext = if (info.downloadUrl.endsWith(".exe", ignoreCase = true)) "exe" else "msi"
         val target = File(dir, "PureTV-${info.version}.$ext")
 
@@ -202,6 +220,7 @@ class UpdateManager {
     }
 
     private suspend fun downloadText(url: String): String = withUpdateRetry {
+        requireTrustedAssetHost(url)
         val request = HttpRequest.newBuilder(URI.create(url))
             .header("User-Agent", "PureTV-Updater")
             .timeout(Duration.ofSeconds(30))
@@ -259,10 +278,55 @@ class UpdateManager {
         return ProcessHandle.current().info().command().orElse(null)
     }
 
+    private fun requireTrustedAssetHost(url: String) {
+        require(isTrustedGithubAssetHost(url)) {
+            "Refusing to fetch update artifact from an untrusted host: $url"
+        }
+    }
+
+    /**
+     * Best-effort owner-only restriction on the update staging dir. On Windows
+     * uses the NIO ACL view to grant only the file owner; failures are swallowed
+     * (the random unguessable name remains the primary defence). Never throws.
+     */
+    private fun hardenDirOwnerOnly(dir: File) {
+        val path = dir.toPath()
+        val aclView = java.nio.file.Files.getFileAttributeView(path, java.nio.file.attribute.AclFileAttributeView::class.java)
+        if (aclView != null) {
+            val owner = java.nio.file.Files.getOwner(path)
+            val entry = java.nio.file.attribute.AclEntry.newBuilder()
+                .setType(java.nio.file.attribute.AclEntryType.ALLOW)
+                .setPrincipal(owner)
+                .setPermissions(java.util.EnumSet.allOf(java.nio.file.attribute.AclEntryPermission::class.java))
+                .build()
+            aclView.acl = listOf(entry)
+        } else {
+            dir.setReadable(false, false); dir.setReadable(true, true)
+            dir.setWritable(false, false); dir.setWritable(true, true)
+        }
+    }
+
     private companion object {
         /** jpackage launcher name — derives from build.gradle.kts `packageName`. */
         const val LAUNCHER_EXE_NAME = "PureTV for Twitch.exe"
     }
+}
+
+/**
+ * True only if [url] is an HTTPS URL whose host is a GitHub-controlled domain
+ * that serves release assets (audit F3). Release `browser_download_url`s
+ * 302-redirect from `github.com` to `*.githubusercontent.com`, so both are
+ * allowed. The scheme MUST be https — otherwise `http://github.com/...` would
+ * pass the host check and the installer/signature would be fetched in cleartext
+ * (the host-only check relied on GitHub's JSON always returning https).
+ */
+internal fun isTrustedGithubAssetHost(url: String): Boolean {
+    val uri = runCatching { URI.create(url) }.getOrNull() ?: return false
+    if (!uri.scheme.equals("https", ignoreCase = true)) return false
+    val host = uri.host?.lowercase().orEmpty()
+    if (host.isBlank()) return false
+    return host == "github.com" || host.endsWith(".github.com") ||
+        host == "githubusercontent.com" || host.endsWith(".githubusercontent.com")
 }
 
 /** The two scripts the updater drops next to the installer. */

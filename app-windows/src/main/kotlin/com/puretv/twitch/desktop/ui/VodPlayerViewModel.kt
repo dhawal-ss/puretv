@@ -1,12 +1,15 @@
 package com.puretv.twitch.desktop.ui
 
+import com.puretv.twitch.core.model.PlaybackBackend
 import com.puretv.twitch.core.model.StreamQuality
+import com.puretv.twitch.core.model.UpscalingMode
 import com.puretv.twitch.core.repository.VodRepository
 import com.puretv.twitch.core.stream.Storyboard
 import com.puretv.twitch.core.stream.VodResolver
 import com.puretv.twitch.desktop.data.ResumePolicy
 import com.puretv.twitch.desktop.data.WatchProgress
 import com.puretv.twitch.desktop.data.WatchProgressStore
+import com.puretv.twitch.desktop.data.DesktopSettingsStore
 import com.puretv.twitch.desktop.player.DesktopPlayer
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -33,6 +36,7 @@ class VodPlayerViewModel(
     val player: DesktopPlayer,
     private val vodRepository: VodRepository,
     private val store: WatchProgressStore,
+    private val settingsStore: DesktopSettingsStore,
 ) : DesktopViewModel() {
 
     private val vodId: String get() = launch.vodId
@@ -53,7 +57,9 @@ class VodPlayerViewModel(
         scope.launch {
             while (true) {
                 delay(10_000)
-                persistProgress()
+                // Audit U2: a single IO error (locked file, disk full) must not kill
+                // the save loop for the rest of the VOD — guard each save.
+                runCatching { persistProgress() }
             }
         }
     }
@@ -107,6 +113,16 @@ class VodPlayerViewModel(
         }
     }
 
+    /** Live-apply the scaler to the running player AND persist it (mirrors StreamViewModel). */
+    fun setUpscaling(mode: UpscalingMode) {
+        player.setUpscaling(mode)
+        settingsStore.updateSettings { it.copy(upscalingMode = mode) }
+    }
+
+    /** Persist the backend choice; restart-gated. */
+    fun setPlaybackBackend(backend: PlaybackBackend) =
+        settingsStore.updateSettings { it.copy(playbackBackend = backend) }
+
     fun seekTo(ms: Long) = player.seekTo(ms)
     fun togglePlayPause() = player.togglePlayPause()
     fun setVolume(v: Int) = player.setVolume(v)
@@ -115,7 +131,7 @@ class VodPlayerViewModel(
     // Save before tearing down, then stop the SHARED player singleton (safe because
     // the Stream and Vod routes are mutually exclusive). Mirrors StreamViewModel.
     override fun onCleared() {
-        persistProgress()
+        runCatching { persistProgress() }
         player.stop()
     }
 }

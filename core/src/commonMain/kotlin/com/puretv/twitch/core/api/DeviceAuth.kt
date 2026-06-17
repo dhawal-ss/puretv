@@ -123,6 +123,29 @@ object DeviceAuth {
             url = "${TwitchConfig.AUTH_BASE}/token",
             formParameters = parameters { refreshForm(clientId, refreshToken).forEach { (k, v) -> append(k, v) } },
         )
-        return json.decodeFromString(TokenResponse.serializer(), response.bodyAsText())
+        return parseRefreshResponse(response.bodyAsText())
+    }
+
+    /**
+     * Decode a /oauth2/token refresh response. Twitch returns a `{status,message}`
+     * envelope (no `access_token`) when the refresh token is invalid/expired/
+     * revoked; decoding that as a [TokenResponse] throws an opaque
+     * `MissingFieldException`. Read the body once and surface a clean, typed
+     * [TokenRefreshException] so callers can route to a re-login prompt
+     * (audit F4).
+     */
+    internal fun parseRefreshResponse(body: String): TokenResponse {
+        runCatching { json.decodeFromString(TokenResponse.serializer(), body) }
+            .getOrNull()
+            ?.takeIf { it.accessToken.isNotBlank() }
+            ?.let { return it }
+
+        val message = runCatching {
+            json.parseToJsonElement(body).jsonObject["message"]?.jsonPrimitive?.content
+        }.getOrNull().orEmpty()
+        throw TokenRefreshException(message.ifBlank { "refresh token rejected" })
     }
 }
+
+/** Thrown when a token refresh fails (invalid/expired/revoked refresh token). */
+class TokenRefreshException(message: String) : Exception(message)

@@ -103,28 +103,8 @@ fun SettingsContent(koin: Koin, onExit: () -> Unit) {
                     onSelect = { viewModel.setPreferredQuality(it) },
                 )
             }
-            SettingsRow(
-                label = "Playback engine",
-                description = "VLC is the default. mpv enables GPU upscaling (libplacebo / Anime4K). Takes effect after restart.",
-            ) {
-                SegmentedControl(
-                    options = PlaybackBackend.entries,
-                    selected = state.settings.playbackBackend,
-                    label = { it.label },
-                    onSelect = { viewModel.setPlaybackBackend(it) },
-                )
-            }
-            SettingsRow(
-                label = "GPU upscaling",
-                description = "Sharpen sub-native streams with GPU scaling. Standard uses libplacebo; Anime uses Anime4K. Requires the mpv engine (above) and takes effect after restart.",
-            ) {
-                SegmentedControl(
-                    options = UpscalingMode.entries,
-                    selected = state.settings.upscalingMode,
-                    label = { it.label },
-                    onSelect = { viewModel.setUpscalingMode(it) },
-                )
-            }
+            // Playback engine + GPU upscaling moved to the in-player gear menu
+            // (per-stream, applied live). See PlayerSettingsMenu.
         }
 
         // ── Chat ─────────────────────────────────────────────────────────────────

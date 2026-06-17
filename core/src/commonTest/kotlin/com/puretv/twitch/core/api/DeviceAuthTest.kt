@@ -2,10 +2,29 @@ package com.puretv.twitch.core.api
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class DeviceAuthTest {
+
+    @Test
+    fun parseRefreshResponse_success_returns_token() {
+        val body = """{"access_token":"AT2","refresh_token":"RT2","expires_in":3600}"""
+        val token = DeviceAuth.parseRefreshResponse(body)
+        assertEquals("AT2", token.accessToken)
+        assertEquals("RT2", token.refreshToken)
+    }
+
+    @Test
+    fun parseRefreshResponse_error_envelope_throws_typed_not_missingfield() {
+        // A revoked/invalid refresh token returns {status,message} with no
+        // access_token — must surface a clean TokenRefreshException (audit F4),
+        // not an opaque kotlinx MissingFieldException.
+        assertFailsWith<TokenRefreshException> {
+            DeviceAuth.parseRefreshResponse("""{"status":400,"message":"Invalid refresh token"}""")
+        }
+    }
 
     @Test
     fun deviceCodeForm_has_client_id_and_scopes_and_no_secret() {

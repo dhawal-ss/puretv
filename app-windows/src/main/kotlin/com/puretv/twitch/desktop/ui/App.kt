@@ -100,6 +100,9 @@ private sealed class Route {
 
 @Composable
 fun App(koin: Koin, windowState: WindowState, onClose: () -> Unit, awtWindow: AwtWindow) {
+    // coil3's setSingletonImageLoaderFactory is itself @Composable and internally
+    // memoizes the singleton, so calling it here in the composable body (idempotent
+    // factory swap) is the intended usage — it can't be hoisted into remember{}.
     setSingletonImageLoaderFactory { context ->
         ImageLoader.Builder(context)
             .components { add(KtorNetworkFetcherFactory()) }
