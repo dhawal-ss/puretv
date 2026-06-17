@@ -11,10 +11,14 @@ import com.puretv.twitch.desktop.player.LocalStreamProxy
 import com.puretv.twitch.desktop.player.MpvPlayer
 import com.puretv.twitch.desktop.player.VlcPlayer
 import com.puretv.twitch.desktop.update.UpdateManager
+import com.puretv.twitch.core.follows.FollowedChannelsService
+import com.puretv.twitch.core.follows.FollowedChannelsSource
+import com.puretv.twitch.core.follows.FollowedRef
 import com.puretv.twitch.desktop.ui.BrowseViewModel
 import com.puretv.twitch.desktop.ui.CategoryViewModel
 import com.puretv.twitch.desktop.ui.ChannelStatsViewModel
 import com.puretv.twitch.desktop.ui.ChannelViewModel
+import com.puretv.twitch.desktop.ui.FollowedRailViewModel
 import com.puretv.twitch.desktop.ui.HomeViewModel
 import com.puretv.twitch.desktop.ui.LoginViewModel
 import com.puretv.twitch.desktop.ui.SearchViewModel
@@ -53,6 +57,8 @@ val desktopModule = module {
     single { DesktopSettingsStore(get()) }
     // Local "Following" list (the in-app library) — see FollowStore.
     single { FollowStore() }
+    // Followed-rail data: real Twitch follows (paginated) ∪ local pins.
+    single<FollowedChannelsSource> { FollowedChannelsService(get()) }
     // Per-VOD playback positions ("continue watching") — see WatchProgressStore.
     single { WatchProgressStore() }
     // Locally-persisted viewer-count history for the channel stats panel — see ViewerHistoryStore.
@@ -76,6 +82,15 @@ val desktopModule = module {
 
     // --- ViewModels (plain factories — see note above) -------------------------
     factory { HomeViewModel(get(), get(), get()) }
+    factory {
+        val store = get<DesktopSettingsStore>()
+        val follows = get<FollowStore>()
+        FollowedRailViewModel(
+            source = get(),
+            loggedInUserId = { if (store.isLoggedIn) store.sessionUserId else null },
+            localPins = { follows.followed.value.map { FollowedRef(it.id, it.login, it.displayName) } },
+        )
+    }
     factory { BrowseViewModel(get()) }
     // Category drill-down takes (gameId, gameName) from the tapped Browse card.
     factory { (gameId: String, gameName: String) -> CategoryViewModel(gameId, gameName, get()) }
