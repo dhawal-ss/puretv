@@ -48,6 +48,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -63,6 +64,7 @@ import com.puretv.twitch.desktop.ui.emotes.LocalEmoteFrameCache
 import com.puretv.twitch.desktop.platform.WindowsNative
 import com.puretv.twitch.desktop.update.UpdateManager
 import com.puretv.twitch.desktop.update.UpdateState
+import com.puretv.twitch.desktop.ui.components.FollowedRail
 import com.puretv.twitch.desktop.ui.components.Kicker
 import com.puretv.twitch.desktop.ui.components.UpdateBanner
 import com.puretv.twitch.desktop.ui.screens.BrowseContent
@@ -80,6 +82,7 @@ import com.puretv.twitch.desktop.ui.theme.PureTvType
 import com.puretv.twitch.desktop.ui.theme.ThemeVariant
 import java.awt.MouseInfo
 import java.awt.Window as AwtWindow
+import kotlinx.coroutines.delay
 import org.koin.core.Koin
 
 enum class Destination(val label: String, val icon: ImageVector) {
@@ -156,9 +159,15 @@ fun App(koin: Koin, windowState: WindowState, onClose: () -> Unit, awtWindow: Aw
                             exit = slideOutHorizontally { -it },
                         ) {
                             NavigationSidebar(
+                                koin = koin,
                                 selected = destination,
                                 onSelect = {
                                     destination = it
+                                    route = Route.Top
+                                },
+                                onOpenChannel = { login -> route = Route.Channel(login) },
+                                onSignIn = {
+                                    destination = Destination.ACCOUNT
                                     route = Route.Top
                                 },
                             )
@@ -393,8 +402,29 @@ private fun MaximizeIcon(isMaximized: Boolean) {
 // ── Navigation sidebar ─────────────────────────────────────────────────────────
 
 @Composable
-private fun NavigationSidebar(selected: Destination, onSelect: (Destination) -> Unit) {
+private fun NavigationSidebar(
+    koin: Koin,
+    selected: Destination,
+    onSelect: (Destination) -> Unit,
+    onOpenChannel: (String) -> Unit,
+    onSignIn: () -> Unit,
+) {
     val c = PureTvTheme.colors
+    val railVm = rememberDesktopViewModel { koin.get<FollowedRailViewModel>() }
+    val railState by railVm.state.collectAsState()
+    val windowInfo = LocalWindowInfo.current
+
+    // Load once on first composition (regardless of focus, so a cold start that
+    // opens unfocused/behind another window still populates), then poll every 60s
+    // but only while the window is focused.
+    LaunchedEffect(Unit) {
+        railVm.refresh()
+        while (true) {
+            delay(60_000)
+            if (windowInfo.isWindowFocused) railVm.refresh()
+        }
+    }
+
     Column(
         modifier = Modifier
             .fillMaxHeight()
@@ -431,6 +461,15 @@ private fun NavigationSidebar(selected: Destination, onSelect: (Destination) -> 
         Destination.entries.forEach { dest ->
             NavItem(icon = dest.icon, label = dest.label, selected = selected == dest, onClick = { onSelect(dest) })
         }
+
+        Spacer(Modifier.height(16.dp))
+        FollowedRail(
+            state = railState,
+            onToggleOffline = { railVm.toggleOffline() },
+            onOpenChannel = onOpenChannel,
+            onSignIn = onSignIn,
+            modifier = Modifier.weight(1f),
+        )
     }
 }
 

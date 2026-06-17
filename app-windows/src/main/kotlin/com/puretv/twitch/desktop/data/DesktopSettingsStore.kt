@@ -66,12 +66,16 @@ class DesktopSettingsStore(
     // file on every emission (audit U9). Updated on init/save/clear.
     @Volatile private var cachedLoggedIn: Boolean = false
     @Volatile private var cachedLogin: String? = null
+    @Volatile private var cachedUserId: String? = null
 
     /** Whether a session token is present — no disk/crypto, safe in hot flows. */
     val isLoggedIn: Boolean get() = cachedLoggedIn
 
     /** The logged-in user's login (cached in memory), or null. */
     val sessionLogin: String? get() = cachedLogin
+
+    /** The logged-in user's Twitch user id (cached in memory), or null. Needed for GET /channels/followed. */
+    val sessionUserId: String? get() = cachedUserId
 
     private val _settings = MutableStateFlow(loadSettingsFromDisk())
     val settings: StateFlow<AppSettings> = _settings.asStateFlow()
@@ -83,7 +87,7 @@ class DesktopSettingsStore(
         // TokenHolder so TwitchApiClient/TwitchGqlClient can authenticate on the
         // very first call, before the user has to "log in again" after a restart.
         // Mirrors the Android/TV AppSettingsStore.init pattern.
-        loadTokens()?.let { tokenHolder.update(it.accessToken); cachedLoggedIn = true; cachedLogin = it.login }
+        loadTokens()?.let { tokenHolder.update(it.accessToken); cachedLoggedIn = true; cachedLogin = it.login; cachedUserId = it.userId }
     }
 
     /**
@@ -210,6 +214,7 @@ class DesktopSettingsStore(
         tokenHolder.update(accessToken)
         cachedLoggedIn = true
         cachedLogin = login
+        cachedUserId = userId
     }
 
     fun loadTokens(): StoredTokensResult? = runCatching {
@@ -230,6 +235,7 @@ class DesktopSettingsStore(
         tokenHolder.update(null)
         cachedLoggedIn = false
         cachedLogin = null
+        cachedUserId = null
     }
 
     /**
