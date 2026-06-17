@@ -33,6 +33,14 @@ secrets.properties
 # Internal build/design docs (specs, plans, prompts) — kept out of the repo.
 docs/superpowers/
 
+# Local-only token store + key material written by DesktopSettingsStore at runtime.
+tokens.enc
+.keyseed
+
+# Build / run / audit logs and tool scratch — never source.
+*.log
+.playwright-mcp/
+
 # OS
 .DS_Store
 Thumbs.db

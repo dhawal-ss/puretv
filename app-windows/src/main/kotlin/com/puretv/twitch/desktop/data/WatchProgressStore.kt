@@ -44,6 +44,10 @@ class WatchProgressStore(appDataDir: File = defaultDir()) {
     private val file = File(appDataDir, "watch-progress.json")
     private val json = Json { ignoreUnknownKeys = true; prettyPrint = true; encodeDefaults = true }
 
+    // Serializes the read-derive-write sections (the 10s autosave loop, the
+    // onCleared save, and explicit removes can otherwise interleave — audit F2).
+    private val lock = Any()
+
     private val _progress = MutableStateFlow(loadFromDisk())
     val progress: StateFlow<Map<String, WatchProgress>> = _progress.asStateFlow()
 
@@ -51,9 +55,9 @@ class WatchProgressStore(appDataDir: File = defaultDir()) {
 
     fun get(vodId: String): WatchProgress? = _progress.value[vodId]
 
-    fun save(p: WatchProgress) = persist(_progress.value + (p.vodId to p))
+    fun save(p: WatchProgress) = synchronized(lock) { persistLocked(capped(_progress.value + (p.vodId to p))) }
 
-    fun remove(vodId: String) = persist(_progress.value - vodId)
+    fun remove(vodId: String) = synchronized(lock) { persistLocked(_progress.value - vodId) }
 
     /** Resumable entries (per [ResumePolicy]), newest first. */
     fun continueWatching(): List<WatchProgress> =
@@ -61,12 +65,25 @@ class WatchProgressStore(appDataDir: File = defaultDir()) {
             .filter { ResumePolicy.resumePositionMs(it) != null }
             .sortedByDescending { it.updatedAt }
 
-    private fun persist(map: Map<String, WatchProgress>) {
-        _progress.value = map
-        runCatching {
-            file.parentFile?.mkdirs()
-            file.writeText(json.encodeToString(map))
+    /**
+     * Bound the store (audit F3): an unbounded map is loaded into memory on
+     * startup and rewritten in full on every 10s autosave, so cost grows with
+     * watch history forever. Keep only the [MAX_ENTRIES] most-recently-updated
+     * VODs — far more than any "continue watching" surface shows.
+     */
+    private fun capped(map: Map<String, WatchProgress>): Map<String, WatchProgress> =
+        if (map.size <= MAX_ENTRIES) {
+            map
+        } else {
+            map.entries.sortedByDescending { it.value.updatedAt }
+                .take(MAX_ENTRIES)
+                .associate { it.key to it.value }
         }
+
+    private fun persistLocked(map: Map<String, WatchProgress>) {
+        _progress.value = map
+        runCatching { AtomicFile.writeTextAtomically(file, json.encodeToString(map)) }
+            .onFailure { System.err.println("WatchProgressStore: failed to persist watch progress: ${it.message}") }
     }
 
     private fun loadFromDisk(): Map<String, WatchProgress> = runCatching {
@@ -74,6 +91,8 @@ class WatchProgressStore(appDataDir: File = defaultDir()) {
     }.getOrElse { emptyMap() }
 
     companion object {
+        private const val MAX_ENTRIES = 300
+
         private fun defaultDir(): File =
             File(System.getenv("APPDATA") ?: System.getProperty("user.home"), "PureTwitch")
     }

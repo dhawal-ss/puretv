@@ -34,13 +34,33 @@ import com.puretv.twitch.core.model.FilteredPlaylist
  */
 class ManifestRewriter {
 
-    fun filter(rawPlaylist: String): FilteredPlaylist {
+    /**
+     * Strip ad pods from a media playlist.
+     *
+     * [assumeStartInAdBreak] is the fail-safe for the cross-refresh leak (audit
+     * AD-1): live playlists are sliding 2s windows, so a pod's opening DATERANGE
+     * + discontinuity can scroll out of the window while the *tail* ad segments
+     * remain. Those leading segments precede any marker and would be emitted as
+     * content. When the caller knows an ad was detected but the normal pass
+     * stripped nothing (the opener is missing), it re-runs with this flag so the
+     * window is treated as starting mid-pod: everything up to the first
+     * return-to-content discontinuity is dropped. Worst case is a brief stall —
+     * never a played ad.
+     */
+    fun filter(rawPlaylist: String, assumeStartInAdBreak: Boolean = false): FilteredPlaylist {
         val lines = rawPlaylist.lines()
         val cleaned = ArrayList<String>(lines.size)
-        var inAdBreak = false
+        var inAdBreak = assumeStartInAdBreak
         var adSegmentsThisPod = 0
         var removedSegments = 0
-        var sawAdMarkers = false
+        var sawAdMarkers = assumeStartInAdBreak
+        // Pod length from the DATERANGE DURATION attribute (0.0 = unknown). The
+        // pod is anchored on this so an #EXT-X-DISCONTINUITY *between* stitched
+        // creatives (audit AD-2) does not end the pod early — we only close once
+        // the ad's worth of segment-seconds has been consumed.
+        var podDurationTarget = 0.0
+        var consumedAdSeconds = 0.0
+        var pendingSegmentSeconds = DEFAULT_AD_SEGMENT_SECONDS
 
         // Emit a single discontinuity at the splice, collapsing any run of
         // consecutive ones (e.g. a synthetic splice marker followed by Twitch's
@@ -49,34 +69,64 @@ class ManifestRewriter {
             if (cleaned.lastOrNull() != "#EXT-X-DISCONTINUITY") cleaned += "#EXT-X-DISCONTINUITY"
         }
 
+        // True once we've stripped enough ad-segment-seconds to satisfy the
+        // declared pod duration (or the duration is unknown, in which case any
+        // post-segment discontinuity is treated as the pod boundary).
+        fun podDurationConsumed(): Boolean =
+            podDurationTarget <= 0.0 || consumedAdSeconds + DURATION_EPSILON >= podDurationTarget
+
         for (line in lines) {
             when {
+                isStructuralHeaderTag(line) -> {
+                    // Playlist-level header tags (#EXTM3U, #EXT-X-VERSION,
+                    // #EXT-X-MEDIA-SEQUENCE, …). These are never ad markers or
+                    // per-segment tags, so they must survive even when we start
+                    // mid-pod (assumeStartInAdBreak) — otherwise the leading
+                    // '#'-line catch-all below would eat #EXTM3U and hand the
+                    // player a headerless playlist it can reject. Must be FIRST
+                    // so #EXT-X-DISCONTINUITY-SEQUENCE isn't misread as a
+                    // content discontinuity.
+                    cleaned += line
+                }
                 line.startsWith("#EXT-X-DATERANGE") && line.contains("stitched-ad") -> {
-                    inAdBreak = true
-                    adSegmentsThisPod = 0
+                    // A repeated DATERANGE inside an already-open pod must not
+                    // reset progress — only (re)arm the duration target.
+                    if (!inAdBreak) {
+                        inAdBreak = true
+                        adSegmentsThisPod = 0
+                        consumedAdSeconds = 0.0
+                    }
+                    parseDuration(line)?.let { podDurationTarget = maxOf(podDurationTarget, it) }
                     sawAdMarkers = true
                     // drop the marker itself
                 }
                 line.startsWith("#EXT-X-CUE-OUT") -> {
                     // Covers #EXT-X-CUE-OUT and #EXT-X-CUE-OUT-CONT.
-                    inAdBreak = true
-                    adSegmentsThisPod = 0
+                    if (!inAdBreak) {
+                        inAdBreak = true
+                        adSegmentsThisPod = 0
+                        consumedAdSeconds = 0.0
+                    }
+                    parseCueOutDuration(line)?.let { podDurationTarget = maxOf(podDurationTarget, it) }
                     sawAdMarkers = true
                 }
                 line.startsWith("#EXT-X-CUE-IN") -> {
-                    // Explicit end of an SCTE-style pod.
+                    // Explicit end of an SCTE-style pod — authoritative boundary.
                     if (inAdBreak) {
                         inAdBreak = false
+                        podDurationTarget = 0.0
                         appendSpliceDiscontinuity()
                     }
                 }
                 inAdBreak && line.startsWith("#EXT-X-DISCONTINUITY") -> {
-                    // The discontinuity right after the start marker (no ad
-                    // segments seen yet) opens the ad timeline — drop it. The
-                    // next discontinuity, once we've removed ad segments, is the
-                    // return-to-content boundary — that ends the pod.
-                    if (adSegmentsThisPod > 0) {
+                    // A discontinuity inside the pod. It ends the pod ONLY if
+                    // we've already removed ad segments AND consumed the declared
+                    // duration; otherwise it is either the opening boundary (no
+                    // segments yet) or an internal creative boundary (duration
+                    // not yet consumed) — drop it and keep stripping.
+                    if (adSegmentsThisPod > 0 && podDurationConsumed()) {
                         inAdBreak = false
+                        podDurationTarget = 0.0
                         appendSpliceDiscontinuity()
                     }
                 }
@@ -85,15 +135,23 @@ class ManifestRewriter {
                     // CUE-IN). Keep exactly one at the splice.
                     appendSpliceDiscontinuity()
                 }
+                inAdBreak && line.startsWith("#EXTINF") -> {
+                    // Remember this segment's declared duration so the following
+                    // URI line can count toward the pod's consumed seconds.
+                    pendingSegmentSeconds = parseExtinfSeconds(line) ?: DEFAULT_AD_SEGMENT_SECONDS
+                    // drop the tag (its URI is dropped below)
+                }
                 inAdBreak && line.startsWith("#") -> {
-                    // Per-segment ad tags inside the pod (#EXTINF,
-                    // #EXT-X-PROGRAM-DATE-TIME, extra DATERANGEs, …). Dropping
+                    // Other per-segment ad tags inside the pod
+                    // (#EXT-X-PROGRAM-DATE-TIME, extra DATERANGEs, …). Dropping
                     // them is what prevents an orphaned #EXTINF.
                 }
                 inAdBreak && line.isNotBlank() -> {
                     // Ad segment URI.
                     adSegmentsThisPod++
                     removedSegments++
+                    consumedAdSeconds += pendingSegmentSeconds
+                    pendingSegmentSeconds = DEFAULT_AD_SEGMENT_SECONDS
                 }
                 inAdBreak -> {
                     // Blank line inside the pod — swallow it.
@@ -107,6 +165,47 @@ class ManifestRewriter {
             adSegmentsRemoved = removedSegments,
             containedAds = sawAdMarkers || removedSegments > 0,
         )
+    }
+
+    private companion object {
+        // Twitch stitches ad segments at exactly 2.0s; used only as the fallback
+        // when an #EXTINF duration can't be parsed.
+        const val DEFAULT_AD_SEGMENT_SECONDS = 2.0
+        const val DURATION_EPSILON = 0.001
+
+        /**
+         * Playlist-level (not per-segment, not ad-related) tags that must never
+         * be stripped, even when the fail-safe treats the window as starting
+         * mid-ad-break. Order matters at the call site: this is checked before
+         * the discontinuity branches so #EXT-X-DISCONTINUITY-SEQUENCE (a header)
+         * isn't confused with #EXT-X-DISCONTINUITY (a content boundary).
+         */
+        fun isStructuralHeaderTag(line: String): Boolean =
+            line.startsWith("#EXTM3U") ||
+                line.startsWith("#EXT-X-VERSION") ||
+                line.startsWith("#EXT-X-TARGETDURATION") ||
+                line.startsWith("#EXT-X-MEDIA-SEQUENCE") ||
+                line.startsWith("#EXT-X-DISCONTINUITY-SEQUENCE") ||
+                line.startsWith("#EXT-X-PLAYLIST-TYPE") ||
+                line.startsWith("#EXT-X-INDEPENDENT-SEGMENTS") ||
+                line.startsWith("#EXT-X-ALLOW-CACHE") ||
+                line.startsWith("#EXT-X-START") ||
+                line.startsWith("#EXT-X-TWITCH")
+
+        fun parseExtinfSeconds(line: String): Double? =
+            // "#EXTINF:2.000,Amazon" -> 2.0
+            line.removePrefix("#EXTINF:").substringBefore(',').trim().toDoubleOrNull()
+
+        // Anchored on a ':'/',' boundary (mirrors LocalStreamProxy.streamInfAttr)
+        // so PLANNED-DURATION= is NOT matched as DURATION= — grabbing the planned
+        // value mis-anchors the pod length and over/under-strips.
+        fun parseDuration(line: String): Double? =
+            Regex("(?:^|[,:])DURATION=([0-9]*\\.?[0-9]+)").find(line)?.groupValues?.get(1)?.toDoubleOrNull()
+
+        fun parseCueOutDuration(line: String): Double? =
+            // "#EXT-X-CUE-OUT:30.000" or "#EXT-X-CUE-OUT:DURATION=30"
+            parseDuration(line)
+                ?: line.substringAfter(':', "").trim().toDoubleOrNull()
     }
 }
 

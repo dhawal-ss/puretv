@@ -36,7 +36,10 @@ class ChannelStatsViewModel(
 
     init {
         scope.launch {
-            val snap = statsRepository.snapshot(channelLogin)
+            // Audit U1: a transient network error from snapshot() must NOT throw out
+            // of this coroutine — that would leave the panel stuck on "LOADING…"
+            // forever (isLoading never flips). Guard the call and always clear the flag.
+            val snap = runCatching { statsRepository.snapshot(channelLogin) }.getOrNull()
             _state.update {
                 it.copy(snapshot = snap, history = historyStore.get(channelLogin), isLoading = false)
             }
@@ -51,7 +54,9 @@ class ChannelStatsViewModel(
     private suspend fun sampleLoop() {
         while (scope.isActive) {
             delay(SAMPLE_INTERVAL_MS)
-            val viewers = statsRepository.liveViewers(channelLogin)
+            // Audit U1: one failed poll must skip this tick, not kill the whole
+            // sampling loop for the rest of the session.
+            val viewers = runCatching { statsRepository.liveViewers(channelLogin) }.getOrNull()
             if (viewers != null) {
                 recordSample(viewers)
                 _state.update { st -> st.copy(snapshot = st.snapshot?.copy(isLive = true, viewerCount = viewers)) }

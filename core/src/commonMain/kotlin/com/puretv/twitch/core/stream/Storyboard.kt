@@ -44,13 +44,18 @@ object StoryboardParser {
 
     /** The tile to show for [positionSeconds] from [spec], images resolved against [baseUrl]. */
     fun tileAt(spec: StoryboardSpec, baseUrl: String, positionSeconds: Long): StoryboardTile {
-        val perImage = (spec.cols * spec.rows).coerceAtLeast(1)
+        // cols/rows/interval come from untrusted remote JSON; a 0 (or negative)
+        // value must not divide-by-zero when the user hovers the scrubber
+        // (audit P0-4). Coerce every divisor to a sane minimum.
+        val cols = spec.cols.coerceAtLeast(1)
+        val rows = spec.rows.coerceAtLeast(1)
+        val perImage = cols * rows
         val idx = (positionSeconds / spec.interval.coerceAtLeast(1)).toInt()
             .coerceIn(0, (spec.count - 1).coerceAtLeast(0))
         val imageIndex = (idx / perImage).coerceIn(0, (spec.images.size - 1).coerceAtLeast(0))
         val within = idx % perImage
-        val col = within % spec.cols
-        val row = within / spec.cols
+        val col = within % cols
+        val row = within / cols
         return StoryboardTile(
             imageUrl = "$baseUrl/${spec.images.getOrElse(imageIndex) { spec.images.firstOrNull().orEmpty() }}",
             srcXPx = col * spec.width,

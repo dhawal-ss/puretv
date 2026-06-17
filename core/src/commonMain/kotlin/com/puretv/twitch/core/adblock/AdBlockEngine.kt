@@ -98,7 +98,18 @@ class AdBlockEngine(
      * ~2 seconds). Cheap, synchronous, no network — pure text filtering so it
      * can run on the player's polling thread without adding latency.
      */
-    fun filterPlaylist(playlistContent: String): FilteredPlaylist = rewriter.filter(playlistContent)
+    fun filterPlaylist(playlistContent: String): FilteredPlaylist {
+        val filtered = rewriter.filter(playlistContent)
+        // Fail-safe (audit AD-1, Rule #5 "a stream playing with ads is a failure
+        // state"): detection sees an ad in this window but the normal pass
+        // stripped nothing — the pod's opening marker has scrolled out of the
+        // live window, so the leading segments are mid-pod ad content that would
+        // otherwise be served as content. Re-strip assuming we start mid-pod.
+        if (filtered.adSegmentsRemoved == 0 && AdMarkers.containsAds(playlistContent)) {
+            return rewriter.filter(playlistContent, assumeStartInAdBreak = true)
+        }
+        return filtered
+    }
 
     /**
      * Called by the transport layer (e.g. `LocalStreamProxy`) when stream

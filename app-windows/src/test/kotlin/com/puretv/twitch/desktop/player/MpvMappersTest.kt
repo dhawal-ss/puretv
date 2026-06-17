@@ -4,19 +4,7 @@ import com.puretv.twitch.core.model.UpscalingMode
 import kotlin.test.*
 
 class MpvMappersTest {
-    @Test fun offUsesBilinear() {
-        assertEquals("bilinear", mpvUpscaleArgs(UpscalingMode.OFF, "ignored")["scale"])
-        assertNull(mpvUpscaleArgs(UpscalingMode.OFF, "x")["glsl-shaders"])
-    }
-    @Test fun standardUsesEwa() {
-        assertEquals("ewa_lanczossharp", mpvUpscaleArgs(UpscalingMode.STANDARD, "x")["scale"])
-        assertNull(mpvUpscaleArgs(UpscalingMode.STANDARD, "x")["glsl-shaders"])
-    }
-    @Test fun animeAddsShader() {
-        val a = mpvUpscaleArgs(UpscalingMode.ANIME, "C:/s/anime.glsl")
-        assertEquals("ewa_lanczossharp", a["scale"])
-        assertEquals("C:/s/anime.glsl", a["glsl-shaders"])
-    }
+    // Scaler mapping moved to MpvScalerPropsTest (mpvScalerProps replaced mpvUpscaleArgs).
     @Test fun statusMapping() {
         val base = PlayerStatus()
         assertEquals(3000L, mpvApply(base, "time-pos", "3.0").positionMs)

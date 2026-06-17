@@ -25,10 +25,14 @@ import kotlin.random.Random
 /**
  * Thin wrapper over the Twitch Helix REST API.
  *
- * - [tokenProvider] supplies the current (auto-refreshing) user/app access token.
- *   The token interceptor in [buildKtorClient] re-fetches 5 minutes before expiry;
- *   this client only needs to read the latest cached value.
- * - 429 responses are retried with jittered exponential backoff via [withRateLimitRetry].
+ * - [tokenProvider] supplies the latest cached user/app access token (from the
+ *   platform's [TokenHolder]). This client does NOT itself refresh — token
+ *   refresh is the platform store's responsibility (desktop:
+ *   `DesktopSettingsStore.refreshIfNeeded`, invoked at app start). There is no
+ *   in-client refresh interceptor.
+ * - 429 responses are normalized to [RateLimitedException] by the client's
+ *   response validator and retried with jittered exponential backoff via
+ *   [withRateLimitRetry].
  */
 class TwitchApiClient(
     private val httpClient: HttpClient,

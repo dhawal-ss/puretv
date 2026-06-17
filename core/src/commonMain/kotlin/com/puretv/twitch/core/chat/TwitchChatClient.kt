@@ -10,14 +10,18 @@ import io.ktor.client.plugins.websocket.webSocket
 import io.ktor.websocket.Frame
 import io.ktor.websocket.close
 import io.ktor.websocket.readText
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.ClosedSendChannelException
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.random.Random
 
 /**
@@ -52,44 +56,70 @@ class TwitchChatClient(
      * ignored and an anonymous `justinfanNNNN` identity is used instead.
      */
     suspend fun connect(channel: String, token: String?, username: String? = null) {
-        currentChannel = channel.lowercase()
+        val newChannel = channel.lowercase()
+        val channelChanged = currentChannel != null && currentChannel != newChannel
+        currentChannel = newChannel
         connectionJob?.cancel()
+        // On a channel switch, drop any messages still queued for the previous
+        // channel so a reconnect doesn't deliver them to the new one (audit F3).
+        if (channelChanged) { while (outbox.tryReceive().isSuccess) { /* drain */ } }
         connectionJob = scope.launch {
-            try {
-                httpClient.webSocket(TwitchConfig.IRC_ENDPOINT) {
-                    _events.emit(ChatEvent.ConnectionState(connected = true))
+            var backoffMs = INITIAL_BACKOFF_MS
+            // Reconnect loop (audit P0-6): Twitch routinely drops idle/long-lived
+            // connections and issues RECONNECT. Without this, a dropped socket
+            // silently ended chat for the rest of the channel session.
+            while (isActive) {
+                try {
+                    httpClient.webSocket(TwitchConfig.IRC_ENDPOINT) {
+                        backoffMs = INITIAL_BACKOFF_MS // a healthy connect resets the backoff
+                        _events.emit(ChatEvent.ConnectionState(connected = true))
 
-                    send(Frame.Text("CAP REQ :twitch.tv/tags twitch.tv/commands twitch.tv/membership"))
-                    if (!token.isNullOrBlank() && !username.isNullOrBlank()) {
-                        send(Frame.Text("PASS oauth:$token"))
-                        send(Frame.Text("NICK ${username.lowercase()}"))
-                    } else {
-                        // Anonymous read-only — works even when token is present
-                        // but username hasn't been resolved yet.
-                        send(Frame.Text("NICK justinfan${Random.nextInt(10_000, 99_999)}"))
-                    }
-                    send(Frame.Text("JOIN #${currentChannel}"))
-
-                    // Outbound pump — respects the local token bucket (Gotcha #7).
-                    val sender = launch {
-                        for (raw in outbox) {
-                            rateLimiter.acquire()
-                            send(Frame.Text(raw))
+                        send(Frame.Text("CAP REQ :twitch.tv/tags twitch.tv/commands twitch.tv/membership"))
+                        if (!token.isNullOrBlank() && !username.isNullOrBlank()) {
+                            send(Frame.Text("PASS oauth:$token"))
+                            send(Frame.Text("NICK ${username.lowercase()}"))
+                        } else {
+                            // Anonymous read-only — works even when token is present
+                            // but username hasn't been resolved yet.
+                            send(Frame.Text("NICK justinfan${Random.nextInt(10_000, 99_999)}"))
                         }
-                    }
+                        send(Frame.Text("JOIN #$newChannel"))
 
-                    try {
-                        for (frame in incoming) {
-                            if (frame is Frame.Text) {
-                                handleRawIrcChunk(frame.readText()) { send(Frame.Text(it)) }
+                        // Outbound pump — respects the local token bucket (Gotcha #7).
+                        val sender = launch {
+                            for (raw in outbox) {
+                                rateLimiter.acquire()
+                                send(Frame.Text(raw))
                             }
                         }
-                    } finally {
-                        sender.cancel()
+
+                        try {
+                            while (isActive) {
+                                // Idle-timeout the read: Twitch PINGs ~every 5min, so no
+                                // frame for READ_IDLE_MS means a half-open socket (Wi-Fi
+                                // handoff, sleep/resume) — break to reconnect (audit F4).
+                                val frame = withTimeoutOrNull(READ_IDLE_MS) {
+                                    incoming.receiveCatching().getOrNull()
+                                } ?: break
+                                if (frame is Frame.Text) {
+                                    val reconnectRequested = handleRawIrcChunk(frame.readText()) { send(Frame.Text(it)) }
+                                    if (reconnectRequested) break
+                                }
+                            }
+                        } finally {
+                            sender.cancel()
+                        }
                     }
+                } catch (e: CancellationException) {
+                    throw e // disconnect()/scope cancellation — do NOT reconnect
+                } catch (e: Exception) {
+                    _events.emit(ChatEvent.ConnectionState(connected = false, reason = e.message))
                 }
-            } catch (e: Exception) {
-                _events.emit(ChatEvent.ConnectionState(connected = false, reason = e.message))
+                if (!isActive) break
+                // Socket dropped (clean close, RECONNECT, idle, or error) — back off and redial.
+                _events.emit(ChatEvent.ConnectionState(connected = false, reason = "reconnecting"))
+                delay(backoffMs + Random.nextLong(0, BACKOFF_JITTER_MS))
+                backoffMs = (backoffMs * 2).coerceAtMost(MAX_BACKOFF_MS)
             }
         }
     }
@@ -124,16 +154,30 @@ class TwitchChatClient(
 
     /**
      * IRC frames can arrive batched with `\r\n` separators — split, then
-     * dispatch each line through [TwitchIrcParser].
+     * dispatch each line through [TwitchIrcParser]. Returns true if Twitch sent
+     * a server-initiated `RECONNECT` (the caller should cycle the connection).
      */
-    private suspend fun handleRawIrcChunk(chunk: String, rawSend: suspend (String) -> Unit) {
+    private suspend fun handleRawIrcChunk(chunk: String, rawSend: suspend (String) -> Unit): Boolean {
+        var reconnectRequested = false
         chunk.split("\r\n").filter { it.isNotBlank() }.forEach { line ->
-            if (line.startsWith("PING")) {
-                rawSend(line.replaceFirst("PING", "PONG"))
-                return@forEach
+            when {
+                line.startsWith("PING") -> rawSend(line.replaceFirst("PING", "PONG"))
+                // Twitch tells us it's about to drop this socket — cycle proactively
+                // instead of waiting for the read to fail (audit P0-6).
+                line.startsWith("RECONNECT") -> reconnectRequested = true
+                else -> TwitchIrcParser.parse(line, currentChannel.orEmpty())?.let { _events.emit(it) }
             }
-            TwitchIrcParser.parse(line, currentChannel.orEmpty())?.let { _events.emit(it) }
         }
+        return reconnectRequested
+    }
+
+    private companion object {
+        const val INITIAL_BACKOFF_MS = 1_000L
+        const val MAX_BACKOFF_MS = 30_000L
+        const val BACKOFF_JITTER_MS = 500L
+        // > Twitch's ~5min server PING cadence, so a quiet-but-healthy channel
+        // isn't mistaken for a dead socket.
+        const val READ_IDLE_MS = 360_000L
     }
 }
 
@@ -215,7 +259,8 @@ object TwitchIrcParser {
         return when (command) {
             "PRIVMSG" -> buildMessageEvent(tags, prefix, trailing.orEmpty(), joinedChannel)?.let { ChatEvent.Message(it) }
             "USERNOTICE" -> ChatEvent.UserNotice(
-                systemMessage = tags["system-msg"]?.replace("\\s", " ").orEmpty(),
+                // system-msg is already IRCv3-unescaped by parseTags.
+                systemMessage = tags["system-msg"].orEmpty(),
                 raw = trailing?.let { buildMessageEvent(tags, prefix, it, joinedChannel) },
             )
             "CLEARCHAT" -> ChatEvent.ClearChat(
@@ -313,8 +358,41 @@ object TwitchIrcParser {
     }
 
     private fun parseTags(tagBlock: String): Map<String, String> =
+        // Split on the RAW ';' separator first (value semicolons arrive escaped as
+        // '\:'), then IRCv3-unescape each value exactly once at the source.
         tagBlock.split(';').filter { it.isNotBlank() }.associate {
             val idx = it.indexOf('=')
-            if (idx < 0) it to "" else it.substring(0, idx) to it.substring(idx + 1)
+            if (idx < 0) it to "" else it.substring(0, idx) to unescapeTagValue(it.substring(idx + 1))
         }
+
+    /**
+     * IRCv3 message-tag value unescaping (`\:`→`;`, `\s`→space, `\\`→`\`,
+     * `\r`→CR, `\n`→LF). Processed left-to-right so `\\s` stays a literal
+     * backslash + 's', not a space. Without this, reply quotes and USERNOTICE
+     * system messages render visible `\s`/`\:` mojibake for any multi-word value.
+     */
+    internal fun unescapeTagValue(value: String): String {
+        if (value.indexOf('\\') < 0) return value // fast path: nothing to unescape
+        val sb = StringBuilder(value.length)
+        var i = 0
+        while (i < value.length) {
+            val c = value[i]
+            if (c != '\\') {
+                sb.append(c)
+                i++
+                continue
+            }
+            if (i + 1 >= value.length) break // trailing lone backslash -> drop
+            when (value[i + 1]) {
+                ':' -> sb.append(';')
+                's' -> sb.append(' ')
+                '\\' -> sb.append('\\')
+                'r' -> sb.append('\r')
+                'n' -> sb.append('\n')
+                else -> sb.append(value[i + 1])
+            }
+            i += 2
+        }
+        return sb.toString()
+    }
 }

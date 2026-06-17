@@ -34,4 +34,34 @@ class EmoteIndexTest {
         assertEquals(setOf("ZW"), idx.keys)
         assertTrue(idx["ZW"]!!.zeroWidth)
     }
+
+    @Test fun includesFirstPartyTwitchEmotesWhenProvided() {
+        // Self-echo can't get a Twitch `emotes=` tag, so typed first-party emotes
+        // must be resolvable by name from the index.
+        val idx = buildEmoteIndex(
+            thirdPartyChannel = listOf(e("catJAM")),
+            thirdPartyGlobal = emptyList(),
+            twitchChannel = emptyList(),
+            twitchGlobal = listOf(e("Kappa", provider = EmoteProvider.TWITCH)),
+        )
+        assertEquals("u/catJAM", idx["catJAM"]?.url)
+        assertEquals("u/Kappa", idx["Kappa"]?.url)
+        assertEquals(EmoteProvider.TWITCH, idx["Kappa"]?.provider)
+    }
+
+    @Test fun thirdPartyWinsOverTwitchOnNameCollision() {
+        val idx = buildEmoteIndex(
+            thirdPartyChannel = listOf(e("DUP", url = "tp")),
+            thirdPartyGlobal = emptyList(),
+            twitchChannel = listOf(e("DUP", provider = EmoteProvider.TWITCH, url = "tw")),
+            twitchGlobal = emptyList(),
+        )
+        assertEquals("tp", idx["DUP"]?.url)
+    }
+
+    @Test fun existingThirdPartyOnlyCallsUnchanged() {
+        // Defaulted twitch params keep the incoming-message path third-party-only.
+        val idx = buildEmoteIndex(thirdPartyChannel = listOf(e("catJAM")), thirdPartyGlobal = emptyList())
+        assertEquals(setOf("catJAM"), idx.keys)
+    }
 }

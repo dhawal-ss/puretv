@@ -91,7 +91,7 @@ val desktopModule = module {
     // resolving the broadcaster's own userId/login via GET /users).
     factory { LoginViewModel(get(), get(), get(), get(), get()) }
     factory { (userId: String) -> VodListViewModel(userId, get()) }
-    factory { (launch: VodLaunch) -> VodPlayerViewModel(launch, get(), get(), get()) }
+    factory { (launch: VodLaunch) -> VodPlayerViewModel(launch, get(), get(), get(), get()) }
     factory { (vodId: String, channelLogin: String) -> VodChatViewModel(vodId, channelLogin, get(), get(), get(), get()) }
 }
 

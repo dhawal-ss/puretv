@@ -11,6 +11,21 @@ release notes automatically.
 
 ---
 
+## 1.8.0 - 2026-06-17
+
+GPU upscaling arrives, the emotes you type finally show up, and a big round of reliability and safety fixes under the hood.
+
+### New
+- **Sharper streams with your graphics card.** In the player's gear menu you can switch the playback engine to mpv and turn on GPU upscaling. Pick **Sharp** for live content (gaming, IRL, sports) or **Anime** for animation, **hold X** to instantly compare against off, and press **F3** to see exactly what's happening (source size, output size and the scaler in use). It's off by default — the classic player is untouched until you opt in.
+
+### Fixed
+- **Your own emotes show when you send them.** Emotes you type or pick — Twitch, BTTV, FFZ and 7TV — now appear (animated) in your own messages instead of as plain text.
+- **Settings no longer freezes the window.** Opening Settings while a stream was playing could briefly hang the whole app. That's gone.
+- **Cleaner chat.** Replies and channel notices no longer show stray characters like `\s` in the quoted text.
+- **Even fewer ads slip through.** Several edge cases where an ad could briefly play — or where a refresh could stutter — have been closed.
+- **Your saved data is safer.** Follows, watch progress and settings are now written so they can't be left half-finished or corrupted if the app or PC stops unexpectedly.
+- **Safer updates.** Update downloads are now locked to secure (HTTPS) connections.
+
 ## 1.7.2 - 2026-06-15
 
 Streams play again, chat gets Enter-to-send, and in-app updates install reliably.

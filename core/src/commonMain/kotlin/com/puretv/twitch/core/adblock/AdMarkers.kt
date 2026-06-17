@@ -15,6 +15,16 @@ package com.puretv.twitch.core.adblock
 object AdMarkers {
     const val SIGNIFIER = "stitched"
 
-    /** True if [playlist] (a media playlist) currently contains a stitched ad. */
-    fun containsAds(playlist: String): Boolean = playlist.contains(SIGNIFIER, ignoreCase = true)
+    /**
+     * All substrings whose presence flags an ad pod. `stitched` covers the
+     * DATERANGE `CLASS="twitch-stitched-ad"` format; `#EXT-X-CUE-OUT` covers the
+     * SCTE-35 bracket format that some edge nodes emit WITHOUT a `stitched`
+     * DATERANGE (audit AD-3: detection must agree with what [ManifestRewriter]
+     * actually strips, or a pure-SCTE pod is detected as clean and served raw).
+     */
+    val SIGNIFIERS: List<String> = listOf(SIGNIFIER, "#EXT-X-CUE-OUT")
+
+    /** True if [playlist] (a media playlist) currently contains an ad pod. */
+    fun containsAds(playlist: String): Boolean =
+        SIGNIFIERS.any { playlist.contains(it, ignoreCase = true) }
 }

@@ -12,12 +12,15 @@ import com.puretv.twitch.core.repository.StreamRepository
 import com.puretv.twitch.core.repository.UserRepository
 import com.puretv.twitch.core.stream.StreamResolver
 import com.puretv.twitch.core.stream.TwitchGqlClient
+import com.puretv.twitch.core.api.RateLimitedException
 import io.ktor.client.HttpClient
+import io.ktor.client.plugins.HttpResponseValidator
 import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.plugins.logging.LogLevel
 import io.ktor.client.plugins.logging.Logging
 import io.ktor.client.plugins.websocket.WebSockets
+import io.ktor.http.HttpStatusCode
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.json.Json
 import org.koin.dsl.module
@@ -89,6 +92,26 @@ fun buildKtorClient(engine: io.ktor.client.engine.HttpClientEngine): HttpClient 
     install(HttpTimeout) {
         requestTimeoutMillis = 15_000
         connectTimeoutMillis = 10_000
+        // A stalled server that sends headers then trickles/stops the body would
+        // otherwise hang a coroutine indefinitely between bytes (audit F9).
+        socketTimeoutMillis = 15_000
     }
-    install(Logging) { level = LogLevel.INFO }
+    // Audit F5: this single client carries the OAuth token endpoint
+    // (client_secret/refresh_token), Bearer/OAuth Authorization headers, AND the
+    // usher URL whose query string contains the SIGNED playback token+sig. Even
+    // at INFO, Ktor logs the request line — leaking the usher token URL into any
+    // captured log / bug report. For a privacy-first product, default to NONE;
+    // a maintainer can temporarily raise this locally while debugging.
+    install(Logging) { level = LogLevel.NONE }
+    // Audit F3: normalize Helix 429s into RateLimitedException so
+    // TwitchApiClient.withRateLimitRetry actually engages. Without this a 429
+    // body deserializes to an empty HelixEnvelope (data defaults to []), so
+    // rate-limited calls silently returned no results and never backed off.
+    HttpResponseValidator {
+        validateResponse { response ->
+            if (response.status == HttpStatusCode.TooManyRequests) {
+                throw RateLimitedException(response.headers["Ratelimit-Reset"]?.toLongOrNull())
+            }
+        }
+    }
 }

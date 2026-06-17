@@ -66,6 +66,20 @@ class LocalStreamProxy(
         /** Builds the URL VLCJ should be pointed at for [channelLogin]/[quality]. */
         fun streamUrl(channelLogin: String, quality: StreamQuality = StreamQuality.AUTO): String =
             "http://localhost:$PORT/stream?channel=$channelLogin&quality=${quality.name}"
+
+        /**
+         * The /variant route fetches an upstream URL on the player's behalf, so
+         * restrict it to the Twitch HLS CDN — otherwise it is an open localhost
+         * proxy (SSRF): any local process or a crafted page could hit
+         * `http://127.0.0.1:7979/variant?url=http://169.254.169.254/...` and use
+         * the app as a confused-deputy fetcher. Twitch variant media playlists
+         * are always served from *.ttvnw.net (video-edge-*.abs.hls.ttvnw.net /
+         * usher.ttvnw.net), so this allowlist never blocks real playback.
+         */
+        fun isAllowedVariantHost(url: String): Boolean {
+            val host = runCatching { java.net.URI(url).host }.getOrNull()?.lowercase() ?: return false
+            return host == "ttvnw.net" || host.endsWith(".ttvnw.net")
+        }
     }
 
     // Ktor 3: embeddedServer { }.start() returns EmbeddedServer (engine-typed),
@@ -216,6 +230,12 @@ class LocalStreamProxy(
                     val originalUrl = runCatching { URLDecoder.decode(encoded, StandardCharsets.UTF_8) }.getOrNull()
                     if (originalUrl.isNullOrBlank() || !originalUrl.startsWith("http")) {
                         call.respondText("Invalid 'url' query parameter", status = HttpStatusCode.BadRequest)
+                        return@get
+                    }
+                    // SSRF guard: only proxy the Twitch HLS CDN, never an
+                    // arbitrary host supplied via ?url= (see isAllowedVariantHost).
+                    if (!isAllowedVariantHost(originalUrl)) {
+                        call.respondText("Disallowed upstream host", status = HttpStatusCode.Forbidden)
                         return@get
                     }
                     val channel = call.request.queryParameters["channel"].orEmpty()

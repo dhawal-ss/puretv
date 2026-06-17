@@ -12,6 +12,11 @@ services:
       - "8080:8080"
     environment:
       PORT: "8080"
+      # The server now defaults to binding loopback (127.0.0.1) so it isn't an
+      # open relay on a multi-homed host. This is the DELIBERATELY-public Docker
+      # deployment, so bind all interfaces inside the container (the host still
+      # controls real exposure via the `ports:` mapping / your reverse proxy).
+      BIND_ADDR: "0.0.0.0"
       # Uncomment to override the upstream User-Agent sent to Twitch's CDN:
       # UPSTREAM_USER_AGENT: "Mozilla/5.0 ..."
     # NOTE: no `healthcheck:` block — the runtime image is built `FROM scratch`
