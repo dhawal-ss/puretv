@@ -54,7 +54,7 @@ fun FollowedRail(
     modifier: Modifier = Modifier,
 ) {
     val c = PureTvTheme.colors
-    Column(modifier = modifier.fillMaxWidth().fillMaxHeight()) {
+    Column(modifier = modifier.fillMaxWidth()) {
         Box(Modifier.fillMaxWidth().padding(horizontal = 8.dp).height(1.dp).background(c.hairline))
         Spacer(Modifier.height(12.dp))
 
@@ -77,15 +77,19 @@ fun FollowedRail(
         Spacer(Modifier.height(6.dp))
 
         Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
-            if (state.live.isEmpty()) {
-                Text(
-                    "No followed channels live",
-                    color = c.textMuted,
-                    modifier = Modifier.padding(horizontal = 18.dp, vertical = 6.dp),
-                )
-            } else {
-                // forEach (not LazyColumn) is fine for realistic follow counts; revisit with a LazyColumn if offline lists grow very large (Twitch allows up to ~2000 follows).
-                state.live.forEach { FollowRowItem(it, onClick = { onOpenChannel(it.login) }) }
+            val noData = state.live.isEmpty() && state.offline.isEmpty()
+            when {
+                // Distinguish first-load-in-flight and load-failure from a genuinely
+                // empty follow list, so neither is mistaken for "nobody's live".
+                state.isLoading && noData ->
+                    Text("Loading…", color = c.textMuted, modifier = Modifier.padding(horizontal = 18.dp, vertical = 6.dp))
+                state.errored && noData ->
+                    Text("Couldn't load follows", color = c.textMuted, modifier = Modifier.padding(horizontal = 18.dp, vertical = 6.dp))
+                state.live.isEmpty() ->
+                    Text("No followed channels live", color = c.textMuted, modifier = Modifier.padding(horizontal = 18.dp, vertical = 6.dp))
+                else ->
+                    // forEach (not LazyColumn) is fine for realistic follow counts; revisit with a LazyColumn if offline lists grow very large (Twitch allows up to ~2000 follows).
+                    state.live.forEach { FollowRowItem(it, onClick = { onOpenChannel(it.login) }) }
             }
 
             if (state.offline.isNotEmpty()) {
