@@ -10,6 +10,14 @@ interface FollowedChannelsSource {
      * @param localPins extra channels to union in (desktop's local "Following" list).
      */
     suspend fun load(userId: String, localPins: List<FollowedRef>): FollowedList
+
+    /**
+     * Drop any cached profile data. Call on sign-out so that a different account
+     * signing in within the same process never reuses the previous user's cached
+     * profiles. (Follow membership is never cached — only avatar/display-name by
+     * login — so this is defensive hygiene, not a correctness requirement.)
+     */
+    fun clear()
 }
 
 /**
@@ -50,5 +58,9 @@ class FollowedChannelsService(private val api: TwitchApiClient) : FollowedChanne
         }
 
         return buildFollowedList(refs, live, profileCache.toMap())
+    }
+
+    override fun clear() {
+        profileCache.clear()
     }
 }
