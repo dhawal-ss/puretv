@@ -1,5 +1,10 @@
 package com.puretv.twitch.desktop.ui.components
 
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.hoverable
@@ -10,7 +15,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -18,6 +22,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ExpandLess
@@ -81,8 +86,7 @@ fun FollowedRail(
             when {
                 // Distinguish first-load-in-flight and load-failure from a genuinely
                 // empty follow list, so neither is mistaken for "nobody's live".
-                state.isLoading && noData ->
-                    Text("Loading…", color = c.textMuted, modifier = Modifier.padding(horizontal = 18.dp, vertical = 6.dp))
+                state.isLoading && noData -> LoadingSkeleton()
                 state.errored && noData ->
                     Text("Couldn't load follows", color = c.textMuted, modifier = Modifier.padding(horizontal = 18.dp, vertical = 6.dp))
                 state.live.isEmpty() ->
@@ -166,6 +170,37 @@ private fun FollowRowItem(row: FollowRow, onClick: () -> Unit) {
             LiveDot(size = 6.dp)
             Spacer(Modifier.width(5.dp))
             Text(formatViewerCount(row.viewerCount), color = c.textSecondary, style = PureTvType.dataSmall)
+        }
+    }
+}
+
+/**
+ * Placeholder rows shown while the first load is in flight, so the rail visibly reads
+ * as "working" rather than empty. A gentle alpha pulse signals activity.
+ */
+@Composable
+private fun LoadingSkeleton(rows: Int = 5) {
+    val c = PureTvTheme.colors
+    val transition = rememberInfiniteTransition(label = "followed-skeleton")
+    val alpha by transition.animateFloat(
+        initialValue = 0.3f,
+        targetValue = 0.65f,
+        animationSpec = infiniteRepeatable(tween(750), RepeatMode.Reverse),
+        label = "skeleton-alpha",
+    )
+    Column {
+        repeat(rows) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 5.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(9.dp),
+            ) {
+                Box(Modifier.size(18.dp).clip(CircleShape).background(c.textMuted.copy(alpha = alpha)))
+                Box(
+                    Modifier.weight(1f).height(10.dp).clip(RoundedCornerShape(4.dp))
+                        .background(c.textMuted.copy(alpha = alpha)),
+                )
+            }
         }
     }
 }

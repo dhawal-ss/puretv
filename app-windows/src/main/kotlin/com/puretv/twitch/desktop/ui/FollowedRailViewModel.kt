@@ -37,7 +37,7 @@ class FollowedRailViewModel(
 
     fun toggleOffline() = _state.update { it.copy(offlineExpanded = !it.offlineExpanded) }
 
-    /** Suspending single load — also the test entry point. */
+    /** Suspending single load. Also the test entry point. */
     internal suspend fun loadOnce() {
         val userId = loggedInUserId()
         if (userId.isNullOrBlank()) {
@@ -48,8 +48,14 @@ class FollowedRailViewModel(
             return
         }
         _state.update { it.copy(isLoggedIn = true, isLoading = it.live.isEmpty() && it.offline.isEmpty()) }
-        runCatching { source.load(userId, localPins()) }
-            .onSuccess { list -> _state.update { it.copy(isLoading = false, errored = false, live = list.live, offline = list.offline) } }
+        runCatching {
+            source.load(userId, localPins()) { live ->
+                // Fast partial: live channels are in (avatars may still be loading). Drop
+                // the loading state now so the list appears without waiting on avatars.
+                _state.update { it.copy(isLoading = false, errored = false, live = live.live, offline = live.offline) }
+            }
+        }
+            .onSuccess { full -> _state.update { it.copy(isLoading = false, errored = false, live = full.live, offline = full.offline) } }
             .onFailure { _state.update { it.copy(isLoading = false, errored = true) } }
     }
 }
