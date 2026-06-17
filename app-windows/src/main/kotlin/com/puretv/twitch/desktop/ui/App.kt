@@ -82,6 +82,7 @@ import com.puretv.twitch.desktop.ui.theme.PureTvType
 import com.puretv.twitch.desktop.ui.theme.ThemeVariant
 import java.awt.MouseInfo
 import java.awt.Window as AwtWindow
+import kotlinx.coroutines.delay
 import org.koin.core.Koin
 
 enum class Destination(val label: String, val icon: ImageVector) {
@@ -413,11 +414,14 @@ private fun NavigationSidebar(
     val railState by railVm.state.collectAsState()
     val windowInfo = LocalWindowInfo.current
 
-    // Focus-aware poll: initial load + every 60s while the window is focused.
+    // Load once on first composition (regardless of focus, so a cold start that
+    // opens unfocused/behind another window still populates), then poll every 60s
+    // but only while the window is focused.
     LaunchedEffect(Unit) {
+        railVm.refresh()
         while (true) {
+            delay(60_000)
             if (windowInfo.isWindowFocused) railVm.refresh()
-            kotlinx.coroutines.delay(60_000)
         }
     }
 
