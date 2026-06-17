@@ -71,7 +71,7 @@ class FollowedChannelsServiceTest {
         }
         val service = FollowedChannelsService(TwitchApiClient(client) { "token" })
 
-        val result = service.load("user123", localPins = emptyList())
+        val result = service.load("user123", localPins = emptyList()) {}
 
         assertEquals(3, result.live.size, "3 followed channels are live")
         assertEquals(117, result.offline.size, "the rest are offline")
@@ -99,7 +99,7 @@ class FollowedChannelsServiceTest {
 
         // "C0" duplicates the remote follow (case-insensitive); "pinonly" is new.
         val pins = listOf(FollowedRef("id_C0", "C0", "C0"), FollowedRef("id_pinonly", "pinonly", "PinOnly"))
-        val result = service.load("user123", localPins = pins)
+        val result = service.load("user123", localPins = pins) {}
 
         val allLogins = (result.live + result.offline).map { it.login.lowercase() }
         assertEquals(2, allLogins.size, "c0 deduped; pinonly added")
@@ -125,8 +125,8 @@ class FollowedChannelsServiceTest {
         }
         val service = FollowedChannelsService(TwitchApiClient(client) { "token" })
 
-        service.load("user123", localPins = emptyList())          // first load populates the profile cache
-        val second = service.load("user123", localPins = emptyList())
+        service.load("user123", localPins = emptyList()) {}          // first load populates the profile cache
+        val second = service.load("user123", localPins = emptyList()) {}
 
         assertEquals(1, userCalls, "profiles are cached: the second load must not re-fetch /users")
         // The cached profile is still applied on the second pass.
@@ -152,10 +152,35 @@ class FollowedChannelsServiceTest {
         }
         val service = FollowedChannelsService(TwitchApiClient(client) { "token" })
 
-        service.load("user123", localPins = emptyList())   // caches c0's profile
+        service.load("user123", localPins = emptyList()) {}   // caches c0's profile
         service.clear()                                     // sign-out drops the cache
-        service.load("user123", localPins = emptyList())    // must re-fetch
+        service.load("user123", localPins = emptyList()) {}    // must re-fetch
 
         assertEquals(2, userCalls, "clear() must drop the cache so the next load re-fetches /users")
+    }
+
+    @Test fun emitsLiveBeforeAvatarsThenEnriches() = runTest {
+        val engine = MockEngine { request ->
+            val url = request.url
+            when {
+                url.encodedPath.endsWith("/channels/followed") -> respond(followsPage(listOf("c0"), null), HttpStatusCode.OK, jsonHeaders)
+                url.encodedPath.endsWith("/streams") -> respond(streamsFor(url.parameters.getAll("user_login").orEmpty()), HttpStatusCode.OK, jsonHeaders)
+                url.encodedPath.endsWith("/users") -> respond(usersFor(url.parameters.getAll("id").orEmpty()), HttpStatusCode.OK, jsonHeaders)
+                else -> respond("", HttpStatusCode.NotFound)
+            }
+        }
+        val client = HttpClient(engine) {
+            install(ContentNegotiation) { json(Json { ignoreUnknownKeys = true }) }
+        }
+        val service = FollowedChannelsService(TwitchApiClient(client) { "token" })
+
+        var partial: FollowedList? = null
+        val full = service.load("user123", localPins = emptyList()) { partial = it }
+
+        // The fast partial has the live channel but no avatar yet (profiles not resolved).
+        assertEquals(listOf("c0"), partial?.live?.map { it.login })
+        assertEquals(null, partial?.live?.first()?.avatarUrl)
+        // The final result has the avatar enriched.
+        assertEquals("http://a/c0.png", full.live.first().avatarUrl)
     }
 }

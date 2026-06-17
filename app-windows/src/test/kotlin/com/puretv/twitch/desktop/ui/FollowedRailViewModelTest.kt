@@ -13,9 +13,10 @@ import kotlin.test.assertTrue
 private class FakeSource(var result: FollowedList, var fail: Boolean = false) : FollowedChannelsSource {
     var calls = 0
     var clears = 0
-    override suspend fun load(userId: String, localPins: List<FollowedRef>): FollowedList {
+    override suspend fun load(userId: String, localPins: List<FollowedRef>, onLive: (FollowedList) -> Unit): FollowedList {
         calls++
         if (fail) throw RuntimeException("boom")
+        onLive(result)
         return result
     }
     override fun clear() { clears++ }
