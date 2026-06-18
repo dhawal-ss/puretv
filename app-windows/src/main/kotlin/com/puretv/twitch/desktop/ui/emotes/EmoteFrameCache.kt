@@ -72,7 +72,13 @@ class EmoteFrameCache(
         val bytes = withContext(Dispatchers.IO) {
             runCatching { httpClient.get(url).body<ByteArray>() }.getOrNull()
         } ?: return null
-        val decoded = decodeAnimatedFrames(bytes)
+        // The Skia decode is CPU-bound and MUST run off the EDT. frames() is called from
+        // AnimatedEmote's LaunchedEffect, whose dispatcher on Compose Desktop is the main
+        // (EDT) dispatcher, so decoding inline here ran on the UI thread. Combined with the
+        // 2-arg readPixels (which recursively re-decodes each frame's required-frame chain,
+        // O(n^2)), a large multi-frame emote burned tens of seconds of EDT CPU and froze the
+        // whole window. Default = the CPU thread pool.
+        val decoded = withContext(Dispatchers.Default) { decodeAnimatedFrames(bytes) }
         synchronized(lock) {
             if (cache.containsKey(url)) {
                 // Another coroutine won the race and cached an equivalent result; drop ours.
