@@ -11,6 +11,21 @@ release notes automatically.
 
 ---
 
+## 1.9.1 - 2026-06-18
+
+Fixes a freeze with animated emotes, makes the followed list load faster with clearer feedback, and toughens up your saved data.
+
+### Fixed
+- **The app no longer freezes on busy chat.** A large animated emote could lock up the whole window for a while. The decoding was happening on the wrong thread; it now runs in the background, so chat stays smooth no matter how many emotes are flying.
+- **One network blip no longer empties your "Live now" list.** If a single part of the followed-channels load failed, the whole rail used to come back empty. Now the parts that succeed still show up.
+- **Browse, Search and category pages tell you when something went wrong.** Instead of looking empty, as if there were nothing there, they show a short message with a Retry button when the network is the problem.
+
+### Improved
+- **The followed sidebar gives you feedback the moment you sign in.** You now see a loading bar and placeholder rows right away, then your live channels stream in, instead of the list sitting blank until the next refresh.
+- **Animated emotes load faster.** Large animated emotes decode a lot quicker and use less memory.
+- **You see who's live sooner.** Live channels show up first and their avatars fill in right after, so you're not waiting on profile pictures to find out who's streaming.
+- **Your saved data is harder to lose.** If a follows, history or settings file ever gets damaged, PureTV sets the bad copy aside and keeps going instead of silently wiping it, and it closes cleanly without hanging on the way out.
+
 ## 1.8.1 - 2026-06-17
 
 Makes in-app updates reliable and self-explaining.
