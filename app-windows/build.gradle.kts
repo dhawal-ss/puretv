@@ -12,7 +12,7 @@ plugins {
 // ── App version (single source of truth) ─────────────────────────────────────
 // Drives both the MSI `packageVersion` AND the generated AppBuildConfig the
 // in-app updater compares against GitHub Releases — so the two can never drift.
-val appVersion = "1.9.1"
+val appVersion = "1.9.2"
 
 val generateAppBuildConfig by tasks.registering {
     val outDir = layout.buildDirectory.dir("generated/buildconfig/kotlin")
@@ -251,7 +251,11 @@ compose.desktop {
         //  - string dedup (chat produces many duplicate short strings).
         jvmArgs += listOf(
             "-Xms256m",
-            "-Xmx1024m",
+            // 1536m (was 1024m): leaves headroom for the in-app updater, which Ed25519-verifies
+            // the ~170MB installer. Pure Ed25519 buffers the whole message internally, so verify
+            // needs a couple hundred MB transient on top of the running UI's working set; at
+            // 1024m that tipped over into OutOfMemoryError mid-update. Native VLC/mpv is off-heap.
+            "-Xmx1536m",
             "-XX:+UseG1GC",
             "-XX:MaxGCPauseMillis=50",
             "-XX:+UseStringDeduplication",

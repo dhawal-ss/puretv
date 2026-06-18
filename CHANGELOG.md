@@ -11,6 +11,15 @@ release notes automatically.
 
 ---
 
+## 1.9.2 - 2026-06-18
+
+Fixes in-app updates that could fail with an out-of-memory error.
+
+### Fixed
+- **In-app updates no longer fail with an "out of memory" error.** When checking a downloaded update, PureTV used to load the whole installer into memory at once. On a busy session that could run the app out of room and stop the update, even though the download itself was perfectly fine. It now reads the file in small pieces and runs with more memory headroom, so updates install reliably.
+
+If your current version keeps failing to update with that memory error, this is the one update you'll want to install by hand: download the installer below and run it once, and after that in-app updates work normally again.
+
 ## 1.9.1 - 2026-06-18
 
 Fixes a freeze with animated emotes, makes the followed list load faster with clearer feedback, and toughens up your saved data.
