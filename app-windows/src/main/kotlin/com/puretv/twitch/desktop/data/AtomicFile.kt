@@ -29,6 +29,39 @@ internal object AtomicFile {
     fun writeTextAtomically(file: File, text: String) =
         writeBytesAtomically(file, text.toByteArray(StandardCharsets.UTF_8))
 
+    /**
+     * Move an unparseable file aside before the lenient loaders fall back to empty.
+     *
+     * Audit F3: the atomic writer makes a *torn* file unlikely, but a file can still be
+     * unreadable for other reasons (a half-written file from a pre-atomic app version
+     * already on disk, a manual edit, bit-rot, or a future serialization-incompatible
+     * change). When [decode] throws, the stores reset to empty AND the very next mutation
+     * atomically overwrites the bad file — turning a *recoverable* corruption into
+     * *permanent, silent* loss of the user's follows / history / progress.
+     *
+     * Renaming the bad bytes to a `<name>.corrupt-<epochMillis>` sidecar preserves them
+     * for manual/automated recovery and stops the next write from destroying them. The
+     * sidecar name is made unique so a same-millisecond second corruption can't clobber
+     * an earlier quarantine. Best-effort: returns the sidecar path, or null if nothing
+     * was moved (file absent, or the rename failed — in which case the old fallback of
+     * resetting to empty still applies).
+     */
+    fun quarantineCorrupt(file: File): File? {
+        if (!file.exists()) return null
+        val base = "${file.name}.corrupt-${System.currentTimeMillis()}"
+        var dest = File(file.parentFile, base)
+        var n = 1
+        while (dest.exists()) dest = File(file.parentFile, "$base-${n++}")
+        return runCatching {
+            try {
+                Files.move(file.toPath(), dest.toPath(), StandardCopyOption.ATOMIC_MOVE)
+            } catch (e: AtomicMoveNotSupportedException) {
+                Files.move(file.toPath(), dest.toPath())
+            }
+            dest
+        }.getOrNull()
+    }
+
     fun writeBytesAtomically(file: File, bytes: ByteArray) {
         val dir = file.parentFile
         dir?.mkdirs()

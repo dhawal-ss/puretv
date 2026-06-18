@@ -115,6 +115,8 @@ import com.puretv.twitch.desktop.ui.theme.PureTvTheme
 import com.puretv.twitch.desktop.ui.theme.PureTvType
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import org.koin.core.Koin
 import org.koin.core.parameter.parametersOf
@@ -146,7 +148,17 @@ fun StreamContent(koin: Koin, channelLogin: String, onBack: () -> Unit, onReques
     val state by viewModel.state.collectAsState()
     val isFollowed by viewModel.isFollowed.collectAsState()
     val vlcPlayer = remember { koin.get<DesktopPlayer>() }
-    val playerStatus by vlcPlayer.status.collectAsState()
+    // The live screen never reads positionMs/durationMs, yet the backend emits a new
+    // PlayerStatus on every time tick (VLC ~4Hz, mpv several Hz). Collecting the raw
+    // flow here would recompose the ENTIRE screen — including the 200-row chat
+    // LazyColumn — on every tick (the dominant playback-stutter cause). Project away
+    // the volatile position fields and de-dup, so this screen recomposes only on a
+    // change it actually shows (play/buffer/volume/mute/error).
+    val playerStatus by remember(vlcPlayer) {
+        vlcPlayer.status
+            .map { it.copy(positionMs = 0L, durationMs = 0L) }
+            .distinctUntilChanged()
+    }.collectAsState(initial = vlcPlayer.status.value.copy(positionMs = 0L, durationMs = 0L))
     val settingsStore = remember { koin.get<DesktopSettingsStore>() }
     val appSettings by settingsStore.settings.collectAsState()
     val shell = LocalAppShell.current
@@ -311,6 +323,14 @@ fun StreamContent(koin: Koin, channelLogin: String, onBack: () -> Unit, onReques
                     contentAlignment = Alignment.Center,
                 ) {
                     when {
+                        // A stream-level fatal error (e.g. the local proxy port is in use)
+                        // takes priority — the player never even got a URL, so show the
+                        // explanation instead of an endless "Loading…".
+                        state.fatalError != null -> Text(
+                            state.fatalError!!,
+                            color = c.textSecondary,
+                            modifier = Modifier.padding(24.dp),
+                        )
                         // Surface a player error whenever nothing is actively playing —
                         // covers an unavailable engine (e.g. "switch back to VLC"), an
                         // mpv init failure, and a failed stream start (bad URL). The

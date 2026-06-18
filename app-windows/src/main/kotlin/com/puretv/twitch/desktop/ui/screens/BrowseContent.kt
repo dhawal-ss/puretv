@@ -73,16 +73,24 @@ fun BrowseContent(koin: Koin, onOpenCategory: (gameId: String, gameName: String)
             }
         }
 
-        if (state.games.isEmpty()) {
-            fullSpan {
+        when {
+            state.error != null -> fullSpan {
                 EditorialEmptyState(
                     kicker = "Categories",
-                    title = "Nothing to browse yet",
-                    message = "Top categories will appear here in a moment.",
+                    title = "Couldn't load categories",
+                    message = state.error!!,
+                    actionLabel = "Retry",
+                    onAction = { viewModel.load() },
                 )
             }
-        } else {
-            items(state.games, key = { it.id }) { game ->
+            state.games.isEmpty() -> fullSpan {
+                EditorialEmptyState(
+                    kicker = "Categories",
+                    title = if (state.isLoading) "Loading categories…" else "Nothing to browse yet",
+                    message = if (state.isLoading) "Fetching the top categories." else "Top categories will appear here in a moment.",
+                )
+            }
+            else -> items(state.games, key = { it.id }) { game ->
                 GameTile(
                     name = game.name,
                     boxArtUrl = game.boxArtUrl,

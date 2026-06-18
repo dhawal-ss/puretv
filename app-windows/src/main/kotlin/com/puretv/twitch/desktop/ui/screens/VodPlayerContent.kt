@@ -89,6 +89,8 @@ import com.puretv.twitch.desktop.ui.theme.PureTvTheme
 import com.puretv.twitch.desktop.ui.theme.PureTvType
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import org.koin.core.Koin
 import org.koin.core.parameter.parametersOf
@@ -106,7 +108,16 @@ import java.awt.event.KeyEvent
 fun VodPlayerContent(koin: Koin, launch: VodLaunch, onBack: () -> Unit) {
     val viewModel = rememberDesktopViewModel(launch.vodId) { koin.get<VodPlayerViewModel> { parametersOf(launch) } }
     val state by viewModel.state.collectAsState()
-    val status by viewModel.status.collectAsState()
+    // Only the error branch below reads `status` at this level; the position slider
+    // lives in VodControls, which collects the full status itself. Project away the
+    // volatile position fields + de-dup so the per-second time ticks don't recompose
+    // this whole screen (including the chat-replay LazyColumn) — the dominant VOD
+    // stutter. VodControls remains the one place that sees the live position.
+    val status by remember(viewModel) {
+        viewModel.status
+            .map { it.copy(positionMs = 0L, durationMs = 0L) }
+            .distinctUntilChanged()
+    }.collectAsState(initial = viewModel.status.value.copy(positionMs = 0L, durationMs = 0L))
     val chatViewModel = rememberDesktopViewModel(launch.vodId) { koin.get<VodChatViewModel> { parametersOf(launch.vodId, launch.channelLogin) } }
     val chatMessages by chatViewModel.messages.collectAsState()
     val settingsStore = remember { koin.get<DesktopSettingsStore>() }

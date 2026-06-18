@@ -102,6 +102,17 @@ fun SearchContent(koin: Koin, onOpenChannel: (String) -> Unit) {
         }
 
         when {
+            state.error != null -> {
+                EditorialEmptyState(
+                    kicker = "Search",
+                    title = "Search failed",
+                    message = state.error!!,
+                    actionLabel = "Retry",
+                    onAction = { viewModel.retry() },
+                    modifier = Modifier.padding(top = 24.dp),
+                )
+            }
+
             state.isSearching -> {
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(top = 32.dp),
@@ -187,7 +198,7 @@ private fun SearchResultRow(result: ChannelSearchResult, onClick: () -> Unit) {
         }
 
         // Right-aligned status. No viewer count exists on the search model,
-        // so live shows a LIVE marker and offline shows a muted em dash.
+        // so live shows a LIVE marker and offline shows a muted dot.
         if (result.is_live) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -199,7 +210,7 @@ private fun SearchResultRow(result: ChannelSearchResult, onClick: () -> Unit) {
             }
         } else {
             Text(
-                "—",
+                "·",
                 style = PureTvType.data,
                 color = c.textMuted,
                 modifier = Modifier.padding(start = 16.dp),

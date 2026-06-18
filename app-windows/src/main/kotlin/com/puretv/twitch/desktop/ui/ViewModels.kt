@@ -34,6 +34,7 @@ import com.puretv.twitch.desktop.data.DesktopSettingsStore
 import com.puretv.twitch.desktop.data.FollowStore
 import com.puretv.twitch.desktop.data.FollowedChannel
 import com.puretv.twitch.desktop.player.LocalStreamProxy
+import com.puretv.twitch.desktop.player.ProxyUnavailableException
 import com.puretv.twitch.desktop.player.DesktopPlayer
 import com.puretv.twitch.desktop.ui.chat.buildSelfEcho
 import io.ktor.client.HttpClient
@@ -165,16 +166,27 @@ class HomeViewModel(
 
 // ---- Browse ------------------------------------------------------------------
 
-data class BrowseUiState(val games: List<GameInfo> = emptyList())
+data class BrowseUiState(
+    val games: List<GameInfo> = emptyList(),
+    val isLoading: Boolean = true,
+    /** Non-null when the load failed — lets the screen show an error + Retry instead of
+     *  an empty grid that's indistinguishable from "no categories". */
+    val error: String? = null,
+)
 
 class BrowseViewModel(private val channelRepository: ChannelRepository) : DesktopViewModel() {
     private val _state = MutableStateFlow(BrowseUiState())
     val state: StateFlow<BrowseUiState> = _state.asStateFlow()
 
-    init {
+    init { load() }
+
+    /** (Re)load the category grid. Public so the screen's Retry button can call it. */
+    fun load() {
         scope.launch {
+            _state.update { it.copy(isLoading = true, error = null) }
             runCatching { channelRepository.topGames() }
-                .onSuccess { games -> _state.update { it.copy(games = games) } }
+                .onSuccess { games -> _state.update { it.copy(games = games, isLoading = false, error = null) } }
+                .onFailure { _state.update { it.copy(isLoading = false, error = "Couldn't load categories. Check your connection and try again.") } }
         }
     }
 }
@@ -185,6 +197,9 @@ data class CategoryUiState(
     val gameName: String = "",
     val streams: List<StreamInfo> = emptyList(),
     val isLoading: Boolean = true,
+    /** Non-null when the load failed — distinguishes a network error from "this category
+     *  genuinely has no live streams right now". */
+    val error: String? = null,
 )
 
 /**
@@ -200,10 +215,15 @@ class CategoryViewModel(
     private val _state = MutableStateFlow(CategoryUiState(gameName = gameName, isLoading = true))
     val state: StateFlow<CategoryUiState> = _state.asStateFlow()
 
-    init {
+    init { load() }
+
+    /** (Re)load this category's live streams. Public so the screen's Retry button can call it. */
+    fun load() {
         scope.launch {
-            val streams = runCatching { streamRepository.streamsForGame(gameId) }.getOrDefault(emptyList())
-            _state.update { it.copy(streams = streams, isLoading = false) }
+            _state.update { it.copy(isLoading = true, error = null) }
+            runCatching { streamRepository.streamsForGame(gameId) }
+                .onSuccess { streams -> _state.update { it.copy(streams = streams, isLoading = false, error = null) } }
+                .onFailure { _state.update { it.copy(isLoading = false, error = "Couldn't load this category. Check your connection and try again.") } }
         }
     }
 }
@@ -214,6 +234,9 @@ data class SearchUiState(
     val query: String = "",
     val results: List<ChannelSearchResult> = emptyList(),
     val isSearching: Boolean = false,
+    /** Non-null when the search request failed — lets the screen say "search failed" with
+     *  a Retry rather than showing the same blank as "no matches". */
+    val error: String? = null,
 )
 
 class SearchViewModel(private val channelRepository: ChannelRepository) : DesktopViewModel() {
@@ -223,15 +246,19 @@ class SearchViewModel(private val channelRepository: ChannelRepository) : Deskto
     fun onQueryChange(query: String) {
         _state.update { it.copy(query = query) }
         if (query.length < 2) {
-            _state.update { it.copy(results = emptyList(), isSearching = false) }
+            _state.update { it.copy(results = emptyList(), isSearching = false, error = null) }
             return
         }
         scope.launch {
-            _state.update { it.copy(isSearching = true) }
-            val results = runCatching { channelRepository.search(query) }.getOrDefault(emptyList())
-            _state.update { it.copy(results = results, isSearching = false) }
+            _state.update { it.copy(isSearching = true, error = null) }
+            runCatching { channelRepository.search(query) }
+                .onSuccess { results -> _state.update { it.copy(results = results, isSearching = false, error = null) } }
+                .onFailure { _state.update { it.copy(results = emptyList(), isSearching = false, error = "Search failed. Check your connection and try again.") } }
         }
     }
+
+    /** Re-run the current query (for the screen's Retry affordance). */
+    fun retry() = onQueryChange(_state.value.query)
 }
 
 // ---- Stream (player + chat) ---------------------------------------------------
@@ -249,6 +276,9 @@ data class StreamUiState(
     /** The message the composer is currently replying to, if any. */
     val replyingTo: ChatMessage? = null,
     val isLoading: Boolean = true,
+    /** A stream-level fatal error (e.g. the local proxy port is in use). Distinct from
+     *  a transient player-engine error; shown in place of the video with priority. */
+    val fatalError: String? = null,
 )
 
 class StreamViewModel(
@@ -300,7 +330,19 @@ class StreamViewModel(
             // SECTION 08.3 — VLC talks to our local proxy (port 7979), never
             // straight to Twitch's CDN: that's the choke point where every
             // ad-block strategy in `core` gets applied uniformly (Section 4).
-            localStreamProxy.start()
+            // A port conflict (second PureTV window / leftover process) must surface as
+            // a clear message, not silently kill this coroutine and hang on "Loading…".
+            val proxyStart = runCatching { localStreamProxy.start() }
+            if (proxyStart.isFailure) {
+                _state.update {
+                    it.copy(
+                        isLoading = false,
+                        fatalError = (proxyStart.exceptionOrNull() as? ProxyUnavailableException)?.message
+                            ?: "PureTV's local video proxy could not start. Try closing other PureTV windows and reopening this stream.",
+                    )
+                }
+                return@launch
+            }
 
             val channel = runCatching { channelRepository.getChannel(channelLogin) }.getOrNull()
             val liveInfo = runCatching {
@@ -365,7 +407,7 @@ class StreamViewModel(
                         val mapped = event.message.copy(
                             parsedParts = applyThirdPartyEmotes(event.message.parsedParts, emoteIndex),
                         )
-                        current.copy(chatMessages = (current.chatMessages + mapped).takeLast(200))
+                        current.copy(chatMessages = current.chatMessages.appendCapped(mapped))
                     }
                     is ChatEvent.SelfState -> {
                         event.displayName.ifBlank { null }?.let { selfDisplayName = it }
@@ -433,9 +475,21 @@ class StreamViewModel(
             emoteIndex = selfEchoIndex,
         )
         _state.update {
-            it.copy(chatMessages = (it.chatMessages + echo).takeLast(200), replyingTo = null)
+            it.copy(chatMessages = it.chatMessages.appendCapped(echo), replyingTo = null)
         }
     }
+
+    /**
+     * Append [msg] keeping the newest [max] messages. At steady state (list already at cap)
+     * this allocates ONE list of [max] rather than the `(list + msg).takeLast(max)` pattern's
+     * two (an n+1 temp, then the capped copy) — less per-message GC churn in a fast chat.
+     */
+    private fun List<ChatMessage>.appendCapped(msg: ChatMessage, max: Int = 200): List<ChatMessage> =
+        if (size < max) this + msg
+        else ArrayList<ChatMessage>(max).also {
+            it.addAll(subList(size - (max - 1), size))
+            it.add(msg)
+        }
 
     /** Adds/removes this channel from the local Following list (see [FollowStore]). */
     fun toggleFollow() {

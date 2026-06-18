@@ -56,7 +56,14 @@ class DesktopSettingsStore(
     private val keyFile = File(appDataDir, ".keyseed")
     private val authSchemaFile = File(appDataDir, ".authschema")
 
-    private val json = Json { ignoreUnknownKeys = true; prettyPrint = true; encodeDefaults = true }
+    // Compact JSON: machine-only files (plaintext settings + the encrypted token
+    // payload). prettyPrint only inflated bytes/CPU; loaders are whitespace-insensitive.
+    private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
+    // settings.json is written off the calling thread — it used to fsync on the EDT for
+    // every theme/quality/animate-emotes toggle and every in-player gear-menu change
+    // (upscaling/backend), each a UI freeze. Tokens stay synchronous (security + the
+    // init/refresh ordering depend on the write being durable on return).
+    private val settingsWriter = AtomicJsonWriter(settingsFile)
 
     // Serializes settings + token read-modify-writes so concurrent callers can't
     // lose an update or interleave writes (audit F2).
@@ -176,17 +183,25 @@ class DesktopSettingsStore(
 
     fun updateSettings(transform: (AppSettings) -> AppSettings) = synchronized(lock) {
         val updated = transform(_settings.value)
+        // In-memory update is synchronous so the UI reflects the toggle instantly; the
+        // serialize + fsync run off-thread (conflated) so the click never blocks the EDT.
         _settings.value = updated
-        runCatching {
-            appDataDir.mkdirs()
-            AtomicFile.writeTextAtomically(settingsFile, json.encodeToString(updated.toDto()))
-        }
+        settingsWriter.enqueue { json.encodeToString(updated.toDto()) }
     }
 
-    private fun loadSettingsFromDisk(): AppSettings = runCatching {
-        if (settingsFile.exists()) json.decodeFromString(SettingsDto.serializer(), settingsFile.readText()).toAppSettings()
-        else AppSettings()
-    }.getOrElse { AppSettings() }
+    /** Block until pending settings writes are durable. Tests + shutdown only — never the UI thread. */
+    fun flush() = settingsWriter.flush()
+
+    private fun loadSettingsFromDisk(): AppSettings {
+        if (!settingsFile.exists()) return AppSettings()
+        val text = runCatching { settingsFile.readText() }.getOrNull() ?: return AppSettings()
+        return runCatching { json.decodeFromString(SettingsDto.serializer(), text).toAppSettings() }
+            .getOrElse {
+                // Preserve the unparseable settings before falling back to defaults (audit F3).
+                AtomicFile.quarantineCorrupt(settingsFile)
+                AppSettings()
+            }
+    }
 
     // ---- Tokens (AES-256-GCM encrypted) -------------------------------------
 
@@ -278,7 +293,7 @@ class DesktopSettingsStore(
     // ---- Encryption helpers --------------------------------------------------
 
     private fun encrypt(plaintext: ByteArray): ByteArray {
-        val key = machineKey()
+        val key = machineKey
         val iv = ByteArray(12).also { SecureRandom().nextBytes(it) }
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
         cipher.init(Cipher.ENCRYPT_MODE, key, GCMParameterSpec(128, iv))
@@ -289,7 +304,7 @@ class DesktopSettingsStore(
 
     private fun decrypt(blob: ByteArray): ByteArray {
         require(blob.size > 12) { "Encrypted token blob too short" }
-        val key = machineKey()
+        val key = machineKey
         val iv = blob.copyOfRange(0, 12)
         val ciphertext = blob.copyOfRange(12, blob.size)
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
@@ -307,10 +322,17 @@ class DesktopSettingsStore(
      * previously saved tokens — acceptable for a local cache of refresh
      * tokens that can simply be re-obtained via login).
      */
-    private fun machineKey(): SecretKeySpec {
+    /**
+     * Derived ONCE and memoized. Deriving it used to run a `reg query` SUBPROCESS
+     * (readMachineGuid) on EVERY encrypt/decrypt — i.e. on every token save, load, and
+     * refresh, plus once synchronously on the main thread at startup. The MachineGuid is
+     * invariant within a session, so derive the AES key lazily on first use and cache it,
+     * eliminating the repeated subprocess spawns.
+     */
+    private val machineKey: SecretKeySpec by lazy {
         val seed = readMachineGuid() ?: readOrCreateKeySeedFile()
         val digest = MessageDigest.getInstance("SHA-256").digest(seed.toByteArray(Charsets.UTF_8))
-        return SecretKeySpec(digest, "AES")
+        SecretKeySpec(digest, "AES")
     }
 
     private fun readMachineGuid(): String? = runCatching {

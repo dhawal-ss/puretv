@@ -76,6 +76,15 @@ fun CategoryContent(
         }
 
         when {
+            state.error != null -> EditorialEmptyState(
+                kicker = "Category",
+                title = "Couldn't load this category",
+                message = state.error!!,
+                actionLabel = "Retry",
+                onAction = { viewModel.load() },
+                modifier = Modifier.fillMaxWidth().padding(top = 32.dp),
+            )
+
             state.isLoading -> LazyVerticalGrid(
                 columns = GridCells.Adaptive(minSize = 260.dp),
                 modifier = Modifier.fillMaxSize(),
