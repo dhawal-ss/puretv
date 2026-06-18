@@ -220,9 +220,11 @@ class UpdateManager {
         repeat(2) { attempt ->
             val installer = downloadInstaller(info)
             val signatureBase64 = downloadText(signatureUrl)
-            val data = installer.readBytes()
-            updateLog("attempt ${attempt + 1}: installer=${installer.length()}B expected=${info.sizeBytes}B sha256=${sha256Hex(data)} sigChars=${signatureBase64.trim().length}")
-            when (val result = UpdateSignatureVerifier.verify(data, signatureBase64, UpdateSigning.PUBLIC_KEY_BASE64)) {
+            // Stream the installer into the digest (for the log) and the verifier; never
+            // materialize the whole ~170MB file as one heap ByteArray. Doing so, on top of
+            // Ed25519's own internal buffering, OOM'd the player's 1GB heap mid-update.
+            updateLog("attempt ${attempt + 1}: installer=${installer.length()}B expected=${info.sizeBytes}B sha256=${sha256HexOfFile(installer)} sigChars=${signatureBase64.trim().length}")
+            when (val result = UpdateSignatureVerifier.verify(installer, signatureBase64, UpdateSigning.PUBLIC_KEY_BASE64)) {
                 UpdateSignatureVerifier.VerifyResult.Valid -> {
                     updateLog("attempt ${attempt + 1}: signature VALID")
                     return@withContext installer
@@ -243,9 +245,18 @@ class UpdateManager {
         error("Update signature check FAILED even after re-downloading — $lastReason. Get the latest version manually from ${info.htmlUrl} (details in %APPDATA%\\PureTwitch\\update.log).")
     }
 
-    private fun sha256Hex(bytes: ByteArray): String =
-        java.security.MessageDigest.getInstance("SHA-256").digest(bytes)
-            .joinToString("") { "%02x".format(it.toInt() and 0xFF) }
+    private fun sha256HexOfFile(file: File): String {
+        val md = java.security.MessageDigest.getInstance("SHA-256")
+        file.inputStream().buffered().use { input ->
+            val buf = ByteArray(64 * 1024)
+            while (true) {
+                val n = input.read(buf)
+                if (n < 0) break
+                md.update(buf, 0, n)
+            }
+        }
+        return md.digest().joinToString("") { "%02x".format(it.toInt() and 0xFF) }
+    }
 
     /** Append a timestamped line to %APPDATA%/PureTwitch/update.log. Never throws —
      *  diagnostics must not break the updater. This is the cure for "it just fails":
