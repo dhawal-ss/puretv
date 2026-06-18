@@ -55,8 +55,11 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.WindowState
 import coil3.ImageLoader
 import coil3.compose.setSingletonImageLoaderFactory
+import coil3.disk.DiskCache
+import coil3.memory.MemoryCache
 import coil3.network.ktor3.KtorNetworkFetcherFactory
 import coil3.request.crossfade
+import okio.Path.Companion.toOkioPath
 import com.puretv.twitch.desktop.data.DesktopSettingsStore
 import com.puretv.twitch.desktop.ui.emotes.EmoteFrameCache
 import com.puretv.twitch.desktop.ui.emotes.LocalEmoteAnimation
@@ -107,8 +110,25 @@ fun App(koin: Koin, windowState: WindowState, onClose: () -> Unit, awtWindow: Aw
     // memoizes the singleton, so calling it here in the composable body (idempotent
     // factory swap) is the intended usage — it can't be hoisted into remember{}.
     setSingletonImageLoaderFactory { context ->
+        val imageCacheDir = java.io.File(
+            System.getenv("APPDATA") ?: System.getProperty("user.home"),
+            "PureTwitch/image_cache",
+        )
         ImageLoader.Builder(context)
             .components { add(KtorNetworkFetcherFactory()) }
+            // Bound the on-heap decoded-image cache explicitly. Coil's default is 25% of
+            // max heap; on this app's modest heap that competes with playback + chat and
+            // feeds GC pauses, so cap it lower and leave the app room.
+            .memoryCache { MemoryCache.Builder().maxSizePercent(context, 0.20).build() }
+            // Persist fetched avatars/thumbnails across navigation and restarts so they
+            // are not re-downloaded + re-decoded every session (desktop had no disk cache
+            // by default). Bounded so it can never grow without limit.
+            .diskCache {
+                DiskCache.Builder()
+                    .directory(imageCacheDir.toOkioPath())
+                    .maxSizeBytes(256L * 1024 * 1024)
+                    .build()
+            }
             .crossfade(true)
             .build()
     }

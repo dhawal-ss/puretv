@@ -20,10 +20,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
@@ -81,41 +81,50 @@ fun FollowedRail(
         Kicker("Live now · ${state.live.size}", modifier = Modifier.padding(horizontal = 18.dp, vertical = 2.dp))
         Spacer(Modifier.height(6.dp))
 
-        Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+        // LazyColumn (not Column+verticalScroll): only on-screen rows compose, so a power
+        // user with hundreds of live/offline follows no longer measures+composes them all at
+        // once when the rail or the Offline section expands. Bounded height comes from the
+        // parent's Modifier.weight(1f), so this is a safe virtualization swap.
+        LazyColumn(modifier = Modifier.fillMaxWidth().weight(1f)) {
             val noData = state.live.isEmpty() && state.offline.isEmpty()
             when {
                 // Distinguish first-load-in-flight and load-failure from a genuinely
                 // empty follow list, so neither is mistaken for "nobody's live".
-                state.isLoading && noData -> LoadingSkeleton()
-                state.errored && noData ->
+                state.isLoading && noData -> item { LoadingSkeleton() }
+                state.errored && noData -> item {
                     Text("Couldn't load follows", color = c.textMuted, modifier = Modifier.padding(horizontal = 18.dp, vertical = 6.dp))
-                state.live.isEmpty() ->
+                }
+                state.live.isEmpty() -> item {
                     Text("No followed channels live", color = c.textMuted, modifier = Modifier.padding(horizontal = 18.dp, vertical = 6.dp))
-                else ->
-                    // forEach (not LazyColumn) is fine for realistic follow counts; revisit with a LazyColumn if offline lists grow very large (Twitch allows up to ~2000 follows).
-                    state.live.forEach { FollowRowItem(it, onClick = { onOpenChannel(it.login) }) }
+                }
+                // Keyed by login (live + offline are disjoint, so keys stay unique across both).
+                else -> items(state.live, key = { it.login }) { FollowRowItem(it, onClick = { onOpenChannel(it.login) }) }
             }
 
             if (state.offline.isNotEmpty()) {
-                Spacer(Modifier.height(8.dp))
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { onToggleOffline() }
-                        .handCursor()
-                        .padding(horizontal = 18.dp, vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Icon(
-                        if (state.offlineExpanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
-                        contentDescription = null,
-                        tint = c.textMuted,
-                        modifier = Modifier.size(16.dp),
-                    )
-                    Text("Offline (${state.offline.size})", color = c.textMuted)
+                item {
+                    Column {
+                        Spacer(Modifier.height(8.dp))
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onToggleOffline() }
+                                .handCursor()
+                                .padding(horizontal = 18.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(
+                                if (state.offlineExpanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+                                contentDescription = null,
+                                tint = c.textMuted,
+                                modifier = Modifier.size(16.dp),
+                            )
+                            Text("Offline (${state.offline.size})", color = c.textMuted)
+                        }
+                    }
                 }
                 if (state.offlineExpanded) {
-                    state.offline.forEach { FollowRowItem(it, onClick = { onOpenChannel(it.login) }) }
+                    items(state.offline, key = { it.login }) { FollowRowItem(it, onClick = { onOpenChannel(it.login) }) }
                 }
             }
         }

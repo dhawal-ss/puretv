@@ -2,6 +2,7 @@ package com.puretv.twitch.desktop.ui.emotes
 
 import androidx.compose.foundation.Image
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -31,6 +32,13 @@ fun AnimatedEmote(
 ) {
     val cache = LocalEmoteFrameCache.current
     if (cache == null) { staticFallback(url, name, modifier); return }
+
+    // Hold a reference for this url while composed so the cache never frees its native frames
+    // mid-render (an LRU eviction can target an on-screen entry); release on dispose/url change.
+    DisposableEffect(url) {
+        cache.retain(url)
+        onDispose { cache.release(url) }
+    }
 
     var frames by remember(url) { mutableStateOf<AnimatedEmoteFrames?>(null) }
     LaunchedEffect(url) { frames = cache.frames(url) }

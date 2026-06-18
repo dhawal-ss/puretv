@@ -92,6 +92,10 @@ dependencies {
 
     testImplementation(libs.kotlin.test)
     testImplementation(libs.kotlinx.coroutines.test)
+    // Ktor MockEngine — lets desktop ViewModel tests drive core repositories (which hit
+    // the real Twitch API base URL) against canned responses instead of the network.
+    // Test-only; pinned to the same Ktor version as the rest of the catalog.
+    testImplementation(libs.ktor.client.mock)
 }
 
 // ── VLC bundling ─────────────────────────────────────────────────────────────
@@ -237,6 +241,20 @@ compose.desktop {
             }
         }
 
-        jvmArgs += listOf("-Xmx512m", "-Xms128m")
+        // Media UI GC tuning. The old -Xmx512m + default G1 (200ms pause target) meant a
+        // stop-the-world could drop ~12 frames = a visible hitch, and the small heap filled
+        // fast (Coil's decoded-image cache alone is a fraction of it), forcing frequent GCs.
+        // Native memory (VLC/mpv, skia bitmaps) is off-heap and unaffected by -Xmx; this only
+        // bounds on-heap churn (Compose, chat, image cache):
+        //  - more headroom so collections are rarer,
+        //  - a 50ms pause target so a collection costs ~3 frames, not ~12,
+        //  - string dedup (chat produces many duplicate short strings).
+        jvmArgs += listOf(
+            "-Xms256m",
+            "-Xmx1024m",
+            "-XX:+UseG1GC",
+            "-XX:MaxGCPauseMillis=50",
+            "-XX:+UseStringDeduplication",
+        )
     }
 }

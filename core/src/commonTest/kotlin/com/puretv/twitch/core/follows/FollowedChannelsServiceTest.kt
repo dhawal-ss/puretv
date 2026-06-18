@@ -82,6 +82,72 @@ class FollowedChannelsServiceTest {
         assertEquals("http://a/c2.png", result.live.first().avatarUrl)
     }
 
+    @Test fun oneFailedStreamsChunkDoesNotWipeLiveFromTheOtherChunks() = runTest {
+        // 120 follows -> 2 /streams chunks (100 + 20). The live logins (c0/c1/c2) sit in
+        // the FIRST chunk; fail the SECOND (no-live) chunk with a 500. A single failed
+        // chunk must NOT discard the successful sibling's live channels (audit: unguarded
+        // awaitAll() turns one transient blip into a fully empty "Live now" rail).
+        val engine = MockEngine { request ->
+            val url = request.url
+            when {
+                url.encodedPath.endsWith("/channels/followed") -> {
+                    val after = url.parameters["after"]
+                    if (after == null) respond(followsPage(followLogins.take(100), "P2"), HttpStatusCode.OK, jsonHeaders)
+                    else respond(followsPage(followLogins.drop(100), null), HttpStatusCode.OK, jsonHeaders)
+                }
+                url.encodedPath.endsWith("/streams") -> {
+                    val logins = url.parameters.getAll("user_login").orEmpty()
+                    if (logins.none { it in liveLogins }) respond("boom", HttpStatusCode.InternalServerError, jsonHeaders)
+                    else respond(streamsFor(logins), HttpStatusCode.OK, jsonHeaders)
+                }
+                url.encodedPath.endsWith("/users") -> respond(usersFor(url.parameters.getAll("id").orEmpty()), HttpStatusCode.OK, jsonHeaders)
+                else -> respond("", HttpStatusCode.NotFound)
+            }
+        }
+        val client = HttpClient(engine) {
+            install(ContentNegotiation) { json(Json { ignoreUnknownKeys = true }) }
+        }
+        val service = FollowedChannelsService(TwitchApiClient(client) { "token" })
+
+        val result = service.load("user123", localPins = emptyList()) {}
+
+        assertEquals(3, result.live.size, "live channels from the OK chunk must survive a sibling chunk's failure")
+        assertEquals(setOf("c0", "c1", "c2"), result.live.map { it.login }.toSet())
+    }
+
+    @Test fun oneFailedUsersChunkStillEnrichesAvatarsFromTheOtherChunks() = runTest {
+        // 120 follows -> 2 /users chunks. The live logins (and their avatars) are in the
+        // first chunk; fail the second /users chunk. Enrichment of the successful chunk
+        // must still apply, and load() must not throw.
+        val engine = MockEngine { request ->
+            val url = request.url
+            when {
+                url.encodedPath.endsWith("/channels/followed") -> {
+                    val after = url.parameters["after"]
+                    if (after == null) respond(followsPage(followLogins.take(100), "P2"), HttpStatusCode.OK, jsonHeaders)
+                    else respond(followsPage(followLogins.drop(100), null), HttpStatusCode.OK, jsonHeaders)
+                }
+                url.encodedPath.endsWith("/streams") -> respond(streamsFor(url.parameters.getAll("user_login").orEmpty()), HttpStatusCode.OK, jsonHeaders)
+                url.encodedPath.endsWith("/users") -> {
+                    val ids = url.parameters.getAll("id").orEmpty()
+                    // The first chunk holds id_c0..id_c99; fail the second (id_c100..).
+                    if (ids.any { it == "id_c100" }) respond("boom", HttpStatusCode.InternalServerError, jsonHeaders)
+                    else respond(usersFor(ids), HttpStatusCode.OK, jsonHeaders)
+                }
+                else -> respond("", HttpStatusCode.NotFound)
+            }
+        }
+        val client = HttpClient(engine) {
+            install(ContentNegotiation) { json(Json { ignoreUnknownKeys = true }) }
+        }
+        val service = FollowedChannelsService(TwitchApiClient(client) { "token" })
+
+        val result = service.load("user123", localPins = emptyList()) {}
+
+        assertEquals(3, result.live.size, "live status is unaffected by a /users failure")
+        assertEquals("http://a/c2.png", result.live.first().avatarUrl, "avatars from the OK /users chunk still enrich")
+    }
+
     @Test fun localPinsAreUnionedAndDedupedByLogin() = runTest {
         val engine = MockEngine { request ->
             val url = request.url

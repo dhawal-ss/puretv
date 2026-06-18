@@ -8,6 +8,9 @@ import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import com.puretv.twitch.core.di.coreModule
 import com.puretv.twitch.desktop.data.DesktopSettingsStore
+import com.puretv.twitch.desktop.data.FollowStore
+import com.puretv.twitch.desktop.data.ViewerHistoryStore
+import com.puretv.twitch.desktop.data.WatchProgressStore
 import com.puretv.twitch.desktop.di.desktopModule
 import com.puretv.twitch.desktop.platform.WindowsNative
 import com.puretv.twitch.desktop.player.LocalStreamProxy
@@ -40,6 +43,12 @@ fun main() {
     val vlcPlayer = koinApp.koin.get<DesktopPlayer>()
     val localStreamProxy = koinApp.koin.get<LocalStreamProxy>()
     Runtime.getRuntime().addShutdownHook(Thread {
+        // The stores now persist off the UI thread via a conflated async writer; flush
+        // any pending snapshot so a change made right before quitting is still durable.
+        runCatching { settingsStore.flush() }
+        runCatching { koinApp.koin.get<FollowStore>().flush() }
+        runCatching { koinApp.koin.get<WatchProgressStore>().flush() }
+        runCatching { koinApp.koin.get<ViewerHistoryStore>().flush() }
         runCatching { runBlocking { localStreamProxy.stop() } }
         runCatching { vlcPlayer.release() }
     })

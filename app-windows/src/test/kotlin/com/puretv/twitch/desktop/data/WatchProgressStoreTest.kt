@@ -48,7 +48,9 @@ class WatchProgressStoreTest {
     }
 
     @Test fun persistsAcrossInstances() {
-        WatchProgressStore(tmp).save(progress("a", 60_000, 1_200_000, 100))
+        val first = WatchProgressStore(tmp)
+        first.save(progress("a", 60_000, 1_200_000, 100))
+        first.flush()
         assertTrue(WatchProgressStore(tmp).get("a") != null)
     }
 }

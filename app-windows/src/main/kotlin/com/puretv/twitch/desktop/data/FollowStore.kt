@@ -38,7 +38,10 @@ class FollowStore(
     appDataDir: File = defaultDir(),
 ) {
     private val file = File(appDataDir, "following.json")
-    private val json = Json { ignoreUnknownKeys = true; prettyPrint = true; encodeDefaults = true }
+    // Compact JSON: these files are machine-only, and prettyPrint roughly doubles
+    // bytes + serialize CPU on every write (loaders are whitespace-insensitive).
+    private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
+    private val writer = AtomicJsonWriter(file)
 
     // Serializes the read-derive-write critical sections so concurrent
     // follow/unfollow from different coroutines (Dispatchers.Default) can't lose
@@ -73,14 +76,26 @@ class FollowStore(
     }
 
     private fun persistLocked(list: List<FollowedChannel>) {
+        // Update the in-memory list synchronously (cheap, UI-thread safe); serialize +
+        // fsync happen off-thread so a follow/unfollow click never blocks the EDT.
         _followed.value = list
-        runCatching { AtomicFile.writeTextAtomically(file, json.encodeToString(list)) }
-            .onFailure { System.err.println("FollowStore: failed to persist following list: ${it.message}") }
+        writer.enqueue { json.encodeToString(list) }
     }
 
-    private fun loadFromDisk(): List<FollowedChannel> = runCatching {
-        if (file.exists()) json.decodeFromString<List<FollowedChannel>>(file.readText()) else emptyList()
-    }.getOrElse { emptyList() }
+    /** Block until pending writes are durable. Tests + shutdown only — never the UI thread. */
+    fun flush() = writer.flush()
+
+    private fun loadFromDisk(): List<FollowedChannel> {
+        if (!file.exists()) return emptyList()
+        val text = runCatching { file.readText() }.getOrNull() ?: return emptyList()
+        return runCatching { json.decodeFromString<List<FollowedChannel>>(text) }
+            .getOrElse {
+                // Preserve the unparseable bytes before falling back, so the next write
+                // can't silently destroy recoverable data (audit F3).
+                AtomicFile.quarantineCorrupt(file)
+                emptyList()
+            }
+    }
 
     companion object {
         private fun defaultDir(): File =

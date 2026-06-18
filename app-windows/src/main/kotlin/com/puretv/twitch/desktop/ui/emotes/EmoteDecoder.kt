@@ -30,6 +30,11 @@ fun decodeAnimatedFrames(bytes: ByteArray): AnimatedEmoteFrames? = runCatching {
             val info = codec.imageInfo
             val frames = ArrayList<ImageBitmap>(count)
             val durations = ArrayList<Int>(count)
+            // Keep the native skia Images alongside the ImageBitmaps that wrap them, so the
+            // cache can free their off-heap pixels deterministically on eviction (see
+            // AnimatedEmoteFrames.close). Each Image holds its own refcounted pixelref, so
+            // closing the source Bitmap below is still safe.
+            val images = ArrayList<Image>(count)
             for (i in 0 until count) {
                 val bmp = Bitmap()
                 try {
@@ -40,13 +45,15 @@ fun decodeAnimatedFrames(bytes: ByteArray): AnimatedEmoteFrames? = runCatching {
                     // optimization — do not switch to it without seeding the dst with the
                     // prior frame's pixels, or compositing breaks.
                     codec.readPixels(bmp, i)
-                    frames += Image.makeFromBitmap(bmp).toComposeImageBitmap()
+                    val img = Image.makeFromBitmap(bmp)
+                    images += img
+                    frames += img.toComposeImageBitmap()
                     durations += codec.framesInfo.getOrNull(i)?.duration ?: 100
                 } finally {
                     bmp.close()
                 }
             }
-            AnimatedEmoteFrames(frames, durations)
+            AnimatedEmoteFrames(frames, durations, images)
         }
     } finally {
         codec.close()

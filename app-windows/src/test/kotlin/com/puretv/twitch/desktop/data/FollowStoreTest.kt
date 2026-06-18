@@ -59,7 +59,9 @@ class FollowStoreTest {
 
     @Test
     fun persists_across_instances() {
-        FollowStore(tmp).follow(channel("shroud"))
+        val first = FollowStore(tmp)
+        first.follow(channel("shroud"))
+        first.flush()
         val reopened = FollowStore(tmp)
         assertTrue(reopened.isFollowed("shroud"))
         assertEquals("Shroud", reopened.followed.value.first().displayName)

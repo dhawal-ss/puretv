@@ -22,10 +22,10 @@ class ViewerHistoryStoreTest {
     }
 
     @Test fun persistsAcrossInstances() {
-        ViewerHistoryStore(tmp).apply {
-            record("Shroud", ViewerSample(1000, 100))
-            record("Shroud", ViewerSample(1060, 80))
-        }
+        val first = ViewerHistoryStore(tmp)
+        first.record("Shroud", ViewerSample(1000, 100))
+        first.record("Shroud", ViewerSample(1060, 80))
+        first.flush()
         val reloaded = ViewerHistoryStore(tmp).get("shroud")
         assertNotNull(reloaded)
         assertEquals(2, reloaded.samples.size)

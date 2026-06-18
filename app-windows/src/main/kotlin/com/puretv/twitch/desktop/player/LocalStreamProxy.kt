@@ -46,6 +46,9 @@ import java.util.concurrent.atomic.AtomicReference
  * phone/TV apps' in-process equivalents — only the *transport* differs
  * because VLCJ needs a URL, not a Kotlin object.
  */
+/** Thrown by [LocalStreamProxy.start] when the local HLS proxy cannot bind its port. */
+class ProxyUnavailableException(message: String) : Exception(message)
+
 class LocalStreamProxy(
     private val streamRepository: StreamRepository,
     private val adBlockEngine: AdBlockEngine,
@@ -79,6 +82,21 @@ class LocalStreamProxy(
         fun isAllowedVariantHost(url: String): Boolean {
             val host = runCatching { java.net.URI(url).host }.getOrNull()?.lowercase() ?: return false
             return host == "ttvnw.net" || host.endsWith(".ttvnw.net")
+        }
+
+        /**
+         * True if [t] (or any exception in its cause chain) is a port-in-use bind
+         * failure. Netty wraps the underlying [java.net.BindException], so we walk the
+         * causes. The visited-set guards against a cyclic chain.
+         */
+        fun isAddressInUse(t: Throwable?): Boolean {
+            var cur = t
+            val seen = HashSet<Throwable>()
+            while (cur != null && seen.add(cur)) {
+                if (cur is java.net.BindException) return true
+                cur = cur.cause
+            }
+            return false
         }
     }
 
@@ -126,7 +144,7 @@ class LocalStreamProxy(
 
     suspend fun start() = lifecycleLock.withLock {
         if (engine != null) return@withLock
-        engine = embeddedServer(Netty, port = PORT, host = "127.0.0.1") {
+        val server = embeddedServer(Netty, port = PORT, host = "127.0.0.1") {
             routing {
                 get("/stream") {
                     val channel = call.request.queryParameters["channel"]
@@ -306,7 +324,27 @@ class LocalStreamProxy(
                     )
                 }
             }
-        }.start(wait = false)
+        }
+        // Binding happens synchronously inside start(); a second PureTV process (or a
+        // leftover Netty from a hard-killed one) holding port 7979 throws here. Translate
+        // it into a clear, typed failure instead of letting a raw BindException escape
+        // uncaught into the stream ViewModel's init coroutine (which silently leaves the
+        // player on an endless "Loading…" with no explanation).
+        try {
+            server.start(wait = false)
+            engine = server
+        } catch (e: Throwable) {
+            runCatching { server.stop(0, 0) } // release anything half-bound
+            engine = null
+            if (isAddressInUse(e)) {
+                throw ProxyUnavailableException(
+                    "PureTV's local video proxy could not start because port $PORT is already in use. " +
+                        "This usually means another PureTV window is open, or a previous one did not fully close. " +
+                        "Close other PureTV windows and reopen this stream.",
+                )
+            }
+            throw e
+        }
     }
 
     suspend fun stop() = lifecycleLock.withLock {

@@ -42,7 +42,9 @@ object ResumePolicy {
  */
 class WatchProgressStore(appDataDir: File = defaultDir()) {
     private val file = File(appDataDir, "watch-progress.json")
-    private val json = Json { ignoreUnknownKeys = true; prettyPrint = true; encodeDefaults = true }
+    // Compact JSON: machine-only file; prettyPrint doubled bytes + CPU on every write.
+    private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
+    private val writer = AtomicJsonWriter(file)
 
     // Serializes the read-derive-write sections (the 10s autosave loop, the
     // onCleared save, and explicit removes can otherwise interleave — audit F2).
@@ -81,14 +83,25 @@ class WatchProgressStore(appDataDir: File = defaultDir()) {
         }
 
     private fun persistLocked(map: Map<String, WatchProgress>) {
+        // In-memory update is synchronous; serialize + fsync run off-thread so the
+        // continue-watching "remove" click and the autosave loop never block.
         _progress.value = map
-        runCatching { AtomicFile.writeTextAtomically(file, json.encodeToString(map)) }
-            .onFailure { System.err.println("WatchProgressStore: failed to persist watch progress: ${it.message}") }
+        writer.enqueue { json.encodeToString(map) }
     }
 
-    private fun loadFromDisk(): Map<String, WatchProgress> = runCatching {
-        if (file.exists()) json.decodeFromString<Map<String, WatchProgress>>(file.readText()) else emptyMap()
-    }.getOrElse { emptyMap() }
+    /** Block until pending writes are durable. Tests + shutdown only — never the UI thread. */
+    fun flush() = writer.flush()
+
+    private fun loadFromDisk(): Map<String, WatchProgress> {
+        if (!file.exists()) return emptyMap()
+        val text = runCatching { file.readText() }.getOrNull() ?: return emptyMap()
+        return runCatching { json.decodeFromString<Map<String, WatchProgress>>(text) }
+            .getOrElse {
+                // Preserve the unparseable bytes before falling back (audit F3).
+                AtomicFile.quarantineCorrupt(file)
+                emptyMap()
+            }
+    }
 
     companion object {
         private const val MAX_ENTRIES = 300
