@@ -48,9 +48,9 @@ import javax.crypto.spec.SecretKeySpec
  */
 class DesktopSettingsStore(
     private val tokenHolder: TokenHolder,
+    private val appDataDir: File = File(System.getenv("APPDATA") ?: System.getProperty("user.home"), "PureTwitch"),
 ) {
 
-    private val appDataDir: File = File(System.getenv("APPDATA") ?: System.getProperty("user.home"), "PureTwitch")
     private val settingsFile = File(appDataDir, "settings.json")
     private val tokensFile = File(appDataDir, "tokens.enc")
     private val keyFile = File(appDataDir, ".keyseed")
@@ -75,6 +75,12 @@ class DesktopSettingsStore(
     @Volatile private var cachedLogin: String? = null
     @Volatile private var cachedUserId: String? = null
 
+    // Observable mirror of cachedLoggedIn so the shell can react to sign-in/out (the followed
+    // rail reloads the instant the user signs in, not on the next 60s poll). Updated wherever
+    // cachedLoggedIn is: init restore, saveTokens, clearTokens.
+    private val _loggedIn = MutableStateFlow(false)
+    val loggedInState: StateFlow<Boolean> = _loggedIn.asStateFlow()
+
     /** Whether a session token is present — no disk/crypto, safe in hot flows. */
     val isLoggedIn: Boolean get() = cachedLoggedIn
 
@@ -95,6 +101,7 @@ class DesktopSettingsStore(
         // very first call, before the user has to "log in again" after a restart.
         // Mirrors the Android/TV AppSettingsStore.init pattern.
         loadTokens()?.let { tokenHolder.update(it.accessToken); cachedLoggedIn = true; cachedLogin = it.login; cachedUserId = it.userId }
+        _loggedIn.value = cachedLoggedIn
     }
 
     /**
@@ -230,6 +237,7 @@ class DesktopSettingsStore(
         cachedLoggedIn = true
         cachedLogin = login
         cachedUserId = userId
+        _loggedIn.value = true
     }
 
     fun loadTokens(): StoredTokensResult? = runCatching {
@@ -251,6 +259,7 @@ class DesktopSettingsStore(
         cachedLoggedIn = false
         cachedLogin = null
         cachedUserId = null
+        _loggedIn.value = false
     }
 
     /**

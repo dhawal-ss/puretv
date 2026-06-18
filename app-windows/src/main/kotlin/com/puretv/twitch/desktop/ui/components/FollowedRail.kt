@@ -28,6 +28,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -80,6 +81,18 @@ fun FollowedRail(
 
         Kicker("Live now · ${state.live.size}", modifier = Modifier.padding(horizontal = 18.dp, vertical = 2.dp))
         Spacer(Modifier.height(6.dp))
+
+        // Explicit loading bar while the first load (cold start OR just-signed-in) is in flight.
+        // isLoading is only true when there's no data yet, so this never flashes on the 60s poll
+        // refresh once the list is populated.
+        if (state.isLoading) {
+            LinearProgressIndicator(
+                color = c.twitchPurple,
+                trackColor = c.hairline,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp).height(2.dp),
+            )
+            Spacer(Modifier.height(6.dp))
+        }
 
         // LazyColumn (not Column+verticalScroll): only on-screen rows compose, so a power
         // user with hundreds of live/offline follows no longer measures+composes them all at
