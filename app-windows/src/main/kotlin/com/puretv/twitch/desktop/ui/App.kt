@@ -86,6 +86,7 @@ import com.puretv.twitch.desktop.ui.theme.ThemeVariant
 import java.awt.MouseInfo
 import java.awt.Window as AwtWindow
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.drop
 import org.koin.core.Koin
 
 enum class Destination(val label: String, val icon: ImageVector) {
@@ -442,6 +443,16 @@ private fun NavigationSidebar(
         while (true) {
             delay(60_000)
             if (windowInfo.isWindowFocused) railVm.refresh()
+        }
+    }
+
+    // Reload the rail the instant the user signs in. Without this the rail would sit on the
+    // signed-out/empty state with no loading feedback until the next 60s poll tick. drop(1)
+    // skips the current value (startup is already covered by the initial refresh above), so
+    // this fires only on a real sign-in transition.
+    LaunchedEffect(Unit) {
+        koin.get<DesktopSettingsStore>().loggedInState.drop(1).collect { loggedIn ->
+            if (loggedIn) railVm.refresh()
         }
     }
 
