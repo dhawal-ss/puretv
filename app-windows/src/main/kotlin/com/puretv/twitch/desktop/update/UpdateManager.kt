@@ -135,7 +135,7 @@ class UpdateManager {
                 SwingUtilities.invokeLater { exitApplication() }
             }.onFailure { e ->
                 updateLog("apply FAILED: ${e.message}")
-                _state.value = UpdateState.Error(e.message ?: "Update failed")
+                _state.value = UpdateState.Error(e.message ?: "Update failed", resolveReleaseUrl(info.htmlUrl))
             }
         }
     }
@@ -209,11 +209,11 @@ class UpdateManager {
         // Preconditions a re-download can't fix — fail fast with a clear message.
         if (!UpdateSigning.isConfigured) {
             updateLog("no signing key embedded in this build")
-            error("This build can't verify updates (no signing key configured). Download the latest version manually from ${info.htmlUrl}.")
+            error("This build can't verify updates (no signing key configured).")
         }
         val signatureUrl = info.signatureUrl ?: run {
             updateLog("release ${info.version} has no .sig asset")
-            error("This release isn't signed — refusing to install an unverified update. Download manually from ${info.htmlUrl}.")
+            error("This release isn't signed, so it can't be verified.")
         }
 
         var lastReason = "signature did not match"
@@ -238,11 +238,11 @@ class UpdateManager {
                 is UpdateSignatureVerifier.VerifyResult.Errored -> {
                     updateLog("attempt ${attempt + 1}: verification ERRORED — ${result.reason}")
                     installer.delete()
-                    error("Update verification couldn't run on this PC (${result.reason}). This is an app/runtime problem, not a bad download — please report it with %APPDATA%\\PureTwitch\\update.log. Meanwhile, install manually from ${info.htmlUrl}.")
+                    error("Update verification couldn't run on this PC (${result.reason}). This is an app/runtime problem, not a bad download. Please report it with %APPDATA%\\PureTwitch\\update.log.")
                 }
             }
         }
-        error("Update signature check FAILED even after re-downloading — $lastReason. Get the latest version manually from ${info.htmlUrl} (details in %APPDATA%\\PureTwitch\\update.log).")
+        error("Update signature check FAILED even after re-downloading: $lastReason. Details in %APPDATA%\\PureTwitch\\update.log.")
     }
 
     private fun sha256HexOfFile(file: File): String {
