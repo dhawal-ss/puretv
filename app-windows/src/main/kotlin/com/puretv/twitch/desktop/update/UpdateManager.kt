@@ -363,6 +363,14 @@ class UpdateManager {
 }
 
 /**
+ * The URL the "Open download page" recovery button opens when an update fails.
+ * Prefers the release's own page ([UpdateInfo.htmlUrl]); if that is blank, falls
+ * back to the repo's latest-release page so the button always has a valid target.
+ */
+internal fun resolveReleaseUrl(htmlUrl: String): String =
+    htmlUrl.ifBlank { "https://github.com/${AppBuildConfig.GITHUB_OWNER}/${AppBuildConfig.GITHUB_REPO}/releases/latest" }
+
+/**
  * True only if [url] is an HTTPS URL whose host is a GitHub-controlled domain
  * that serves release assets (audit F3). Release `browser_download_url`s
  * 302-redirect from `github.com` to `*.githubusercontent.com`, so both are

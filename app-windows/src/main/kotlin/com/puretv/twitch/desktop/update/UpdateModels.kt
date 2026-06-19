@@ -18,7 +18,7 @@ sealed interface UpdateState {
     data object Idle : UpdateState
     data class Available(val info: UpdateInfo) : UpdateState
     data class Downloading(val progress: Float) : UpdateState
-    data class Error(val message: String) : UpdateState
+    data class Error(val message: String, val releaseUrl: String? = null) : UpdateState
 }
 
 // ── GitHub Releases API DTOs (subset) ────────────────────────────────────────
