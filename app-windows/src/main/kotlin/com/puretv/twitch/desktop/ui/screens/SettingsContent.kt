@@ -42,8 +42,10 @@ import com.puretv.twitch.desktop.ui.theme.PureTvTheme
 import com.puretv.twitch.desktop.ui.theme.PureTvType
 import com.puretv.twitch.desktop.ui.theme.ThemeVariant
 import com.puretv.twitch.desktop.ui.theme.themeColors
+import com.puretv.twitch.desktop.platform.openInBrowser
 import com.puretv.twitch.desktop.update.UpdateManager
 import com.puretv.twitch.desktop.update.UpdateState
+import com.puretv.twitch.desktop.update.resolveReleaseUrl
 import org.koin.core.Koin
 
 @Composable
@@ -189,6 +191,11 @@ fun SettingsContent(koin: Koin, onExit: () -> Unit) {
                 is UpdateState.Error -> {
                     Text("Update failed: ${s.message}", style = PureTvType.data, color = c.live)
                     Spacer(Modifier.height(12.dp))
+                    PureButton(
+                        text = "Open download page",
+                        onClick = { openInBrowser(s.releaseUrl ?: resolveReleaseUrl("")) },
+                    )
+                    Spacer(Modifier.height(8.dp))
                     PureButton(
                         text = "Retry",
                         onClick = { updateManager.checkForUpdates(force = true) },

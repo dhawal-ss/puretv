@@ -65,6 +65,7 @@ import com.puretv.twitch.desktop.ui.emotes.EmoteFrameCache
 import com.puretv.twitch.desktop.ui.emotes.LocalEmoteAnimation
 import com.puretv.twitch.desktop.ui.emotes.LocalEmoteFrameCache
 import com.puretv.twitch.desktop.platform.WindowsNative
+import com.puretv.twitch.desktop.platform.openInBrowser
 import com.puretv.twitch.desktop.update.UpdateManager
 import com.puretv.twitch.desktop.update.UpdateState
 import com.puretv.twitch.desktop.ui.components.FollowedRail
@@ -168,6 +169,7 @@ fun App(koin: Koin, windowState: WindowState, onClose: () -> Unit, awtWindow: Aw
                                     if (s is UpdateState.Available) updateManager.downloadAndInstall(s.info, onClose)
                                     else updateManager.checkForUpdates(force = true)
                                 },
+                                onOpenReleasePage = { url -> openInBrowser(url) },
                                 onDismiss = { updateDismissed = true },
                             )
                         }
