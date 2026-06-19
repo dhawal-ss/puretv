@@ -237,7 +237,7 @@ jobs:
           cat >> notes.md <<'DL'
 
           ---
-          **Download** the installer below and run it — everything's included, no separate VLC needed. If Windows shows a SmartScreen warning, click **More info → Run anyway**. Already have PureTV? Just install over it.
+          **Download** the installer below and run it. Everything's included, no separate VLC needed. If Windows shows a SmartScreen warning, click **More info, then Run anyway**. Already have PureTV? Just install over it.
           DL
           echo "----- release notes -----"; cat notes.md
 
