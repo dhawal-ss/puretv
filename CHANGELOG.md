@@ -11,6 +11,14 @@ release notes automatically.
 
 ---
 
+## 1.9.3 - 2026-06-19
+
+Makes recovering from a failed update simple, with a one-click way to grab the latest version.
+
+### Improved
+- **If an update ever fails, getting back on track is now one click.** When an in-app update can't finish, PureTV shows an "Open download page" button that takes you straight to the latest installer in your browser, so there's no more hunting for the website or fishing a link out of an error message. It's also the fastest fix if you're stuck on an older version whose updater keeps failing: open the page, run the installer once, and you're back to automatic updates.
+- **Update messages are clearer.** When something goes wrong, the on-screen message is shorter and easier to read, while the full technical details still go to the update log for troubleshooting.
+
 ## 1.9.2 - 2026-06-18
 
 Fixes in-app updates that could fail with an out-of-memory error.
