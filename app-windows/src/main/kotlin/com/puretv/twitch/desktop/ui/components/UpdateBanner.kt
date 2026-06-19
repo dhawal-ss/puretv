@@ -28,6 +28,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.puretv.twitch.desktop.update.UpdateState
+import com.puretv.twitch.desktop.update.resolveReleaseUrl
 import com.puretv.twitch.desktop.ui.theme.PureTvTheme
 
 /**
@@ -35,7 +36,12 @@ import com.puretv.twitch.desktop.ui.theme.PureTvTheme
  * available / downloading / failed. Renders nothing when [state] is Idle.
  */
 @Composable
-fun UpdateBanner(state: UpdateState, onUpdate: () -> Unit, onDismiss: () -> Unit) {
+fun UpdateBanner(
+    state: UpdateState,
+    onUpdate: () -> Unit,
+    onOpenReleasePage: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
     when (state) {
         UpdateState.Idle -> Unit
         is UpdateState.Available -> BannerShell {
@@ -86,6 +92,8 @@ fun UpdateBanner(state: UpdateState, onUpdate: () -> Unit, onDismiss: () -> Unit
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
+            UpdateButton("Open download page") { onOpenReleasePage(state.releaseUrl ?: resolveReleaseUrl("")) }
+            Spacer(Modifier.width(4.dp))
             UpdateButton("Retry", onUpdate)
             Spacer(Modifier.width(4.dp))
             DismissButton(onDismiss)
