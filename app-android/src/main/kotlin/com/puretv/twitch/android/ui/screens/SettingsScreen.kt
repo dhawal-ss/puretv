@@ -8,8 +8,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -21,7 +23,7 @@ import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -51,7 +53,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                 title = { Text("Settings", color = PureTvColors.TextPrimary) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Filled.ArrowBack, contentDescription = "Back", tint = PureTvColors.TextPrimary)
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = PureTvColors.TextPrimary)
                     }
                 },
             )
@@ -88,17 +90,32 @@ fun SettingsScreen(onBack: () -> Unit) {
             item {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("Preferred quality", style = MaterialTheme.typography.bodyLarge, color = PureTvColors.TextPrimary)
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        listOf(StreamQuality.AUTO, StreamQuality.SOURCE, StreamQuality.P720P60).forEach { quality ->
+                    // All quality tiers (was only 3 of them), horizontally scrollable
+                    // as single-select chips so 1080p60 and the lower tiers are reachable.
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        items(StreamQuality.values().toList()) { quality ->
                             val selected = state.settings.preferredQuality.equals(quality.name, ignoreCase = true)
-                            Button(
+                            FilterChip(
+                                selected = selected,
                                 onClick = { viewModel.setPreferredQuality(quality) },
-                                colors = androidx.compose.material3.ButtonDefaults.buttonColors(
-                                    containerColor = if (selected) PureTvColors.TwitchPurple else PureTvColors.Surface,
-                                ),
-                            ) { Text(quality.label) }
+                                label = { Text(quality.label) },
+                            )
                         }
                     }
+                }
+            }
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text("Animate emotes", style = MaterialTheme.typography.bodyLarge, color = PureTvColors.TextPrimary)
+                    Switch(
+                        checked = state.settings.animateEmotes,
+                        onCheckedChange = viewModel::setAnimateEmotes,
+                        colors = SwitchDefaults.colors(checkedTrackColor = PureTvColors.TwitchPurple),
+                    )
                 }
             }
 
@@ -120,17 +137,32 @@ fun SettingsScreen(onBack: () -> Unit) {
             }
             item {
                 var proxyDraft by remember(state.settings.customProxyUrl) { mutableStateOf(state.settings.customProxyUrl) }
+                var proxyError by remember { mutableStateOf<String?>(null) }
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("Custom proxy URL (TTV LOL PRO compatible)", style = MaterialTheme.typography.bodyMedium, color = PureTvColors.TextSecondary)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                         OutlinedTextField(
                             value = proxyDraft,
-                            onValueChange = { proxyDraft = it },
+                            onValueChange = { proxyDraft = it; proxyError = null },
                             placeholder = { Text("https://api.ttv.lol", color = PureTvColors.TextMuted) },
                             singleLine = true,
+                            isError = proxyError != null,
                             modifier = Modifier.weight(1f),
                         )
-                        Button(onClick = { viewModel.setProxyUrl(proxyDraft) }) { Text("Save") }
+                        Button(onClick = {
+                            // Validate before persisting: a malformed proxy silently breaks
+                            // ad-block resolution later with no feedback. Empty clears it.
+                            val trimmed = proxyDraft.trim()
+                            if (trimmed.isNotEmpty() && !trimmed.startsWith("https://")) {
+                                proxyError = "Proxy URL must start with https://"
+                            } else {
+                                proxyError = null
+                                viewModel.setProxyUrl(trimmed)
+                            }
+                        }) { Text("Save") }
+                    }
+                    proxyError?.let { err ->
+                        Text(err, style = MaterialTheme.typography.bodySmall, color = PureTvColors.Live)
                     }
                 }
             }

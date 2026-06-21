@@ -1,6 +1,8 @@
 package com.puretv.twitch.android.player
 
 import android.content.Context
+import androidx.media3.common.PlaybackException
+import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
@@ -38,11 +40,13 @@ class TwitchPlayer(
         )
         .setLoadControl(
             DefaultLoadControl.Builder()
+                // Deeper buffer than the old (2s/15s/0.5s/1s) thresholds: mobile
+                // links jitter hard, and the thin buffer caused chronic rebuffering.
                 .setBufferDurationsMs(
-                    /* minBuffer  */ 2_000,
-                    /* maxBuffer  */ 15_000,
-                    /* playback   */ 500,
-                    /* rebuffer   */ 1_000,
+                    /* minBuffer  */ 5_000,
+                    /* maxBuffer  */ 30_000,
+                    /* playback   */ 1_500,
+                    /* rebuffer   */ 3_000,
                 )
                 .build(),
         )
@@ -52,11 +56,51 @@ class TwitchPlayer(
                 .build(),
         )
         .build()
-        .apply {
-            playWhenReady = true
+
+    /**
+     * Bounded retry counter for transient HLS errors (see [recoveryListener]).
+     * Reset to 0 on the first STATE_READY so a healthy stream never inherits a
+     * sibling stream's exhausted budget on the shared singleton.
+     */
+    private var errorRetries = 0
+
+    /**
+     * SECTION 06.3 — keeps live HLS blips from dead-ending on a black screen.
+     * BEHIND_LIVE_WINDOW (we fell off the live edge) is recovered by re-seeking
+     * to the default (live) position and re-preparing. Any other error gets a
+     * BOUNDED prepare() retry (max 3) so a flapping segment server cannot spin
+     * the loader forever; once playback reaches STATE_READY the budget resets.
+     */
+    private val recoveryListener = object : Player.Listener {
+        override fun onPlayerError(error: PlaybackException) {
+            if (error.errorCode == PlaybackException.ERROR_CODE_BEHIND_LIVE_WINDOW) {
+                exoPlayer.seekToDefaultPosition()
+                exoPlayer.prepare()
+                return
+            }
+            if (errorRetries < MAX_ERROR_RETRIES) {
+                errorRetries++
+                exoPlayer.prepare()
+            }
+            // Past the bound we stop: do not loop forever on a hard failure.
         }
 
+        override fun onPlaybackStateChanged(playbackState: Int) {
+            if (playbackState == Player.STATE_READY) {
+                errorRetries = 0
+            }
+        }
+    }
+
+    init {
+        exoPlayer.addListener(recoveryListener)
+    }
+
     fun release() = exoPlayer.release()
+
+    private companion object {
+        const val MAX_ERROR_RETRIES = 3
+    }
 }
 
 /**
@@ -101,9 +145,11 @@ class AdBlockInterceptor(private val adBlockEngine: AdBlockEngine) : Interceptor
             adBlockEngine.reportFiltered(filtered)
             filtered.content
         } catch (t: Throwable) {
-            // Never silently pass ads as success: report the failure (the pill
-            // goes AD_BLOCK_OFF) and let the player-layer black-frame detector
-            // take over, but still return a valid playlist so playback continues.
+            // Never silently pass ads as success: report the failure so the pill
+            // goes AD_BLOCK_OFF, then return the RAW playlist so playback keeps
+            // running instead of dead-ending. There is no black-frame detector on
+            // Android (the user may briefly see the ad); a detector that pauses or
+            // re-tries on a black frame is a known future improvement, NOT built here.
             adBlockEngine.reportResolutionFailure()
             raw
         }

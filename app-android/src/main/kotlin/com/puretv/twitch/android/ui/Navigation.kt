@@ -6,12 +6,21 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.puretv.twitch.android.ui.screens.BrowseScreen
+import com.puretv.twitch.android.ui.screens.CategoryScreen
 import com.puretv.twitch.android.ui.screens.ChannelScreen
 import com.puretv.twitch.android.ui.screens.HomeScreen
 import com.puretv.twitch.android.ui.screens.LoginScreen
 import com.puretv.twitch.android.ui.screens.SearchScreen
 import com.puretv.twitch.android.ui.screens.SettingsScreen
 import com.puretv.twitch.android.ui.screens.StreamScreen
+
+/**
+ * Navigate, collapsing a rapid double-tap into a single destination. Without
+ * launchSingleTop a fast double-tap on a card pushes two identical entries onto
+ * the back stack (and, for the stream route, two attach cycles on the shared
+ * ExoPlayer), which looks janky and wastes a back press.
+ */
+private fun NavHostController.go(route: String) = navigate(route) { launchSingleTop = true }
 
 /**
  * SECTION 06.2 — Jetpack Navigation Compose route table.
@@ -32,9 +41,11 @@ object Routes {
     const val LOGIN = "login"
     const val STREAM = "stream/{channelLogin}"
     const val CHANNEL = "channel/{channelLogin}"
+    const val CATEGORY = "category/{gameId}"
 
     fun stream(channelLogin: String) = "stream/$channelLogin"
     fun channel(channelLogin: String) = "channel/$channelLogin"
+    fun category(gameId: String) = "category/$gameId"
 }
 
 @Composable
@@ -42,20 +53,24 @@ fun PureTvNavHost(navController: NavHostController = rememberNavController()) {
     NavHost(navController = navController, startDestination = Routes.HOME) {
         composable(Routes.HOME) {
             HomeScreen(
-                onOpenStream = { navController.navigate(Routes.stream(it)) },
-                onOpenChannel = { navController.navigate(Routes.channel(it)) },
-                onOpenBrowse = { navController.navigate(Routes.BROWSE) },
-                onOpenSearch = { navController.navigate(Routes.SEARCH) },
-                onOpenSettings = { navController.navigate(Routes.SETTINGS) },
-                onOpenLogin = { navController.navigate(Routes.LOGIN) },
+                onOpenStream = { navController.go(Routes.stream(it)) },
+                onOpenChannel = { navController.go(Routes.channel(it)) },
+                onOpenBrowse = { navController.go(Routes.BROWSE) },
+                onOpenCategory = { navController.go(Routes.category(it)) },
+                onOpenSearch = { navController.go(Routes.SEARCH) },
+                onOpenSettings = { navController.go(Routes.SETTINGS) },
+                onOpenLogin = { navController.go(Routes.LOGIN) },
             )
         }
         composable(Routes.BROWSE) {
-            BrowseScreen(onOpenChannel = { navController.navigate(Routes.channel(it)) }, onBack = navController::popBackStack)
+            BrowseScreen(
+                onOpenCategory = { navController.go(Routes.category(it)) },
+                onBack = navController::popBackStack,
+            )
         }
         composable(Routes.SEARCH) {
             SearchScreen(
-                onOpenChannel = { navController.navigate(Routes.channel(it)) },
+                onOpenChannel = { navController.go(Routes.channel(it)) },
                 onBack = navController::popBackStack,
             )
         }
@@ -73,7 +88,15 @@ fun PureTvNavHost(navController: NavHostController = rememberNavController()) {
             val channelLogin = backStackEntry.arguments?.getString("channelLogin").orEmpty()
             ChannelScreen(
                 channelLogin = channelLogin,
-                onWatch = { navController.navigate(Routes.stream(channelLogin)) },
+                onWatch = { navController.go(Routes.stream(channelLogin)) },
+                onBack = navController::popBackStack,
+            )
+        }
+        composable(Routes.CATEGORY) { backStackEntry ->
+            val gameId = backStackEntry.arguments?.getString("gameId").orEmpty()
+            CategoryScreen(
+                gameId = gameId,
+                onOpenStream = { navController.go(Routes.stream(it)) },
                 onBack = navController::popBackStack,
             )
         }

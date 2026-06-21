@@ -71,12 +71,20 @@ class UserRepository(private val apiClient: TwitchApiClient) {
     }
 
     /**
+     * The authenticated account (Helix /users with no login/id returns the
+     * current token's owner), or null if there is no token or the call fails.
+     * Used right after sign-in to capture the username/userId for chat identity
+     * and the Settings screen.
+     */
+    suspend fun getCurrentUser(): ChannelInfo? = apiClient.getUsers().firstOrNull()
+
+    /**
      * Loads follows for whoever owns the current token. Helix /users with no
      * login/id returns the authenticated user, so this works right after a
      * device-code sign-in even before the user id has been persisted to settings.
      */
     suspend fun loadFollowsForCurrentUser() {
-        val me = apiClient.getUsers().firstOrNull() ?: return
+        val me = getCurrentUser() ?: return
         loadFollows(me.id)
     }
 }

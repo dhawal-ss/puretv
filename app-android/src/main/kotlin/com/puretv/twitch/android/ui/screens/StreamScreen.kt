@@ -11,18 +11,22 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
@@ -37,10 +41,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import com.puretv.twitch.android.LocalIsInPip
 import com.puretv.twitch.android.player.PlayerSurface
 import com.puretv.twitch.android.ui.StreamUiState
 import com.puretv.twitch.android.ui.StreamViewModel
@@ -62,10 +68,11 @@ fun StreamScreen(channelLogin: String, onBack: () -> Unit) {
     val viewModel: StreamViewModel = koinViewModel(parameters = { parametersOf(channelLogin) })
     val state by viewModel.state.collectAsState()
     val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
+    val isInPip = LocalIsInPip.current
 
     var fullscreen by remember { mutableStateOf(false) }
     var chatVisible by remember(state.chatEnabled) { mutableStateOf(state.chatEnabled) }
-    var chatFraction by remember(state.chatFraction) { mutableStateOf(state.chatFraction.coerceIn(0.2f, 0.5f)) }
+    var chatFraction by remember(state.chatFraction) { mutableStateOf(state.chatFraction.coerceIn(0.2f, 0.7f)) }
 
     // Immersive fullscreen: hide the system bars while fullscreen, restore otherwise.
     val view = LocalView.current
@@ -88,7 +95,8 @@ fun StreamScreen(channelLogin: String, onBack: () -> Unit) {
     }
 
     val sideBySide = isLandscape || fullscreen
-    val showChat = chatVisible && !fullscreen
+    // In PiP the window is a postage stamp: collapse to video only, no chat.
+    val showChat = chatVisible && !fullscreen && !isInPip
 
     val toggleChat: () -> Unit = {
         val next = !chatVisible
@@ -107,6 +115,8 @@ fun StreamScreen(channelLogin: String, onBack: () -> Unit) {
                     onBack = onBack,
                     onToggleFullscreen = { fullscreen = !fullscreen },
                     onToggleChat = toggleChat,
+                    onRetry = viewModel::retry,
+                    isInPip = isInPip,
                     modifier = Modifier.weight(if (showChat) 1f - chatFraction else 1f).fillMaxHeight(),
                 )
                 if (showChat) {
@@ -119,7 +129,7 @@ fun StreamScreen(channelLogin: String, onBack: () -> Unit) {
                                 detectHorizontalDragGestures(
                                     onDragEnd = { viewModel.setChatFraction(chatFraction) },
                                 ) { _, dragAmount ->
-                                    chatFraction = (chatFraction - dragAmount / widthPx).coerceIn(0.2f, 0.5f)
+                                    chatFraction = (chatFraction - dragAmount / widthPx).coerceIn(0.2f, 0.7f)
                                 }
                             },
                     )
@@ -127,6 +137,7 @@ fun StreamScreen(channelLogin: String, onBack: () -> Unit) {
                         messages = state.chatMessages,
                         onSend = viewModel::sendChatMessage,
                         emotes = state.emotes,
+                        canSend = state.isLoggedIn,
                         modifier = Modifier.weight(chatFraction).fillMaxHeight(),
                     )
                 }
@@ -141,17 +152,21 @@ fun StreamScreen(channelLogin: String, onBack: () -> Unit) {
                 onBack = onBack,
                 onToggleFullscreen = { fullscreen = true },
                 onToggleChat = toggleChat,
-                modifier = Modifier.fillMaxWidth().aspectRatio(16f / 9f),
+                onRetry = viewModel::retry,
+                isInPip = isInPip,
+                modifier = if (isInPip) Modifier.fillMaxSize() else Modifier.fillMaxWidth().aspectRatio(16f / 9f),
             )
-            state.channel?.let { channel ->
-                Column(
-                    modifier = Modifier.fillMaxWidth().padding(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(2.dp),
-                ) {
-                    Text(channel.displayName, style = MaterialTheme.typography.titleLarge, color = PureTvColors.TextPrimary)
-                    state.streamInfo?.let { info ->
-                        Text(info.title, style = MaterialTheme.typography.bodyMedium, color = PureTvColors.TextSecondary, maxLines = 2)
-                        Text(info.gameName, style = MaterialTheme.typography.bodySmall, color = PureTvColors.TwitchPurpleLight)
+            if (!isInPip) {
+                state.channel?.let { channel ->
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
+                    ) {
+                        Text(channel.displayName, style = MaterialTheme.typography.titleLarge, color = PureTvColors.TextPrimary)
+                        state.streamInfo?.let { info ->
+                            Text(info.title, style = MaterialTheme.typography.bodyMedium, color = PureTvColors.TextSecondary, maxLines = 2)
+                            Text(info.gameName, style = MaterialTheme.typography.bodySmall, color = PureTvColors.TwitchPurpleLight)
+                        }
                     }
                 }
             }
@@ -160,6 +175,7 @@ fun StreamScreen(channelLogin: String, onBack: () -> Unit) {
                     messages = state.chatMessages,
                     onSend = viewModel::sendChatMessage,
                     emotes = state.emotes,
+                    canSend = state.isLoggedIn,
                     modifier = Modifier.weight(1f).fillMaxWidth(),
                 )
             }
@@ -175,33 +191,63 @@ private fun PlayerArea(
     onBack: () -> Unit,
     onToggleFullscreen: () -> Unit,
     onToggleChat: () -> Unit,
+    onRetry: () -> Unit,
+    isInPip: Boolean,
     modifier: Modifier = Modifier,
 ) {
+    // Keep the top controls clear of the status bar / notch in portrait and
+    // windowed landscape. In fullscreen the system bars are hidden, so no inset.
+    val topInset = if (fullscreen) Modifier else Modifier.windowInsetsPadding(WindowInsets.statusBars)
+
     Box(modifier = modifier.background(Color.Black)) {
-        PlayerSurface(playableUrl = state.playableUrl, modifier = Modifier.fillMaxSize())
+        // In PiP the controller is hidden too: the small window is video only.
+        PlayerSurface(playableUrl = state.playableUrl, useController = !isInPip, modifier = Modifier.fillMaxSize())
 
-        IconButton(onClick = onBack, modifier = Modifier.align(Alignment.TopStart).padding(6.dp)) {
-            Icon(Icons.Filled.ArrowBack, contentDescription = "Back", tint = Color.White)
-        }
+        // All chrome is suppressed in PiP so the floating window shows only video.
+        if (!isInPip) {
+            // Resolution failed: show a recoverable error instead of an endless spinner.
+            if (state.playbackError != null) {
+                Column(
+                    modifier = Modifier.fillMaxSize().background(Color.Black).padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterVertically),
+                ) {
+                    Text(
+                        state.playbackError,
+                        color = Color.White,
+                        style = MaterialTheme.typography.bodyLarge,
+                        textAlign = TextAlign.Center,
+                    )
+                    Button(onClick = onRetry) { Text("Try again") }
+                }
+            }
 
-        Row(
-            modifier = Modifier.align(Alignment.TopEnd).padding(6.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            OverlayPill(text = if (chatVisible) "Hide chat" else "Show chat", onClick = onToggleChat)
-            OverlayPill(text = if (fullscreen) "Exit fullscreen" else "Fullscreen", onClick = onToggleFullscreen)
-        }
+            // Back stays on top and reachable even over the error overlay.
+            IconButton(onClick = onBack, modifier = Modifier.align(Alignment.TopStart).then(topInset).padding(6.dp)) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Color.White)
+            }
 
-        AdBlockPill(
-            status = state.adBlockStatus,
-            onClick = {},
-            modifier = Modifier.align(Alignment.BottomEnd).padding(6.dp),
-        )
+            if (state.playbackError == null) {
+                Row(
+                    modifier = Modifier.align(Alignment.TopEnd).then(topInset).padding(6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    OverlayPill(text = if (chatVisible) "Hide chat" else "Show chat", onClick = onToggleChat)
+                    OverlayPill(text = if (fullscreen) "Exit fullscreen" else "Fullscreen", onClick = onToggleFullscreen)
+                }
 
-        state.streamInfo?.let { info ->
-            Box(modifier = Modifier.align(Alignment.BottomStart).padding(6.dp)) {
-                LiveBadge(viewerCount = info.viewerCount.toLong())
+                AdBlockPill(
+                    status = state.adBlockStatus,
+                    onClick = {},
+                    modifier = Modifier.align(Alignment.BottomEnd).padding(6.dp),
+                )
+
+                state.streamInfo?.let { info ->
+                    Box(modifier = Modifier.align(Alignment.BottomStart).padding(6.dp)) {
+                        LiveBadge(viewerCount = info.viewerCount.toLong())
+                    }
+                }
             }
         }
     }
