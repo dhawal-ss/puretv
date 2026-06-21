@@ -2,6 +2,12 @@ package com.puretv.twitch.android.data.db
 
 import com.puretv.twitch.core.model.StreamInfo
 
+/**
+ * SECTION 09.3: mappers between the live core [StreamInfo] model and the Room
+ * [CachedStream] row. Lets Home paint last session's streams instantly from the
+ * cache, and write fresh network results back through.
+ */
+
 /** Maps a live [StreamInfo] into its persistent cache row. */
 fun StreamInfo.toCachedStream(now: Long): CachedStream = CachedStream(
     channelLogin = userLogin,
