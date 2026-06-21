@@ -63,7 +63,7 @@ fun FollowingScreen(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                items(state.liveFollows, key = { it.id }) { s ->
+                items(state.liveFollows, key = { it.userLogin }) { s ->
                     StreamCard(stream = s, onClick = { onOpenStream(s.userLogin) })
                 }
             }
