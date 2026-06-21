@@ -20,7 +20,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -30,13 +30,16 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.puretv.twitch.android.ui.BrowseViewModel
+import com.puretv.twitch.android.ui.components.EmptyState
+import com.puretv.twitch.android.ui.components.ErrorState
+import com.puretv.twitch.android.ui.components.GameTileSkeleton
 import com.puretv.twitch.android.ui.theme.PureTvColors
 import com.puretv.twitch.core.model.GameInfo
 import org.koin.androidx.compose.koinViewModel
 
 /** SECTION 06.4 — category/game browse grid (Helix `Get Top Games`). */
 @Composable
-fun BrowseScreen(onOpenChannel: (String) -> Unit, onBack: () -> Unit) {
+fun BrowseScreen(onOpenCategory: (String) -> Unit, onBack: () -> Unit) {
     val viewModel: BrowseViewModel = koinViewModel()
     val state by viewModel.state.collectAsState()
 
@@ -46,32 +49,56 @@ fun BrowseScreen(onOpenChannel: (String) -> Unit, onBack: () -> Unit) {
                 title = { Text("Browse", color = PureTvColors.TextPrimary) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Filled.ArrowBack, contentDescription = "Back", tint = PureTvColors.TextPrimary)
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = PureTvColors.TextPrimary)
                     }
                 },
             )
         },
         containerColor = PureTvColors.Background,
     ) { padding ->
-        LazyVerticalGrid(
-            columns = GridCells.Adaptive(minSize = 140.dp),
-            modifier = Modifier.fillMaxSize().padding(padding),
-            contentPadding = PaddingValues(16.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            items(state.games) { game -> GameCard(game) }
+        when {
+            state.isLoading && state.games.isEmpty() -> LazyVerticalGrid(
+                columns = GridCells.Adaptive(minSize = 140.dp),
+                modifier = Modifier.fillMaxSize().padding(padding),
+                contentPadding = PaddingValues(16.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                items(12) { GameTileSkeleton() }
+            }
+            state.error != null && state.games.isEmpty() -> ErrorState(
+                message = state.error!!,
+                onRetry = viewModel::retry,
+                modifier = Modifier.padding(padding),
+            )
+            state.games.isEmpty() -> EmptyState(
+                title = "No categories",
+                subtitle = "Couldn't find anything to browse right now.",
+                modifier = Modifier.padding(padding),
+            )
+            else -> LazyVerticalGrid(
+                columns = GridCells.Adaptive(minSize = 140.dp),
+                modifier = Modifier.fillMaxSize().padding(padding),
+                contentPadding = PaddingValues(16.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                items(state.games, key = { it.id }) { game ->
+                    GameCard(game, onClick = { onOpenCategory(game.id) })
+                }
+            }
         }
     }
 }
 
 @Composable
-private fun GameCard(game: GameInfo) {
+private fun GameCard(game: GameInfo, onClick: () -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { /* category drill-down: list channels playing this game */ }
-            .background(PureTvColors.Surface, RoundedCornerShape(8.dp))
+            .clip(RoundedCornerShape(8.dp))
+            .clickable(onClick = onClick)
+            .background(PureTvColors.Surface)
             .padding(8.dp),
     ) {
         AsyncImage(

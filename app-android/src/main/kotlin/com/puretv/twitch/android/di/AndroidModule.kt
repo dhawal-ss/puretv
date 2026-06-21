@@ -4,9 +4,11 @@ import androidx.media3.common.util.UnstableApi
 import androidx.room.Room
 import com.puretv.twitch.android.data.AppSettingsStore
 import com.puretv.twitch.android.data.SecureTokenStore
+import com.puretv.twitch.android.data.TokenRefresher
 import com.puretv.twitch.android.data.db.PureTvDatabase
 import com.puretv.twitch.android.player.TwitchPlayer
 import com.puretv.twitch.android.ui.BrowseViewModel
+import com.puretv.twitch.android.ui.CategoryViewModel
 import com.puretv.twitch.android.ui.ChannelViewModel
 import com.puretv.twitch.android.ui.HomeViewModel
 import com.puretv.twitch.android.ui.LoginViewModel
@@ -37,8 +39,11 @@ val androidModule = module {
 
     // --- Persistence -----------------------------------------------------
     single {
+        // No .fallbackToDestructiveMigration(): that silently wipes all user
+        // data (watch/search history) on any schema bump. The @Database is at
+        // version 1 with no migrations yet, so omitting it is safe today; real
+        // Migration objects get added here when the schema first changes.
         Room.databaseBuilder(get(), PureTvDatabase::class.java, PureTvDatabase.DB_NAME)
-            .fallbackToDestructiveMigration()
             .build()
     }
     single { get<PureTvDatabase>().cachedStreamDao() }
@@ -49,16 +54,20 @@ val androidModule = module {
 
     single { SecureTokenStore(get()) }
     single { AppSettingsStore(get(), get(), get<TokenHolder>()) }
+    single { TokenRefresher(get(), get()) }
 
     // --- Playback ---------------------------------------------------------
     single { TwitchPlayer(get(), get()) }
 
     // --- ViewModels --------------------------------------------------------
-    viewModel { HomeViewModel(get(), get(), get(), get()) }
+    // get() resolves each constructor argument by type, so argument order does
+    // not matter as long as every type is bound above (the DAOs are).
+    viewModel { HomeViewModel(get(), get(), get(), get(), get()) }
     viewModel { BrowseViewModel(get()) }
-    viewModel { SearchViewModel(get()) }
-    viewModel { (channelLogin: String) -> StreamViewModel(channelLogin, get(), get(), get(), get(), get(), get()) }
+    viewModel { SearchViewModel(get(), get()) }
+    viewModel { (gameId: String) -> CategoryViewModel(gameId, get()) }
+    viewModel { (channelLogin: String) -> StreamViewModel(channelLogin, get(), get(), get(), get(), get(), get(), get(), get()) }
     viewModel { (channelLogin: String) -> ChannelViewModel(channelLogin, get(), get()) }
     viewModel { SettingsViewModel(get()) }
-    viewModel { LoginViewModel(get(), get()) }
+    viewModel { LoginViewModel(get(), get(), get()) }
 }

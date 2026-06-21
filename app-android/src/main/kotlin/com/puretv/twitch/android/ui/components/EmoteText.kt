@@ -6,6 +6,7 @@ import androidx.compose.foundation.text.appendInlineContent
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -34,19 +35,26 @@ fun twitchEmoteUrl(id: String): String =
  */
 @Composable
 fun EmoteText(message: ChatMessage, emotes: Map<String, String>, modifier: Modifier = Modifier) {
-    val inline = HashMap<String, InlineTextContent>()
-    val text = buildAnnotatedString {
-        withStyle(SpanStyle(color = parseChatColor(message.color), fontWeight = FontWeight.SemiBold)) {
-            append(message.displayName)
-        }
-        append(": ")
-        message.parsedParts.forEach { part ->
-            when (part) {
-                is MessagePart.Text -> appendWords(part.content, emotes, inline)
-                is MessagePart.TwitchEmote -> appendEmote("tw_${part.id}", part.name, twitchEmoteUrl(part.id), inline)
-                is MessagePart.ThirdPartyEmote -> appendEmote("tp_${part.name}", part.name, part.url, inline)
+    // A chat list recomposes often (new messages, scroll). Building the
+    // AnnotatedString and the inline-content map is pure work over immutable
+    // inputs, so we memoize it per (message id, emote set). Without this, every
+    // visible row re-tokenizes and re-allocates its emote map on each recompose.
+    val (text, inline) = remember(message.id, emotes) {
+        val map = HashMap<String, InlineTextContent>()
+        val built = buildAnnotatedString {
+            withStyle(SpanStyle(color = parseChatColor(message.color), fontWeight = FontWeight.SemiBold)) {
+                append(message.displayName)
+            }
+            append(": ")
+            message.parsedParts.forEach { part ->
+                when (part) {
+                    is MessagePart.Text -> appendWords(part.content, emotes, map)
+                    is MessagePart.TwitchEmote -> appendEmote("tw_${part.id}", part.name, twitchEmoteUrl(part.id), map)
+                    is MessagePart.ThirdPartyEmote -> appendEmote("tp_${part.name}", part.name, part.url, map)
+                }
             }
         }
+        built to map
     }
     Text(
         text = text,

@@ -9,13 +9,13 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
@@ -33,30 +33,49 @@ fun streamThumbUrl(template: String, width: Int = 640, height: Int = 360): Strin
 
 /**
  * The core discovery unit, reused on Home, Search, and Channel. A 16:9 Coil
- * thumbnail with a LIVE + viewer-count overlay, then the streamer name, game,
- * and title.
+ * thumbnail under a bottom gradient scrim (so the LIVE badge always reads, even
+ * over a bright frame), then a clean type hierarchy: channel name, game, title.
+ *
+ * StreamInfo carries no avatar, so the card leans entirely on the thumbnail. The
+ * thumbnail sits on a Surface2 placeholder so it is never a black box while it
+ * loads, and the whole card is clipped to the medium shape BEFORE .clickable, so
+ * the touch ripple is contained to the rounded silhouette.
  */
 @Composable
 fun StreamCard(stream: StreamInfo, onClick: () -> Unit, modifier: Modifier = Modifier) {
     Column(
         modifier = modifier
+            .clip(MaterialTheme.shapes.medium)
             .clickable(onClick = onClick)
-            .clip(RoundedCornerShape(10.dp))
-            .background(PureTvColors.Surface),
+            .background(PureTvColors.Surface1),
     ) {
-        Box(modifier = Modifier.fillMaxWidth().aspectRatio(16f / 9f)) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(16f / 9f)
+                .background(PureTvColors.Surface2),
+        ) {
             AsyncImage(
                 model = streamThumbUrl(stream.thumbnailUrl),
-                contentDescription = stream.title,
+                contentDescription = stream.title.ifBlank { stream.userName },
                 modifier = Modifier.fillMaxSize(),
                 contentScale = ContentScale.Crop,
+            )
+            // Bottom scrim: keeps the badge legible over a busy lower frame.
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.verticalGradient(
+                            0.55f to Color.Transparent,
+                            1f to Color.Black.copy(alpha = 0.65f),
+                        ),
+                    ),
             )
             Box(
                 modifier = Modifier
                     .align(Alignment.BottomStart)
-                    .padding(6.dp)
-                    .background(Color.Black.copy(alpha = 0.55f), RoundedCornerShape(4.dp))
-                    .padding(horizontal = 4.dp, vertical = 2.dp),
+                    .padding(6.dp),
             ) {
                 LiveBadge(viewerCount = stream.viewerCount.toLong())
             }
@@ -79,8 +98,9 @@ fun StreamCard(stream: StreamInfo, onClick: () -> Unit, modifier: Modifier = Mod
             Text(
                 stream.title,
                 style = MaterialTheme.typography.bodySmall,
-                color = PureTvColors.TextMuted,
-                maxLines = 2,
+                // AA-contrast tertiary, not the near-invisible TextMuted.
+                color = PureTvColors.TextTertiary,
+                maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
         }

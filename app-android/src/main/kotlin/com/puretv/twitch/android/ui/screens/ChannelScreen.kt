@@ -17,7 +17,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -29,6 +29,8 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.puretv.twitch.android.ui.ChannelViewModel
+import com.puretv.twitch.android.ui.components.ErrorState
+import com.puretv.twitch.android.ui.components.FullScreenLoading
 import com.puretv.twitch.android.ui.components.LiveBadge
 import com.puretv.twitch.android.ui.theme.PureTvColors
 import org.koin.androidx.compose.koinViewModel
@@ -46,49 +48,68 @@ fun ChannelScreen(channelLogin: String, onWatch: () -> Unit, onBack: () -> Unit)
                 title = { Text(state.channel?.displayName ?: channelLogin, color = PureTvColors.TextPrimary) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Filled.ArrowBack, contentDescription = "Back", tint = PureTvColors.TextPrimary)
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = PureTvColors.TextPrimary)
                     }
                 },
             )
         },
         containerColor = PureTvColors.Background,
     ) { padding ->
-        Column(
-            modifier = Modifier.fillMaxSize().padding(padding).padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                AsyncImage(
-                    model = state.channel?.profileImageUrl,
-                    contentDescription = state.channel?.displayName,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.size(72.dp).clip(CircleShape).background(PureTvColors.SurfaceVariant),
-                )
-                Column {
-                    Text(
-                        state.channel?.displayName ?: channelLogin,
-                        style = MaterialTheme.typography.headlineMedium,
-                        color = PureTvColors.TextPrimary,
+        when {
+            state.isLoading -> FullScreenLoading(Modifier.padding(padding))
+            state.channel == null -> ErrorState(
+                message = state.error ?: "Channel not found.",
+                onRetry = viewModel::retry,
+                modifier = Modifier.padding(padding),
+            )
+            else -> Column(
+                modifier = Modifier.fillMaxSize().padding(padding).padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    AsyncImage(
+                        model = state.channel?.profileImageUrl,
+                        contentDescription = "${state.channel?.displayName ?: channelLogin} avatar",
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.size(72.dp).clip(CircleShape).background(PureTvColors.SurfaceVariant),
                     )
-                    if (state.isLive) {
-                        LiveBadge(viewerCount = 0L)
-                    } else {
-                        Text("Offline", style = MaterialTheme.typography.bodyMedium, color = PureTvColors.TextMuted)
+                    Column {
+                        Text(
+                            state.channel?.displayName ?: channelLogin,
+                            style = MaterialTheme.typography.headlineMedium,
+                            color = PureTvColors.TextPrimary,
+                        )
+                        if (state.isLive) {
+                            // Use the real StreamInfo so the page shows the actual
+                            // viewer count instead of a misleading "0 viewers".
+                            LiveBadge(viewerCount = state.liveStream?.viewerCount?.toLong() ?: 0L)
+                        } else {
+                            Text("Offline", style = MaterialTheme.typography.bodyMedium, color = PureTvColors.TextMuted)
+                        }
                     }
                 }
-            }
 
-            state.channel?.description?.takeIf { it.isNotBlank() }?.let { description ->
-                Text(description, style = MaterialTheme.typography.bodyLarge, color = PureTvColors.TextSecondary)
-            }
+                state.liveStream?.let { info ->
+                    if (info.title.isNotBlank()) {
+                        Text(info.title, style = MaterialTheme.typography.titleMedium, color = PureTvColors.TextPrimary, maxLines = 2)
+                    }
+                    if (info.gameName.isNotBlank()) {
+                        Text(info.gameName, style = MaterialTheme.typography.bodyMedium, color = PureTvColors.TwitchPurpleLight)
+                    }
+                }
 
-            Button(
-                onClick = onWatch,
-                enabled = state.isLive,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Icon(Icons.Filled.PlayArrow, contentDescription = null)
-                Text(if (state.isLive) "  Watch live" else "  Channel is offline")
+                state.channel?.description?.takeIf { it.isNotBlank() }?.let { description ->
+                    Text(description, style = MaterialTheme.typography.bodyLarge, color = PureTvColors.TextSecondary)
+                }
+
+                Button(
+                    onClick = onWatch,
+                    enabled = state.isLive,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Icon(Icons.Filled.PlayArrow, contentDescription = null)
+                    Text(if (state.isLive) "  Watch live" else "  Channel is offline")
+                }
             }
         }
     }
