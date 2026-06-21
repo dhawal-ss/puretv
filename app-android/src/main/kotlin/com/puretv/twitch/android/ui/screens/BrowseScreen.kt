@@ -13,14 +13,10 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -39,7 +35,7 @@ import org.koin.androidx.compose.koinViewModel
 
 /** SECTION 06.4 — category/game browse grid (Helix `Get Top Games`). */
 @Composable
-fun BrowseScreen(onOpenCategory: (String) -> Unit, onBack: () -> Unit) {
+fun BrowseScreen(onOpenCategory: (String) -> Unit) {
     val viewModel: BrowseViewModel = koinViewModel()
     val state by viewModel.state.collectAsState()
 
@@ -47,11 +43,6 @@ fun BrowseScreen(onOpenCategory: (String) -> Unit, onBack: () -> Unit) {
         topBar = {
             TopAppBar(
                 title = { Text("Browse", color = PureTvColors.TextPrimary) },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = PureTvColors.TextPrimary)
-                    }
-                },
             )
         },
         containerColor = PureTvColors.Background,

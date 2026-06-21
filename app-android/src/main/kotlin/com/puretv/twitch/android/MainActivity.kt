@@ -14,7 +14,7 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.media3.common.util.UnstableApi
 import androidx.navigation.compose.rememberNavController
 import com.puretv.twitch.android.data.TokenRefresher
-import com.puretv.twitch.android.ui.PureTvNavHost
+import com.puretv.twitch.android.ui.MainScaffold
 import com.puretv.twitch.android.ui.Routes
 import com.puretv.twitch.android.ui.theme.PureTvTheme
 import org.koin.compose.koinInject
@@ -62,7 +62,7 @@ class MainActivity : ComponentActivity() {
 
             CompositionLocalProvider(LocalIsInPip provides isInPipState.value) {
                 PureTvTheme {
-                    PureTvNavHost(navController = navController)
+                    MainScaffold(navController = navController)
                 }
             }
         }

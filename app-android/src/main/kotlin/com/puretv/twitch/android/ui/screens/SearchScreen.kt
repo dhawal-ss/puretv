@@ -19,15 +19,11 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -50,7 +46,7 @@ import org.koin.androidx.compose.koinViewModel
 
 /** SECTION 06.4: channel/game search with debounce-on-type (Helix Search Channels). */
 @Composable
-fun SearchScreen(onOpenChannel: (String) -> Unit, onBack: () -> Unit) {
+fun SearchScreen(onOpenChannel: (String) -> Unit) {
     val viewModel: SearchViewModel = koinViewModel()
     val state by viewModel.state.collectAsState()
     val focusManager = LocalFocusManager.current
@@ -73,11 +69,6 @@ fun SearchScreen(onOpenChannel: (String) -> Unit, onBack: () -> Unit) {
                         }),
                         modifier = Modifier.fillMaxWidth(),
                     )
-                },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = PureTvColors.TextPrimary)
-                    }
                 },
             )
         },
