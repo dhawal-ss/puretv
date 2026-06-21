@@ -25,7 +25,9 @@ fun StreamInfo.toCachedStream(now: Long): CachedStream = CachedStream(
  * empty; the card uses login, name, title, game, viewer count, and thumbnail.
  */
 fun CachedStream.toStreamInfo(): StreamInfo = StreamInfo(
-    id = "",
+    // Use the (unique) login as the id so a cached list never has duplicate
+    // empty-string ids, which a LazyGrid keyed on id would reject.
+    id = channelLogin,
     userId = "",
     userLogin = channelLogin,
     userName = channelDisplayName,

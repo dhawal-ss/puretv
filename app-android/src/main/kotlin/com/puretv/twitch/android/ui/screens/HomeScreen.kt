@@ -132,7 +132,7 @@ fun HomeScreen(
                     item(span = { GridItemSpan(maxLineSpan) }) { SectionHeader("Live now") }
                     item(span = { GridItemSpan(maxLineSpan) }) {
                         LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            items(state.followedLive, key = { it.id }) { s ->
+                            items(state.followedLive, key = { it.userLogin }) { s ->
                                 StreamCard(
                                     stream = s,
                                     onClick = { onOpenStream(s.userLogin) },
@@ -158,7 +158,7 @@ fun HomeScreen(
 
                 if (state.topStreams.isNotEmpty()) {
                     item(span = { GridItemSpan(maxLineSpan) }) { SectionHeader("Top streams") }
-                    items(state.topStreams, key = { it.id }) { s ->
+                    items(state.topStreams, key = { it.userLogin }) { s ->
                         StreamCard(stream = s, onClick = { onOpenStream(s.userLogin) })
                     }
                 }
