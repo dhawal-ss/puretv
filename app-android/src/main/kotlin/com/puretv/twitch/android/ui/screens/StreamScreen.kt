@@ -25,6 +25,8 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.dp
 import android.content.res.Configuration
 import com.puretv.twitch.android.player.PlayerSurface
+import com.puretv.twitch.android.ui.StreamUiState
+import com.puretv.twitch.android.ui.StreamViewModel
 import com.puretv.twitch.android.ui.components.AdBlockPill
 import com.puretv.twitch.android.ui.components.ChatPanel
 import com.puretv.twitch.android.ui.components.LiveBadge
@@ -92,7 +94,7 @@ private fun PlayerColumn(state: StreamUiState, onBack: () -> Unit, modifier: Mod
 
             state.streamInfo?.let { info ->
                 Row(modifier = Modifier.align(Alignment.BottomStart).padding(8.dp)) {
-                    LiveBadge(viewerCount = info.viewerCount)
+                    LiveBadge(viewerCount = info.viewerCount.toLong())
                 }
             }
         }

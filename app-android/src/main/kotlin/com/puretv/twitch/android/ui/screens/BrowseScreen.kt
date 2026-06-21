@@ -26,6 +26,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.puretv.twitch.android.ui.BrowseViewModel
 import com.puretv.twitch.android.ui.theme.PureTvColors
 import com.puretv.twitch.core.model.GameInfo
 import org.koin.androidx.compose.koinViewModel

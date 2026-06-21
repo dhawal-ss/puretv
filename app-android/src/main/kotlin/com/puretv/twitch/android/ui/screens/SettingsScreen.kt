@@ -10,7 +10,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
-import androidx.compose.material3.Divider
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -31,6 +31,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.puretv.twitch.android.ui.SettingsViewModel
 import com.puretv.twitch.android.ui.theme.PureTvColors
 import com.puretv.twitch.core.model.StreamQuality
 import org.koin.androidx.compose.koinViewModel
@@ -82,7 +83,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                 }
             }
 
-            item { Divider(color = PureTvColors.SurfaceVariant) }
+            item { HorizontalDivider(color = PureTvColors.SurfaceVariant) }
             item { SectionHeader("Playback") }
             item {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -101,7 +102,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                 }
             }
 
-            item { Divider(color = PureTvColors.SurfaceVariant) }
+            item { HorizontalDivider(color = PureTvColors.SurfaceVariant) }
             item { SectionHeader("Ad blocking") }
             item {
                 Row(
@@ -153,7 +154,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                 }
             }
 
-            item { Divider(color = PureTvColors.SurfaceVariant) }
+            item { HorizontalDivider(color = PureTvColors.SurfaceVariant) }
             item {
                 Text(
                     "PureTV for Twitch — sideloaded build. Not affiliated with Twitch Interactive, Inc.",

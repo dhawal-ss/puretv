@@ -25,6 +25,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.puretv.twitch.android.ui.ChannelViewModel
 import com.puretv.twitch.android.ui.components.LiveBadge
 import com.puretv.twitch.android.ui.theme.PureTvColors
 import org.koin.androidx.compose.koinViewModel

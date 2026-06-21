@@ -28,6 +28,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.puretv.twitch.android.ui.SearchViewModel
 import com.puretv.twitch.android.ui.theme.PureTvColors
 import com.puretv.twitch.core.api.ChannelSearchResult
 import org.koin.androidx.compose.koinViewModel
