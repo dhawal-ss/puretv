@@ -1,5 +1,10 @@
 package com.puretv.twitch.android.ui
 
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
@@ -127,7 +132,24 @@ fun MainScaffold(navController: NavHostController = rememberNavController()) {
 
 @Composable
 fun PureTvNavHost(navController: NavHostController, modifier: Modifier = Modifier) {
-    NavHost(navController = navController, startDestination = Routes.HOME, modifier = modifier) {
+    NavHost(
+        navController = navController,
+        startDestination = Routes.HOME,
+        modifier = modifier,
+        enterTransition = {
+            val bothTabs = initialState.destination.route in TOP_TAB_ROUTES &&
+                targetState.destination.route in TOP_TAB_ROUTES
+            if (bothTabs) fadeIn(tween(180))
+            else fadeIn(tween(220)) + scaleIn(initialScale = 0.96f, animationSpec = tween(220))
+        },
+        exitTransition = {
+            val bothTabs = initialState.destination.route in TOP_TAB_ROUTES &&
+                targetState.destination.route in TOP_TAB_ROUTES
+            if (bothTabs) fadeOut(tween(180)) else fadeOut(tween(160))
+        },
+        popEnterTransition = { fadeIn(tween(180)) },
+        popExitTransition = { fadeOut(tween(160)) + scaleOut(targetScale = 0.96f, animationSpec = tween(160)) },
+    ) {
         composable(Routes.HOME) {
             HomeScreen(
                 onOpenStream = { navController.go(Routes.stream(it)) },
