@@ -63,7 +63,7 @@ val androidModule = module {
     // --- ViewModels --------------------------------------------------------
     // get() resolves each constructor argument by type, so argument order does
     // not matter as long as every type is bound above (the DAOs are).
-    viewModel { HomeViewModel(get(), get(), get(), get(), get()) }
+    viewModel { HomeViewModel(get(), get(), get(), get(), get(), get()) }
     viewModel { BrowseViewModel(get()) }
     viewModel { SearchViewModel(get(), get()) }
     viewModel { (gameId: String) -> CategoryViewModel(gameId, get()) }

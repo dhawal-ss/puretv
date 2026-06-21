@@ -5,11 +5,16 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.media3.common.util.UnstableApi
 import com.puretv.twitch.android.data.AppSettingsStore
+import com.puretv.twitch.android.data.SessionManager
 import com.puretv.twitch.android.player.TwitchPlayer
+import com.puretv.twitch.android.data.db.CachedStreamDao
 import com.puretv.twitch.android.data.db.SearchHistoryDao
 import com.puretv.twitch.android.data.db.SearchHistoryEntry
 import com.puretv.twitch.android.data.db.WatchHistoryDao
 import com.puretv.twitch.android.data.db.WatchHistoryEntry
+import com.puretv.twitch.android.data.db.toCachedStream
+import com.puretv.twitch.android.data.db.toStreamInfo
+import com.puretv.twitch.core.session.SessionState
 import com.puretv.twitch.core.adblock.AdBlockEngine
 import com.puretv.twitch.core.adblock.AdBlockStatus
 import com.puretv.twitch.core.api.DeviceAuth
@@ -30,7 +35,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -55,44 +59,59 @@ class HomeViewModel(
     private val streamRepository: StreamRepository,
     private val userRepository: UserRepository,
     private val channelRepository: ChannelRepository,
-    private val settings: AppSettingsStore,
+    private val sessionManager: SessionManager,
     private val watchHistoryDao: WatchHistoryDao,
+    private val cachedStreamDao: CachedStreamDao,
 ) : ViewModel() {
     private val _state = MutableStateFlow(HomeUiState())
     val state: StateFlow<HomeUiState> = _state.asStateFlow()
 
+    // Once the network returns a fresh top-streams list, stop letting the cached
+    // snapshot overwrite it (the cache is only for the instant first paint).
+    private var freshTopStreamsArrived = false
+
     init {
-        // "Continue watching": the channels you most recently opened, newest first.
+        // "Continue watching": most recently opened channels, newest first.
         viewModelScope.launch {
             watchHistoryDao.observeRecent().collect { history ->
                 _state.update { it.copy(continueWatching = history) }
             }
         }
-        // Initial loads: categories, top streams, and (if logged in) the follow set.
+        // Cached-first: paint last session's streams instantly, before any network.
         viewModelScope.launch {
-            _state.update { it.copy(isLoading = true, error = null) }
-            val gamesOk = runCatching { channelRepository.topGames() }
-                .onSuccess { g -> _state.update { it.copy(games = g) } }
-                .isSuccess
-            val topOk = runCatching { streamRepository.refreshTopStreams() }.isSuccess
-            val prefs = settings.flow.first()
-            if (prefs.accessToken.isNotBlank()) runCatching { userRepository.loadFollowsForCurrentUser() }
-            // Only surface an error when nothing loaded; a partial failure still shows content.
-            val failed = !gamesOk && !topOk
-            _state.update { it.copy(isLoading = false, error = if (failed) "Couldn't load. Check your connection and try again." else null) }
-        }
-        // Reactive: top streams list + login state.
-        viewModelScope.launch {
-            combine(streamRepository.topStreams, settings.flow) { top, prefs ->
-                top to prefs.accessToken.isNotBlank()
-            }.collect { (top, loggedIn) ->
-                _state.update { it.copy(topStreams = top, isLoggedIn = loggedIn) }
+            cachedStreamDao.observeAll().collect { cached ->
+                if (!freshTopStreamsArrived && cached.isNotEmpty()) {
+                    _state.update { it.copy(topStreams = cached.map { c -> c.toStreamInfo() }, isLoading = false) }
+                }
             }
         }
-        // Followed "Live now": the streamers you follow who are live RIGHT NOW.
-        // Helix /streams by user_login returns only currently-live channels, so
-        // this is the correct source (filtering the global top list would miss
-        // any follow outside the top 20). Re-fetch whenever the follow set loads.
+        // Fresh top streams from the network + write-through to the cache.
+        viewModelScope.launch {
+            streamRepository.topStreams.collect { top ->
+                if (top.isNotEmpty()) {
+                    freshTopStreamsArrived = true
+                    _state.update { it.copy(topStreams = top) }
+                    runCatching {
+                        val now = System.currentTimeMillis()
+                        cachedStreamDao.upsertAll(top.map { it.toCachedStream(now) })
+                    }
+                }
+            }
+        }
+        // React to the session: load real content on login, and repopulate on the
+        // logged-out to logged-in transition (the instant-populate fix). Helix
+        // discovery needs a token, so logged-out relies on cached content only.
+        viewModelScope.launch {
+            sessionManager.state.collect { session ->
+                when (session) {
+                    is SessionState.LoggedOut ->
+                        _state.update { it.copy(isLoggedIn = false, isLoading = it.topStreams.isEmpty()) }
+                    is SessionState.LoggedIn ->
+                        loadLoggedInHome()
+                }
+            }
+        }
+        // Followed "Live now": re-fetch whenever the follow set changes.
         viewModelScope.launch {
             userRepository.followedLogins.collect { follows ->
                 val live = if (follows.isEmpty()) emptyList()
@@ -102,11 +121,25 @@ class HomeViewModel(
         }
     }
 
+    private suspend fun loadLoggedInHome() {
+        _state.update { it.copy(isLoggedIn = true, isLoading = it.topStreams.isEmpty(), error = null) }
+        val gamesOk = runCatching { channelRepository.topGames() }
+            .onSuccess { g -> _state.update { it.copy(games = g) } }.isSuccess
+        val topOk = runCatching { streamRepository.refreshTopStreams() }.isSuccess
+        runCatching { userRepository.loadFollowsForCurrentUser() }
+        val failed = !gamesOk && !topOk && _state.value.topStreams.isEmpty()
+        _state.update {
+            it.copy(isLoading = false, error = if (failed) "Couldn't load. Check your connection and try again." else null)
+        }
+    }
+
     fun refresh() = viewModelScope.launch {
         _state.update { it.copy(isLoading = true, error = null) }
         val ok = runCatching { streamRepository.refreshTopStreams() }.isSuccess
         runCatching { channelRepository.topGames() }.onSuccess { g -> _state.update { it.copy(games = g) } }
-        _state.update { it.copy(isLoading = false, error = if (!ok && it.topStreams.isEmpty()) "Couldn't refresh. Check your connection." else null) }
+        _state.update {
+            it.copy(isLoading = false, error = if (!ok && it.topStreams.isEmpty()) "Couldn't refresh. Check your connection." else null)
+        }
     }
 }
 
