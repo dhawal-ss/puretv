@@ -8,7 +8,7 @@ class PlaylistDetectTest {
     @Test fun tsSegmentIsSkippedByPathEvenWithQueryString() {
         assertEquals(
             PlaylistAction.SKIP_SEGMENT,
-            PlaylistDetect.classifyRequest("/v1/segment/abc.ts"),
+            PlaylistDetect.classifyRequest("/v1/segment/abc.ts?token=eyJabc.def"),
         )
     }
 
@@ -40,5 +40,31 @@ class PlaylistDetectTest {
             PlaylistAction.PASSTHROUGH,
             PlaylistDetect.classifyResponse("text/html", "<!DOCTYPE html>"),
         )
+    }
+
+    @Test fun aacSegmentIsSkipped() {
+        assertEquals(PlaylistAction.SKIP_SEGMENT, PlaylistDetect.classifyRequest("/seg/x.aac"))
+    }
+
+    @Test fun uppercaseExtensionIsSkipped() {
+        assertEquals(PlaylistAction.SKIP_SEGMENT, PlaylistDetect.classifyRequest("/seg/x.TS"))
+    }
+
+    @Test fun mpegurlContentTypeWithCharsetSuffixIsAPlaylist() {
+        assertEquals(
+            PlaylistAction.FILTER_PLAYLIST,
+            PlaylistDetect.classifyResponse("application/vnd.apple.mpegurl; charset=utf-8", null),
+        )
+    }
+
+    @Test fun extm3uBodyWithLeadingWhitespaceIsAPlaylist() {
+        assertEquals(
+            PlaylistAction.FILTER_PLAYLIST,
+            PlaylistDetect.classifyResponse(null, "  #EXTM3U"),
+        )
+    }
+
+    @Test fun nullInputsArePassthrough() {
+        assertEquals(PlaylistAction.PASSTHROUGH, PlaylistDetect.classifyResponse(null, null))
     }
 }

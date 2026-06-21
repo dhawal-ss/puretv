@@ -16,12 +16,14 @@ object PlaylistDetect {
     private val SEGMENT_EXTENSIONS = listOf(".ts", ".m4s", ".mp4", ".aac")
 
     /**
-     * [requestPath] is the URL path WITHOUT the query string. Returns
+     * [requestPath] may be a bare path or a full URL with a query string; the
+     * query string is stripped internally before the extension check. Returns
      * [PlaylistAction.SKIP_SEGMENT] for obvious media segments (so their bodies
      * are never buffered), or null when the response must be inspected.
      */
     fun classifyRequest(requestPath: String): PlaylistAction? {
-        val lower = requestPath.lowercase()
+        val path = requestPath.substringBefore('?')
+        val lower = path.lowercase()
         return if (SEGMENT_EXTENSIONS.any { lower.endsWith(it) }) PlaylistAction.SKIP_SEGMENT else null
     }
 
