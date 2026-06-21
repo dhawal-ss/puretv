@@ -25,7 +25,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
+import coil3.compose.AsyncImage
 import com.puretv.twitch.android.ui.BrowseViewModel
 import com.puretv.twitch.android.ui.theme.PureTvColors
 import com.puretv.twitch.core.model.GameInfo
@@ -71,8 +74,11 @@ private fun GameCard(game: GameInfo) {
             .background(PureTvColors.Surface, RoundedCornerShape(8.dp))
             .padding(8.dp),
     ) {
-        androidx.compose.foundation.layout.Box(
-            modifier = Modifier.fillMaxWidth().aspectRatio(3f / 4f).background(PureTvColors.SurfaceVariant, RoundedCornerShape(6.dp)),
+        AsyncImage(
+            model = game.boxArtUrl.replace("{width}", "285").replace("{height}", "380"),
+            contentDescription = game.name,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.fillMaxWidth().aspectRatio(3f / 4f).clip(RoundedCornerShape(6.dp)),
         )
         Text(
             text = game.name,
