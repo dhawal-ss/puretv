@@ -8,6 +8,10 @@ package com.puretv.twitch.core.adblock
  * filter has something to strip.
  */
 object AdSimulator {
+    // Written from the Compose main thread (debug Settings toggle), read from the
+    // OkHttp dispatcher thread (the interceptor). Volatile guarantees visibility
+    // across those threads. Mirrors TokenHolder in CoreModule.
+    @Volatile
     var enabled: Boolean = false
 
     private val POD = listOf(
