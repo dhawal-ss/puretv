@@ -126,6 +126,7 @@ fun StreamScreen(channelLogin: String, onBack: () -> Unit) {
                     ChatPanel(
                         messages = state.chatMessages,
                         onSend = viewModel::sendChatMessage,
+                        emotes = state.emotes,
                         modifier = Modifier.weight(chatFraction).fillMaxHeight(),
                     )
                 }
@@ -158,6 +159,7 @@ fun StreamScreen(channelLogin: String, onBack: () -> Unit) {
                 ChatPanel(
                     messages = state.chatMessages,
                     onSend = viewModel::sendChatMessage,
+                    emotes = state.emotes,
                     modifier = Modifier.weight(1f).fillMaxWidth(),
                 )
             }

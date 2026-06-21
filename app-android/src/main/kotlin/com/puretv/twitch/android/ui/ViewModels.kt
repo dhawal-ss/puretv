@@ -130,6 +130,7 @@ data class StreamUiState(
     val chatMessages: List<ChatMessage> = emptyList(),
     val chatFraction: Float = 0.5f,
     val chatEnabled: Boolean = true,
+    val emotes: Map<String, String> = emptyMap(),
     val isLoading: Boolean = true,
 )
 
@@ -156,8 +157,11 @@ class StreamViewModel(
                     _state.update { it.copy(playableUrl = playable.masterUrl) }
                 }
 
-            emoteRepository.loadGlobalEmotes()
-            channel?.let { emoteRepository.loadChannelEmotes(it.id, it.login) }
+            val global = runCatching { emoteRepository.loadGlobalEmotes() }.getOrDefault(emptyList())
+            val channelEmotes = channel?.let {
+                runCatching { emoteRepository.loadChannelEmotes(it.id, it.login) }.getOrDefault(emptyList())
+            } ?: emptyList()
+            _state.update { s -> s.copy(emotes = (global + channelEmotes).associate { it.name to it.url }) }
         }
         viewModelScope.launch {
             adBlockEngine.status.collect { status -> _state.update { it.copy(adBlockStatus = status) } }
