@@ -201,6 +201,7 @@ data class AppSettings(
     val showFfzEmotes: Boolean = true,
     val chatTimestamps: Boolean = false,
     val animateEmotes: Boolean = true,
+    val chatFraction: Float = 0.5f,
 
     // UI
     val theme: String = "dark", // dark, darker, purple
