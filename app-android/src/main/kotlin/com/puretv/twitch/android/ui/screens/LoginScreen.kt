@@ -24,6 +24,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import android.content.Intent
 import android.net.Uri
+import com.puretv.twitch.android.ui.LoginViewModel
 import com.puretv.twitch.android.ui.theme.PureTvColors
 import org.koin.androidx.compose.koinViewModel
 

@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -31,6 +32,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.puretv.twitch.android.ui.HomeViewModel
 import com.puretv.twitch.android.ui.components.LiveBadge
 import com.puretv.twitch.android.ui.theme.PureTvColors
 import com.puretv.twitch.core.model.StreamInfo
@@ -81,7 +83,7 @@ fun HomeScreen(
                     Text("Live now", style = MaterialTheme.typography.titleLarge, color = PureTvColors.TextPrimary)
                 }
                 item {
-                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         items(state.followedLive) { stream ->
                             StreamCard(stream = stream, onClick = { onOpenStream(stream.userLogin) })
                         }
