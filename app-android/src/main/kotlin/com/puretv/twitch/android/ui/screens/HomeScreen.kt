@@ -1,21 +1,19 @@
 package com.puretv.twitch.android.ui.screens
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -33,14 +31,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.puretv.twitch.android.ui.HomeViewModel
-import com.puretv.twitch.android.ui.components.LiveBadge
+import com.puretv.twitch.android.ui.components.GameTile
+import com.puretv.twitch.android.ui.components.StreamCard
 import com.puretv.twitch.android.ui.theme.PureTvColors
-import com.puretv.twitch.core.model.StreamInfo
 import org.koin.androidx.compose.koinViewModel
 
 /**
- * SECTION 06.4 — Home: followed channels rail (if logged in) + featured/top
- * streams grid. Tapping a card opens [Routes.STREAM] for that channel.
+ * SECTION 06.4: Home. A single adaptive grid (no overlapping scrollables): the
+ * followed "Live now" rail, a categories rail, then the top-streams grid. Cards
+ * carry real thumbnails. Tapping a card opens the stream.
  */
 @Composable
 fun HomeScreen(
@@ -73,87 +72,72 @@ fun HomeScreen(
         },
         containerColor = PureTvColors.Background,
     ) { padding ->
-        LazyColumn(
+        LazyVerticalGrid(
+            columns = GridCells.Adaptive(minSize = 300.dp),
             modifier = Modifier.fillMaxSize().padding(padding),
-            contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(20.dp),
+            contentPadding = PaddingValues(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             if (state.followedLive.isNotEmpty()) {
-                item {
-                    Text("Live now", style = MaterialTheme.typography.titleLarge, color = PureTvColors.TextPrimary)
-                }
-                item {
+                item(span = { GridItemSpan(maxLineSpan) }) { SectionHeader("Live now") }
+                item(span = { GridItemSpan(maxLineSpan) }) {
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        items(state.followedLive) { stream ->
-                            StreamCard(stream = stream, onClick = { onOpenStream(stream.userLogin) })
+                        items(state.followedLive, key = { it.id }) { s ->
+                            StreamCard(
+                                stream = s,
+                                onClick = { onOpenStream(s.userLogin) },
+                                modifier = Modifier.width(300.dp),
+                            )
                         }
                     }
                 }
             }
 
-            item {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text("Browse categories", style = MaterialTheme.typography.titleLarge, color = PureTvColors.TextPrimary)
-                    Text(
-                        "See all",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = PureTvColors.TwitchPurpleLight,
-                        modifier = Modifier.clickable(onClick = onOpenBrowse),
-                    )
+            if (state.games.isNotEmpty()) {
+                item(span = { GridItemSpan(maxLineSpan) }) {
+                    SectionHeaderRow("Browse categories", actionLabel = "See all", onAction = onOpenBrowse)
+                }
+                item(span = { GridItemSpan(maxLineSpan) }) {
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        items(state.games, key = { it.id }) { g ->
+                            GameTile(game = g, onClick = onOpenBrowse)
+                        }
+                    }
                 }
             }
 
-            item {
-                Text("Top streams", style = MaterialTheme.typography.titleLarge, color = PureTvColors.TextPrimary)
-            }
-        }
-
-        LazyVerticalGrid(
-            columns = GridCells.Adaptive(minSize = 160.dp),
-            modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp),
-            contentPadding = PaddingValues(vertical = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            items(state.topStreams) { stream ->
-                StreamCard(stream = stream, onClick = { onOpenStream(stream.userLogin) })
+            item(span = { GridItemSpan(maxLineSpan) }) { SectionHeader("Top streams") }
+            items(state.topStreams, key = { it.id }) { s ->
+                StreamCard(stream = s, onClick = { onOpenStream(s.userLogin) })
             }
         }
     }
 }
 
 @Composable
-private fun StreamCard(stream: StreamInfo, onClick: () -> Unit) {
-    Column(
-        modifier = Modifier
-            .clickable(onClick = onClick)
-            .background(PureTvColors.Surface, RoundedCornerShape(10.dp))
-            .padding(10.dp),
+private fun SectionHeader(title: String) {
+    Text(
+        title,
+        style = MaterialTheme.typography.titleLarge,
+        color = PureTvColors.TextPrimary,
+        modifier = Modifier.padding(top = 4.dp),
+    )
+}
+
+@Composable
+private fun SectionHeaderRow(title: String, actionLabel: String, onAction: () -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            LiveBadge(viewerCount = stream.viewerCount.toLong())
-        }
+        Text(title, style = MaterialTheme.typography.titleLarge, color = PureTvColors.TextPrimary)
         Text(
-            text = stream.userName,
-            style = MaterialTheme.typography.titleLarge,
-            color = PureTvColors.TextPrimary,
-            maxLines = 1,
-        )
-        Text(
-            text = stream.gameName.ifBlank { "—" },
+            actionLabel,
             style = MaterialTheme.typography.bodyMedium,
-            color = PureTvColors.TextSecondary,
-            maxLines = 1,
-        )
-        Text(
-            text = stream.title,
-            style = MaterialTheme.typography.bodyMedium,
-            color = PureTvColors.TextMuted,
-            maxLines = 2,
+            color = PureTvColors.TwitchPurpleLight,
+            modifier = Modifier.clickable(onClick = onAction),
         )
     }
 }
