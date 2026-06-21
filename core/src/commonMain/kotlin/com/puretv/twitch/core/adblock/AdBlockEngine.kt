@@ -112,6 +112,16 @@ class AdBlockEngine(
     }
 
     /**
+     * Drive the on-screen pill from a [filterPlaylist] result. The in-process
+     * Android interceptor calls this after each media-playlist refresh because
+     * [filterPlaylist] itself stays status-free (it runs on the player's polling
+     * thread). Ads stripped sets AD_FILTERED; clean sets AD_BLOCKED.
+     */
+    fun reportFiltered(filtered: FilteredPlaylist) {
+        _status.value = if (filtered.containedAds) AdBlockStatus.AD_FILTERED else AdBlockStatus.AD_BLOCKED
+    }
+
+    /**
      * Called by the transport layer (e.g. `LocalStreamProxy`) when stream
      * resolution fails BEFORE [resolveCleanStream] can run — typically the GQL
      * playback-token mint threw (a banned/renamed channel, or Twitch changing
