@@ -133,6 +133,25 @@ fun SettingsScreen(onBack: () -> Unit) {
                     }
                 }
             }
+            if (com.puretv.twitch.android.BuildConfig.DEBUG) {
+                item {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text("Simulate ads (debug)", style = MaterialTheme.typography.bodyLarge, color = PureTvColors.TextPrimary)
+                        var simulateAds by remember { mutableStateOf(com.puretv.twitch.core.adblock.AdSimulator.enabled) }
+                        Switch(
+                            checked = simulateAds,
+                            onCheckedChange = {
+                                simulateAds = it
+                                com.puretv.twitch.core.adblock.AdSimulator.enabled = it
+                            },
+                        )
+                    }
+                }
+            }
 
             item { Divider(color = PureTvColors.SurfaceVariant) }
             item {
