@@ -43,6 +43,7 @@ class AppSettingsStore(
         val SHOW_7TV = booleanPreferencesKey("show_7tv_emotes")
         val SHOW_FFZ = booleanPreferencesKey("show_ffz_emotes")
         val CHAT_TIMESTAMPS = booleanPreferencesKey("chat_timestamps")
+        val CHAT_FRACTION = floatPreferencesKey("chat_fraction")
         val THEME = stringPreferencesKey("theme")
         val COMPACT_MODE = booleanPreferencesKey("compact_mode")
     }
@@ -78,6 +79,7 @@ class AppSettingsStore(
             show7tvEmotes = prefs[Keys.SHOW_7TV] ?: true,
             showFfzEmotes = prefs[Keys.SHOW_FFZ] ?: true,
             chatTimestamps = prefs[Keys.CHAT_TIMESTAMPS] ?: false,
+            chatFraction = prefs[Keys.CHAT_FRACTION] ?: 0.5f,
             theme = prefs[Keys.THEME] ?: "dark",
             compactMode = prefs[Keys.COMPACT_MODE] ?: false,
             accessToken = token.accessToken,
@@ -104,6 +106,7 @@ class AppSettingsStore(
             prefs[Keys.SHOW_7TV] = next.show7tvEmotes
             prefs[Keys.SHOW_FFZ] = next.showFfzEmotes
             prefs[Keys.CHAT_TIMESTAMPS] = next.chatTimestamps
+            prefs[Keys.CHAT_FRACTION] = next.chatFraction
             prefs[Keys.THEME] = next.theme
             prefs[Keys.COMPACT_MODE] = next.compactMode
         }

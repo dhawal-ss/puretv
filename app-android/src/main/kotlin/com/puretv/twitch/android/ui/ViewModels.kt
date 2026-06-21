@@ -128,6 +128,8 @@ data class StreamUiState(
     val playableUrl: String? = null,
     val adBlockStatus: AdBlockStatus = AdBlockStatus.UNKNOWN,
     val chatMessages: List<ChatMessage> = emptyList(),
+    val chatFraction: Float = 0.5f,
+    val chatEnabled: Boolean = true,
     val isLoading: Boolean = true,
 )
 
@@ -165,6 +167,7 @@ class StreamViewModel(
             // `TwitchChatClient` falls back to a `justinfanNNNN` identity for `null`.
             // Sending requires a real OAuth token (see Section 5.1).
             val settings = settingsStore.flow.first()
+            _state.update { it.copy(chatFraction = settings.chatFraction, chatEnabled = settings.chatEnabled) }
             val token = settings.accessToken.takeIf { it.isNotBlank() }
             val username = settings.username.takeIf { it.isNotBlank() }
             chatClient.connect(channelLogin, token, username)
@@ -180,6 +183,14 @@ class StreamViewModel(
 
     fun sendChatMessage(text: String) = viewModelScope.launch {
         chatClient.sendMessage(channelLogin, text)
+    }
+
+    fun setChatFraction(fraction: Float) = viewModelScope.launch {
+        settingsStore.update { it.copy(chatFraction = fraction) }
+    }
+
+    fun setChatEnabled(enabled: Boolean) = viewModelScope.launch {
+        settingsStore.update { it.copy(chatEnabled = enabled) }
     }
 
     override fun onCleared() {
