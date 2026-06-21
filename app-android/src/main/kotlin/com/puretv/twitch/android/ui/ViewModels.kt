@@ -2,6 +2,7 @@ package com.puretv.twitch.android.ui
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.puretv.twitch.android.data.AppSettingsStore
 import com.puretv.twitch.core.adblock.AdBlockEngine
 import com.puretv.twitch.core.adblock.AdBlockStatus
 import com.puretv.twitch.core.api.PkceAuth
@@ -15,6 +16,7 @@ import com.puretv.twitch.core.model.StreamInfo
 import com.puretv.twitch.core.repository.ChannelRepository
 import com.puretv.twitch.core.repository.StreamRepository
 import com.puretv.twitch.core.repository.UserRepository
+import io.ktor.client.HttpClient
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -255,7 +257,10 @@ data class LoginUiState(
  * screen; the redirect back through `puretv-twitch://auth` is captured by
  * MainActivity's intent filter and forwarded here via [completeWithCode].
  */
-class LoginViewModel(private val settingsStore: AppSettingsStore) : ViewModel() {
+class LoginViewModel(
+    private val httpClient: HttpClient,
+    private val settingsStore: AppSettingsStore,
+) : ViewModel() {
     private val _state = MutableStateFlow(LoginUiState())
     val state: StateFlow<LoginUiState> = _state.asStateFlow()
 
@@ -297,7 +302,7 @@ class LoginViewModel(private val settingsStore: AppSettingsStore) : ViewModel() 
             return@launch
         }
         runCatching {
-            PkceAuth.exchangeCodeForToken(code, verifier, TwitchConfig.REDIRECT_URI_MOBILE)
+            PkceAuth.exchangeCodeForToken(httpClient, code, verifier, TwitchConfig.REDIRECT_URI_MOBILE)
         }.onSuccess { token ->
             settingsStore.setSession(accessToken = token.accessToken, refreshToken = token.refreshToken)
             _state.update { it.copy(isAuthenticating = false, isLoggedIn = true) }
