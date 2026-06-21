@@ -5,7 +5,8 @@ import androidx.lifecycle.viewModelScope
 import com.puretv.twitch.android.data.AppSettingsStore
 import com.puretv.twitch.core.adblock.AdBlockEngine
 import com.puretv.twitch.core.adblock.AdBlockStatus
-import com.puretv.twitch.core.api.PkceAuth
+import com.puretv.twitch.core.api.DeviceAuth
+import com.puretv.twitch.core.api.DevicePollResult
 import com.puretv.twitch.core.api.TwitchConfig
 import com.puretv.twitch.core.chat.TwitchChatClient
 import com.puretv.twitch.core.emotes.EmoteRepository
@@ -17,6 +18,8 @@ import com.puretv.twitch.core.repository.ChannelRepository
 import com.puretv.twitch.core.repository.StreamRepository
 import com.puretv.twitch.core.repository.UserRepository
 import io.ktor.client.HttpClient
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -246,16 +249,19 @@ class SettingsViewModel(private val settingsStore: AppSettingsStore) : ViewModel
 
 data class LoginUiState(
     val isAuthenticating: Boolean = false,
-    val authorizeUrl: String? = null,
+    val userCode: String? = null,
+    val verificationUri: String? = null,
     val error: String? = null,
     val isLoggedIn: Boolean = false,
 )
 
 /**
- * SECTION 03.2 — drives the OAuth Authorization Code + PKCE flow. The
- * generated [authorizeUrl] is opened in a Custom Tab / browser by the
- * screen; the redirect back through `puretv-twitch://auth` is captured by
- * MainActivity's intent filter and forwarded here via [completeWithCode].
+ * SECTION 03.2 drives the Twitch Device Code Grant flow, the same flow the
+ * desktop app uses. Twitch does not accept custom-scheme redirect URIs, so the
+ * authorization-code + `puretv-twitch://auth` approach cannot work on mobile;
+ * device flow needs no redirect at all. The screen shows [userCode] and points
+ * the user at [verificationUri] (twitch.tv/activate); this VM polls until Twitch
+ * reports the code authorized, then persists the session.
  */
 class LoginViewModel(
     private val httpClient: HttpClient,
@@ -264,50 +270,49 @@ class LoginViewModel(
     private val _state = MutableStateFlow(LoginUiState())
     val state: StateFlow<LoginUiState> = _state.asStateFlow()
 
-    private var pendingVerifier: String? = null
-    private var pendingState: String? = null
-
-    init {
-        // MainActivity.onNewIntent forwards the `puretv-twitch://auth?code&state`
-        // redirect through this in-process bus (Section 3.2 step 4).
-        viewModelScope.launch {
-            com.puretv.twitch.android.AuthRedirectBus.events.collect { redirect ->
-                completeWithCode(redirect.code, redirect.state)
-            }
-        }
-    }
+    private var loginJob: Job? = null
 
     fun beginLogin() {
-        val verifier = PkceAuth.generateVerifier()
-        val challenge = PkceAuth.deriveChallenge(verifier)
-        val state = PkceAuth.generateState()
-        pendingVerifier = verifier
-        pendingState = state
-        _state.update {
-            it.copy(
-                isAuthenticating = true,
-                authorizeUrl = TwitchConfig.authorizeUrl(
-                    redirectUri = TwitchConfig.REDIRECT_URI_MOBILE,
-                    codeChallenge = challenge,
-                    state = state,
-                ),
-            )
+        if (loginJob?.isActive == true) return
+        loginJob = viewModelScope.launch {
+            _state.value = LoginUiState(isAuthenticating = true)
+
+            val device = runCatching { DeviceAuth.requestDeviceCode(httpClient) }.getOrElse { e ->
+                _state.update { it.copy(isAuthenticating = false, error = e.message ?: "Could not start sign-in.") }
+                return@launch
+            }
+            _state.update { it.copy(userCode = device.userCode, verificationUri = device.verificationUri) }
+
+            var intervalMs = device.intervalSeconds.coerceAtLeast(1) * 1_000
+            val expiresMs = device.expiresInSeconds.coerceAtLeast(1) * 1_000
+            var elapsedMs = 0L
+            while (elapsedMs < expiresMs) {
+                delay(intervalMs)
+                elapsedMs += intervalMs
+                when (val result = runCatching { DeviceAuth.pollOnce(httpClient, device.deviceCode) }.getOrNull()) {
+                    is DevicePollResult.Success -> {
+                        settingsStore.setSession(
+                            accessToken = result.token.accessToken,
+                            refreshToken = result.token.refreshToken,
+                        )
+                        _state.update { it.copy(isAuthenticating = false, isLoggedIn = true) }
+                        return@launch
+                    }
+                    is DevicePollResult.SlowDown -> intervalMs += 5_000
+                    is DevicePollResult.Expired -> {
+                        _state.update { it.copy(isAuthenticating = false, error = "Sign-in expired, please try again.") }
+                        return@launch
+                    }
+                    // Pending, or a transient null from a network hiccup: keep polling.
+                    else -> {}
+                }
+            }
+            _state.update { it.copy(isAuthenticating = false, error = "Sign-in timed out, please try again.") }
         }
     }
 
-    fun completeWithCode(code: String, returnedState: String) = viewModelScope.launch {
-        val verifier = pendingVerifier
-        if (verifier == null || returnedState != pendingState) {
-            _state.update { it.copy(error = "Login state mismatch — please try again.", isAuthenticating = false) }
-            return@launch
-        }
-        runCatching {
-            PkceAuth.exchangeCodeForToken(httpClient, code, verifier, TwitchConfig.REDIRECT_URI_MOBILE)
-        }.onSuccess { token ->
-            settingsStore.setSession(accessToken = token.accessToken, refreshToken = token.refreshToken)
-            _state.update { it.copy(isAuthenticating = false, isLoggedIn = true) }
-        }.onFailure { e ->
-            _state.update { it.copy(isAuthenticating = false, error = e.message ?: "Login failed") }
-        }
+    override fun onCleared() {
+        loginJob?.cancel()
+        super.onCleared()
     }
 }
