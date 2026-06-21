@@ -14,6 +14,8 @@ import com.puretv.twitch.android.ui.SearchViewModel
 import com.puretv.twitch.android.ui.SettingsViewModel
 import com.puretv.twitch.android.ui.StreamViewModel
 import com.puretv.twitch.core.di.TokenHolder
+import io.ktor.client.engine.HttpClientEngine
+import io.ktor.client.engine.okhttp.OkHttp
 import org.koin.androidx.viewmodel.dsl.viewModel
 import org.koin.dsl.module
 
@@ -25,6 +27,14 @@ import org.koin.dsl.module
  */
 @OptIn(UnstableApi::class)
 val androidModule = module {
+    // --- Networking engine -------------------------------------------------
+    // coreModule's `single { buildKtorClient(get()) }` resolves an
+    // HttpClientEngine from here (OkHttp, matching DesktopModule and core's
+    // android target). Without it the whole networking graph (HttpClient ->
+    // TwitchApiClient -> repositories -> ViewModels) cannot construct, and the
+    // app crashes on the first screen.
+    single<HttpClientEngine> { OkHttp.create() }
+
     // --- Persistence -----------------------------------------------------
     single {
         Room.databaseBuilder(get(), PureTvDatabase::class.java, PureTvDatabase.DB_NAME)

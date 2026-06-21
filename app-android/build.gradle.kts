@@ -71,6 +71,10 @@ dependencies {
 
     implementation(libs.kotlinx.coroutines.android)
 
+    // Ktor OkHttp engine: coreModule's shared HttpClient needs a platform engine
+    // (mirrors app-windows / core's android target). Pulls ktor-client-core in.
+    implementation(libs.ktor.client.okhttp)
+
     implementation(libs.media3.exoplayer)
     implementation(libs.media3.exoplayer.hls)
     implementation(libs.media3.ui)
