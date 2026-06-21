@@ -38,6 +38,16 @@ android {
         targetCompatibility = JavaVersion.VERSION_11
     }
 
+    // Kotlin/KSP default to the build JDK (17); javac is pinned to 11 above.
+    // KSP fails the build on that mismatch, so pin Kotlin to 11 too. This is
+    // the build break that kept app-android out of CI.
+    kotlinOptions {
+        jvmTarget = "11"
+        freeCompilerArgs += listOf(
+            "-opt-in=androidx.compose.material3.ExperimentalMaterial3Api",
+        )
+    }
+
     buildFeatures {
         compose = true
         buildConfig = true
@@ -57,6 +67,7 @@ dependencies {
 
     implementation(libs.koin.android)
     implementation(libs.koin.compose)
+    implementation(libs.koin.androidx.compose)
 
     implementation(libs.kotlinx.coroutines.android)
 
