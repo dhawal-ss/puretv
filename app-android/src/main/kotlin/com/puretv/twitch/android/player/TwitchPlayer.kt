@@ -8,18 +8,19 @@ import androidx.media3.exoplayer.DefaultLivePlaybackSpeedControl
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import com.puretv.twitch.core.adblock.AdBlockEngine
-import kotlinx.coroutines.runBlocking
+import com.puretv.twitch.core.adblock.AdSimulator
+import com.puretv.twitch.core.adblock.PlaylistAction
+import com.puretv.twitch.core.adblock.PlaylistDetect
 import okhttp3.Interceptor
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
-import okhttp3.Protocol
 import okhttp3.Response
 import okhttp3.ResponseBody.Companion.toResponseBody
 
 /**
- * SECTION 06.3 [CRITICAL] — ExoPlayer wrapper tuned for low-latency live HLS,
- * with the [AdBlockInterceptor] wired directly into the OkHttp pipeline so
- * Strategies 1 & 2 (Section 04) run transparently on every playlist fetch.
+ * SECTION 06.3 [CRITICAL]. ExoPlayer wrapper tuned for low-latency live HLS,
+ * with the [AdBlockInterceptor] wired directly into the OkHttp pipeline so ad
+ * pods are stripped transparently on every playlist fetch.
  */
 @UnstableApi
 class TwitchPlayer(
@@ -59,40 +60,57 @@ class TwitchPlayer(
 }
 
 /**
- * Intercepts only Twitch HLS playlist requests (usher.ttvnw.net / *.m3u8) —
- * segment requests pass straight through to the CDN, exactly as Section 4.2
- * specifies, so bandwidth and latency stay untouched.
- *
- * `runBlocking` here is intentional and bounded: OkHttp interceptors are
- * synchronous by contract, and [AdBlockEngine.resolveCleanStream] already
- * carries its own timeouts/fallback chain, so the worst case is "fall through
- * to chain.proceed(request)" rather than an unbounded hang.
+ * Strips Twitch ad pods from HLS playlist responses. The decision is made from
+ * the RESPONSE, not the URL: obvious media segments (.ts/.m4s/.mp4/.aac) pass
+ * through untouched and unbuffered; everything else is peeked, and any HLS
+ * playlist (Content-Type mpegurl, or a body starting with #EXTM3U) is run
+ * through the synchronous, no-network [AdBlockEngine.filterPlaylist]. This
+ * catches the master AND every media-playlist refresh regardless of host or
+ * query string (the leak the old url.endsWith(".m3u8") guard missed), mints no
+ * token (so the anonymous-mint invariant holds), and does no network on the
+ * loader thread.
  */
 @UnstableApi
 class AdBlockInterceptor(private val adBlockEngine: AdBlockEngine) : Interceptor {
     override fun intercept(chain: Interceptor.Chain): Response {
         val request = chain.request()
-        val url = request.url.toString()
 
-        if (!url.contains("usher.ttvnw.net") && !url.endsWith(".m3u8")) {
+        if (PlaylistDetect.classifyRequest(request.url.encodedPath) == PlaylistAction.SKIP_SEGMENT) {
             return chain.proceed(request)
         }
 
-        val result = runBlocking { adBlockEngine.resolveCleanStream(url) }
-        return when (result) {
-            is com.puretv.twitch.core.model.CleanStreamResult.Success -> Response.Builder()
-                .request(request)
-                .protocol(Protocol.HTTP_1_1)
-                .code(200)
-                .message("OK")
-                .body(result.playlistContent.toResponseBody("application/x-mpegurl".toMediaType()))
-                .build()
-
-            is com.puretv.twitch.core.model.CleanStreamResult.Failure ->
-                // Both ad-block strategies failed — let the raw request through so
-                // playback continues; the player-layer black-frame detector
-                // (BlackFrameOverlay) takes over visual suppression from here.
-                chain.proceed(request)
+        val response = chain.proceed(request)
+        val contentType = response.header("Content-Type")
+        val firstLine = if ("mpegurl" in (contentType?.lowercase() ?: "")) {
+            "#EXTM3U"
+        } else {
+            runCatching { response.peekBody(8L * 1024).string() }
+                .getOrNull()
+                ?.lineSequence()
+                ?.firstOrNull { it.isNotBlank() }
         }
+
+        if (PlaylistDetect.classifyResponse(contentType, firstLine) != PlaylistAction.FILTER_PLAYLIST) {
+            return response
+        }
+
+        val body = response.body ?: return response
+        val raw = AdSimulator.inject(body.string())
+        val cleaned = try {
+            val filtered = adBlockEngine.filterPlaylist(raw)
+            adBlockEngine.reportFiltered(filtered)
+            filtered.content
+        } catch (t: Throwable) {
+            // Never silently pass ads as success: report the failure (the pill
+            // goes AD_BLOCK_OFF) and let the player-layer black-frame detector
+            // take over, but still return a valid playlist so playback continues.
+            adBlockEngine.reportResolutionFailure()
+            raw
+        }
+
+        return response.newBuilder()
+            .body(cleaned.toResponseBody("application/vnd.apple.mpegurl".toMediaType()))
+            .removeHeader("Content-Length")
+            .build()
     }
 }
