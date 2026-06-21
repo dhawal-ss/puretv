@@ -54,6 +54,7 @@ val androidModule = module {
 
     single { SecureTokenStore(get()) }
     single { AppSettingsStore(get(), get(), get<TokenHolder>()) }
+    single { com.puretv.twitch.android.data.SessionManager(get()) }
     single { TokenRefresher(get(), get()) }
 
     // --- Playback ---------------------------------------------------------
