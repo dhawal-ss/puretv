@@ -1,6 +1,5 @@
 package com.puretv.twitch.core.adblock
 
-import com.puretv.twitch.core.adblock.AdBlockStatus
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
@@ -40,6 +39,7 @@ class AdBlockFilterPathTest {
     @Test fun stripsScte35CueOutCueInPod() {
         val e = engine()
         val filtered = e.filterPlaylist(SCTE35_AD_PLAYLIST)
+        assertEquals(true, filtered.containedAds)
         assertEquals(false, AdMarkers.containsAds(filtered.content))
         assertEquals(true, filtered.content.contains("content-200.ts"))
         assertEquals(false, filtered.content.contains("scte-ad-0.ts"))
@@ -48,6 +48,7 @@ class AdBlockFilterPathTest {
     @Test fun assumeStartInAdBreakDropsLeadingAdSegmentsUntilDiscontinuity() {
         val filtered = ManifestRewriter().filter(MID_POD_PLAYLIST, assumeStartInAdBreak = true)
         assertEquals(false, filtered.content.contains("ad-tail-0.ts"), "leading ad segment must be dropped")
+        assertEquals(false, filtered.content.contains("ad-tail-1.ts"), "all leading ad segments must be dropped")
         assertEquals(true, filtered.content.contains("content-300.ts"), "content after the splice must survive")
     }
 }
@@ -96,6 +97,7 @@ content-200.ts
 
 private val MID_POD_PLAYLIST = """
 #EXTM3U
+#EXT-X-TARGETDURATION:2
 #EXT-X-MEDIA-SEQUENCE:300
 #EXTINF:2.000,Amazon
 ad-tail-0.ts
