@@ -37,6 +37,7 @@ import kotlinx.coroutines.launch
 data class HomeUiState(
     val isLoggedIn: Boolean = false,
     val followedLive: List<StreamInfo> = emptyList(),
+    val games: List<com.puretv.twitch.core.model.GameInfo> = emptyList(),
     val topStreams: List<StreamInfo> = emptyList(),
     val isLoading: Boolean = false,
 )
@@ -44,34 +45,39 @@ data class HomeUiState(
 class HomeViewModel(
     private val streamRepository: StreamRepository,
     private val userRepository: UserRepository,
+    private val channelRepository: ChannelRepository,
     private val settings: AppSettingsStore,
 ) : ViewModel() {
     private val _state = MutableStateFlow(HomeUiState())
     val state: StateFlow<HomeUiState> = _state.asStateFlow()
 
     init {
+        // Initial loads: categories, top streams, and (if logged in) the follow set.
         viewModelScope.launch {
             _state.update { it.copy(isLoading = true) }
+            runCatching { channelRepository.topGames() }.onSuccess { g -> _state.update { it.copy(games = g) } }
+            runCatching { streamRepository.refreshTopStreams() }
             val prefs = settings.flow.first()
-            if (prefs.userId.isNotBlank()) userRepository.loadFollows(prefs.userId)
-            streamRepository.refreshTopStreams()
+            if (prefs.userId.isNotBlank()) runCatching { userRepository.loadFollows(prefs.userId) }
+            _state.update { it.copy(isLoading = false) }
         }
+        // Reactive: top streams list + login state.
         viewModelScope.launch {
-            combine(
-                streamRepository.topStreams,
-                userRepository.followedLogins,
-                settings.flow,
-            ) { top, follows, prefs ->
-                Triple(top, follows, prefs)
-            }.collect { (top, follows, prefs) ->
-                _state.update {
-                    it.copy(
-                        isLoggedIn = prefs.accessToken.isNotBlank(),
-                        followedLive = top.filter { s -> s.userLogin in follows },
-                        topStreams = top,
-                        isLoading = false,
-                    )
-                }
+            combine(streamRepository.topStreams, settings.flow) { top, prefs ->
+                top to prefs.accessToken.isNotBlank()
+            }.collect { (top, loggedIn) ->
+                _state.update { it.copy(topStreams = top, isLoggedIn = loggedIn) }
+            }
+        }
+        // Followed "Live now": the streamers you follow who are live RIGHT NOW.
+        // Helix /streams by user_login returns only currently-live channels, so
+        // this is the correct source (filtering the global top list would miss
+        // any follow outside the top 20). Re-fetch whenever the follow set loads.
+        viewModelScope.launch {
+            userRepository.followedLogins.collect { follows ->
+                val live = if (follows.isEmpty()) emptyList()
+                else runCatching { streamRepository.streamsForChannels(follows.take(100)) }.getOrDefault(emptyList())
+                _state.update { it.copy(followedLive = live) }
             }
         }
     }

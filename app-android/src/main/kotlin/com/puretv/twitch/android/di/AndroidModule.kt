@@ -54,7 +54,7 @@ val androidModule = module {
     single { TwitchPlayer(get(), get()) }
 
     // --- ViewModels --------------------------------------------------------
-    viewModel { HomeViewModel(get(), get(), get()) }
+    viewModel { HomeViewModel(get(), get(), get(), get()) }
     viewModel { BrowseViewModel(get()) }
     viewModel { SearchViewModel(get()) }
     viewModel { (channelLogin: String) -> StreamViewModel(channelLogin, get(), get(), get(), get(), get(), get()) }
