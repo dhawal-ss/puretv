@@ -46,14 +46,14 @@ class TwitchPlayer(
                 )
                 .build(),
         )
+        .setLivePlaybackSpeedControl(
+            DefaultLivePlaybackSpeedControl.Builder()
+                .setFallbackMaxPlaybackSpeed(1.04f)
+                .build(),
+        )
         .build()
         .apply {
             playWhenReady = true
-            setLivePlaybackSpeedControl(
-                DefaultLivePlaybackSpeedControl.Builder()
-                    .setFallbackMaxPlaybackSpeed(1.04f)
-                    .build(),
-            )
         }
 
     fun release() = exoPlayer.release()
