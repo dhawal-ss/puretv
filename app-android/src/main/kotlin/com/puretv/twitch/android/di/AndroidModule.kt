@@ -4,6 +4,7 @@ import androidx.media3.common.util.UnstableApi
 import androidx.room.Room
 import com.puretv.twitch.android.data.AppSettingsStore
 import com.puretv.twitch.android.data.SecureTokenStore
+import com.puretv.twitch.android.data.SessionManager
 import com.puretv.twitch.android.data.TokenRefresher
 import com.puretv.twitch.android.data.db.PureTvDatabase
 import com.puretv.twitch.android.player.TwitchPlayer
@@ -54,7 +55,7 @@ val androidModule = module {
 
     single { SecureTokenStore(get()) }
     single { AppSettingsStore(get(), get(), get<TokenHolder>()) }
-    single { com.puretv.twitch.android.data.SessionManager(get()) }
+    single { SessionManager(get()) }
     single { TokenRefresher(get(), get()) }
 
     // --- Playback ---------------------------------------------------------

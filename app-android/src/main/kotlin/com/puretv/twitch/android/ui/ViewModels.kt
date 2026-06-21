@@ -6,7 +6,6 @@ import androidx.lifecycle.viewModelScope
 import androidx.media3.common.util.UnstableApi
 import com.puretv.twitch.android.data.AppSettingsStore
 import com.puretv.twitch.android.data.SessionManager
-import com.puretv.twitch.android.player.TwitchPlayer
 import com.puretv.twitch.android.data.db.CachedStreamDao
 import com.puretv.twitch.android.data.db.SearchHistoryDao
 import com.puretv.twitch.android.data.db.SearchHistoryEntry
@@ -14,7 +13,7 @@ import com.puretv.twitch.android.data.db.WatchHistoryDao
 import com.puretv.twitch.android.data.db.WatchHistoryEntry
 import com.puretv.twitch.android.data.db.toCachedStream
 import com.puretv.twitch.android.data.db.toStreamInfo
-import com.puretv.twitch.core.session.SessionState
+import com.puretv.twitch.android.player.TwitchPlayer
 import com.puretv.twitch.core.adblock.AdBlockEngine
 import com.puretv.twitch.core.adblock.AdBlockStatus
 import com.puretv.twitch.core.api.DeviceAuth
@@ -29,7 +28,9 @@ import com.puretv.twitch.core.model.StreamInfo
 import com.puretv.twitch.core.repository.ChannelRepository
 import com.puretv.twitch.core.repository.StreamRepository
 import com.puretv.twitch.core.repository.UserRepository
+import com.puretv.twitch.core.session.SessionState
 import io.ktor.client.HttpClient
+import kotlin.jvm.Volatile
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -68,7 +69,9 @@ class HomeViewModel(
 
     // Once the network returns a fresh top-streams list, stop letting the cached
     // snapshot overwrite it (the cache is only for the instant first paint).
-    private var freshTopStreamsArrived = false
+    // @Volatile documents that every collector mutates this on the main
+    // dispatcher; it keeps the contract correct if a collector ever moves off it.
+    @Volatile private var freshTopStreamsArrived = false
 
     init {
         // "Continue watching": most recently opened channels, newest first.
@@ -78,6 +81,7 @@ class HomeViewModel(
             }
         }
         // Cached-first: paint last session's streams instantly, before any network.
+        // isLoading is cleared here because cached content is immediately visible.
         viewModelScope.launch {
             cachedStreamDao.observeAll().collect { cached ->
                 if (!freshTopStreamsArrived && cached.isNotEmpty()) {
@@ -105,7 +109,7 @@ class HomeViewModel(
             sessionManager.state.collect { session ->
                 when (session) {
                     is SessionState.LoggedOut ->
-                        _state.update { it.copy(isLoggedIn = false, isLoading = it.topStreams.isEmpty()) }
+                        _state.update { it.copy(isLoggedIn = false, isLoading = it.topStreams.isEmpty(), error = null) }
                     is SessionState.LoggedIn ->
                         loadLoggedInHome()
                 }
