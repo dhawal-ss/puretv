@@ -12,6 +12,7 @@ import com.puretv.twitch.android.ui.BrowseViewModel
 import com.puretv.twitch.android.ui.CategoryViewModel
 import com.puretv.twitch.android.ui.ChannelViewModel
 import com.puretv.twitch.android.ui.HomeViewModel
+import com.puretv.twitch.android.ui.FollowingViewModel
 import com.puretv.twitch.android.ui.LoginViewModel
 import com.puretv.twitch.android.ui.SearchViewModel
 import com.puretv.twitch.android.ui.SettingsViewModel
@@ -65,6 +66,7 @@ val androidModule = module {
     // get() resolves each constructor argument by type, so argument order does
     // not matter as long as every type is bound above (the DAOs are).
     viewModel { HomeViewModel(get(), get(), get(), get(), get(), get()) }
+    viewModel { FollowingViewModel(get(), get(), get()) }
     viewModel { BrowseViewModel(get()) }
     viewModel { SearchViewModel(get(), get()) }
     viewModel { (gameId: String) -> CategoryViewModel(gameId, get()) }

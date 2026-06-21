@@ -550,3 +550,52 @@ class LoginViewModel(
         super.onCleared()
     }
 }
+
+data class FollowingUiState(
+    val isLoggedIn: Boolean = false,
+    val liveFollows: List<StreamInfo> = emptyList(),
+    val isLoading: Boolean = false,
+    val error: String? = null,
+)
+
+/**
+ * Backs the Following tab. Observes the session: when logged in it loads the
+ * follow set and shows the channels that are live right now; when logged out it
+ * shows a connect prompt. Reuses the shared UserRepository follow cache, so it
+ * stays in sync with Home's "Live now" rail.
+ */
+class FollowingViewModel(
+    private val userRepository: UserRepository,
+    private val streamRepository: StreamRepository,
+    private val sessionManager: SessionManager,
+) : ViewModel() {
+    private val _state = MutableStateFlow(FollowingUiState())
+    val state: StateFlow<FollowingUiState> = _state.asStateFlow()
+
+    init {
+        viewModelScope.launch {
+            sessionManager.state.collect { session ->
+                when (session) {
+                    is SessionState.LoggedOut -> _state.update { FollowingUiState(isLoggedIn = false) }
+                    is SessionState.LoggedIn -> {
+                        _state.update { it.copy(isLoggedIn = true, isLoading = it.liveFollows.isEmpty(), error = null) }
+                        runCatching { userRepository.loadFollowsForCurrentUser() }
+                    }
+                }
+            }
+        }
+        viewModelScope.launch {
+            userRepository.followedLogins.collect { follows ->
+                val live = if (follows.isEmpty()) emptyList()
+                else runCatching { streamRepository.streamsForChannels(follows.take(100)) }.getOrDefault(emptyList())
+                _state.update { it.copy(liveFollows = live, isLoading = false) }
+            }
+        }
+    }
+
+    fun refresh() = viewModelScope.launch {
+        _state.update { it.copy(isLoading = true, error = null) }
+        runCatching { userRepository.loadFollowsForCurrentUser() }
+        _state.update { it.copy(isLoading = false) }
+    }
+}
