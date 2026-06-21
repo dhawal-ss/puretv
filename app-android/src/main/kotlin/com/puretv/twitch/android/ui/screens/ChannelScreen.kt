@@ -24,7 +24,10 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
+import coil3.compose.AsyncImage
 import com.puretv.twitch.android.ui.ChannelViewModel
 import com.puretv.twitch.android.ui.components.LiveBadge
 import com.puretv.twitch.android.ui.theme.PureTvColors
@@ -55,8 +58,11 @@ fun ChannelScreen(channelLogin: String, onWatch: () -> Unit, onBack: () -> Unit)
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                androidx.compose.foundation.layout.Box(
-                    modifier = Modifier.size(72.dp).background(PureTvColors.SurfaceVariant, CircleShape),
+                AsyncImage(
+                    model = state.channel?.profileImageUrl,
+                    contentDescription = state.channel?.displayName,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.size(72.dp).clip(CircleShape).background(PureTvColors.SurfaceVariant),
                 )
                 Column {
                     Text(
