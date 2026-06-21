@@ -69,4 +69,14 @@ class UserRepository(private val apiClient: TwitchApiClient) {
         val follows = apiClient.getFollowedChannels(userId)
         _followedLogins.value = follows.map { it.broadcaster_login }
     }
+
+    /**
+     * Loads follows for whoever owns the current token. Helix /users with no
+     * login/id returns the authenticated user, so this works right after a
+     * device-code sign-in even before the user id has been persisted to settings.
+     */
+    suspend fun loadFollowsForCurrentUser() {
+        val me = apiClient.getUsers().firstOrNull() ?: return
+        loadFollows(me.id)
+    }
 }

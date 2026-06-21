@@ -58,7 +58,7 @@ class HomeViewModel(
             runCatching { channelRepository.topGames() }.onSuccess { g -> _state.update { it.copy(games = g) } }
             runCatching { streamRepository.refreshTopStreams() }
             val prefs = settings.flow.first()
-            if (prefs.userId.isNotBlank()) runCatching { userRepository.loadFollows(prefs.userId) }
+            if (prefs.accessToken.isNotBlank()) runCatching { userRepository.loadFollowsForCurrentUser() }
             _state.update { it.copy(isLoading = false) }
         }
         // Reactive: top streams list + login state.
