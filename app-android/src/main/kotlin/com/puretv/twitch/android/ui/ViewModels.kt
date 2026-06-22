@@ -34,9 +34,12 @@ import kotlin.jvm.Volatile
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -598,4 +601,15 @@ class FollowingViewModel(
         runCatching { userRepository.loadFollowsForCurrentUser() }
         _state.update { it.copy(isLoading = false) }
     }
+}
+
+/**
+ * Backs the Welcome screen's decorative blurred backdrop: the thumbnails of last
+ * session's cached streams (empty on a true first launch, where Welcome falls
+ * back to a branded gradient). Connect itself is handled by LoginViewModel.
+ */
+class WelcomeViewModel(cachedStreamDao: CachedStreamDao) : ViewModel() {
+    val thumbnails: StateFlow<List<String>> = cachedStreamDao.observeAll()
+        .map { rows -> rows.mapNotNull { it.thumbnailUrl.ifBlank { null } }.take(9) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 }
