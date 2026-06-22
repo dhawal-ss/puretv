@@ -1,10 +1,17 @@
 package com.puretv.twitch.android.ui
 
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
+import androidx.compose.animation.togetherWith
+import androidx.compose.runtime.collectAsState
+import com.puretv.twitch.android.data.SessionManager
+import com.puretv.twitch.android.ui.screens.WelcomeScreen
+import com.puretv.twitch.core.session.SessionState
+import org.koin.compose.koinInject
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
@@ -88,6 +95,27 @@ private val TOP_TABS = listOf(
 )
 
 private val TOP_TAB_ROUTES = TOP_TABS.map { it.route }.toSet()
+
+/**
+ * SECTION 06.0: the app root. Gates the entire tab shell behind authentication:
+ * logged out shows the Welcome connect screen (option C peek), logged in shows
+ * the tab shell. The crossfade is the "blur lift" from the gate into content.
+ * Sign-in flips SessionState, so this swap and Home's reactive populate happen
+ * automatically with no callback.
+ */
+@Composable
+fun RootScreen(navController: NavHostController = rememberNavController()) {
+    val sessionManager = koinInject<SessionManager>()
+    val session by sessionManager.state.collectAsState()
+    val loggedIn = session is SessionState.LoggedIn
+    AnimatedContent(
+        targetState = loggedIn,
+        transitionSpec = { fadeIn(tween(420)) togetherWith fadeOut(tween(420)) },
+        label = "root-gate",
+    ) { isLoggedIn ->
+        if (isLoggedIn) MainScaffold(navController = navController) else WelcomeScreen()
+    }
+}
 
 /**
  * SECTION 06.1: the app shell. A persistent bottom NavigationBar over the nav
