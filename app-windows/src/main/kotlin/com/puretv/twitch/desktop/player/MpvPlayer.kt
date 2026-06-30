@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import java.awt.Component
 import java.io.File
+import java.util.concurrent.Executors
 import javax.swing.SwingUtilities
 
 /**
@@ -43,9 +44,11 @@ class MpvPlayer(private val settingsStore: DesktopSettingsStore) : DesktopPlayer
         runCatching { l.mpv_create()?.also { l.mpv_terminate_destroy(it) } != null }.getOrDefault(false)
     } ?: false
 
-    // The live, surface-bound context: null until attachToPanel, null again after
-    // detachFromPanel. attach/detach run on the EDT; transport reads tolerate null
-    // (no-op when not attached). `ctx != null` ⇔ `initialized`.
+    // The live, surface-bound context: null until an attach completes, null again
+    // after detach. The heavyweight create/initialize/terminate_destroy now run on
+    // [lifecycleExecutor] (NOT the EDT — see A1), so this is read/written on that
+    // thread under [nativeLock]; transport reads tolerate null (no-op when not
+    // attached). `ctx != null` ⇔ `initialized`.
     @Volatile private var ctx: Pointer? = null
 
     private val _status = MutableStateFlow(
@@ -81,10 +84,32 @@ class MpvPlayer(private val settingsStore: DesktopSettingsStore) : DesktopPlayer
     private class EventLoopHandle { @Volatile var stopped = false }
     private var loopHandle: EventLoopHandle? = null
     private var eventThread: Thread? = null
-    // Read in attachToPanel (sameSurface check) OUTSIDE nativeLock, but written
-    // under the lock. detach is reachable off-EDT (release() shutdown hook), so
-    // mark volatile to give that cross-thread read a happens-before edge.
+    // The NATIVE-bound surface: written/read only on [lifecycleExecutor] under
+    // [nativeLock], alongside ctx. No longer consulted for the attach decision (the
+    // EDT can't see it promptly now that attach is async) — that uses desiredCanvas.
     @Volatile private var attachedCanvas: Component? = null
+
+    // The surface we INTEND to be bound to, set/cleared SYNCHRONOUSLY on the EDT in
+    // attach/detach. Because mpv_create/initialize now run async on
+    // [lifecycleExecutor], the EDT can't read the real attachedCanvas in time, so
+    // the attach decision (mpvAttachAction) reads this instead: a duplicate
+    // HierarchyListener/invokeLater attach for the same Canvas still resolves to
+    // NOOP. The submitted attach task also re-checks it under the lock and bails if
+    // a detach has since cleared/changed it — that is what stops an in-flight attach
+    // from binding a context to a Canvas that is about to be destroyed (HWND wedge).
+    @Volatile private var desiredCanvas: Component? = null
+
+    // Serializes the BLOCKING native lifecycle calls off the EDT (A1): mpv_create +
+    // mpv_initialize bring up the gpu-next/libplacebo GPU context, and
+    // mpv_terminate_destroy blocks until the VO releases the HWND. These were run
+    // inline from VlcPlayerView's EDT callbacks (HierarchyListener attach,
+    // Canvas.removeNotify detach), freezing the UI thread on every stream open/close.
+    // Single-threaded + FIFO so an attach and the detach that tears it down can never
+    // run concurrently or out of order on the same handle. Daemon so it never blocks
+    // JVM exit.
+    private val lifecycleExecutor = Executors.newSingleThreadExecutor { r ->
+        Thread(r, "mpv-lifecycle").apply { isDaemon = true }
+    }
 
     private val observedProps = listOf("time-pos", "duration", "pause", "core-idle", "paused-for-cache", "seekable")
 
@@ -136,54 +161,107 @@ class MpvPlayer(private val settingsStore: DesktopSettingsStore) : DesktopPlayer
     override fun attachToPanel(panel: Component) {
         check(SwingUtilities.isEventDispatchThread()) { "attachToPanel must be called on the Swing EDT" }
         val l = lib ?: return
-        when (mpvAttachAction(initialized, sameSurface = panel === attachedCanvas)) {
+        // Decide on the EDT against the synchronously-maintained desiredCanvas marker
+        // (NOT the native attachedCanvas, which is now set later on the lifecycle
+        // thread). desiredCanvas != null ⇔ "an attach for some surface is live or in
+        // flight", which is exactly the property mpvAttachAction's `initialized`
+        // models, so a re-entrant attach for the same Canvas still resolves to NOOP.
+        when (mpvAttachAction(initialized = desiredCanvas != null, sameSurface = panel === desiredCanvas)) {
             AttachAction.NOOP -> return
-            // Tear down the dead-surface context FIRST — outside the lock, since
-            // detach manages its own lock + thread join (nesting would deadlock).
+            // Different surface: tear the old context down FIRST. detachFromPanel
+            // blocks the EDT until the GPU/HWND release completes (mandatory
+            // ordering) and clears desiredCanvas before we re-mark it below.
             AttachAction.REATTACH -> detachFromPanel()
             AttachAction.ATTACH -> {}
         }
         if (!panel.isDisplayable) return
 
-        synchronized(nativeLock) {
-            // Fresh native context bound to THIS surface (wid is set-once pre-init).
-            val c = runCatching { l.mpv_create() }.getOrNull()
-            if (c == null) {
-                _status.update { it.copy(error = "mpv init failed: could not create player context") }
-                return
+        // Capture the HWND on the EDT (Native.getComponentID reads the AWT native
+        // peer) and mark the intent synchronously, THEN hand the blocking GPU-context
+        // bringup (mpv_create/applyPreInitOptions/mpv_initialize) to the lifecycle
+        // thread so stream-open never stalls the EDT (A1). The mpv client API is
+        // thread-safe, so binding `wid` and initializing off-EDT is safe; the HWND
+        // stays alive because its Canvas is still mounted (detach, driven from
+        // Canvas.removeNotify, clears desiredCanvas which makes the task below bail).
+        val hwnd = Native.getComponentID(panel)
+        desiredCanvas = panel
+        lifecycleExecutor.execute {
+            synchronized(nativeLock) {
+                // A detach (or a REATTACH to a different surface) may have changed the
+                // intent while this task waited in the FIFO queue. If THIS surface is
+                // no longer wanted, do NOT bring up a context — it would bind to a
+                // Canvas that is about to be (or already) destroyed and wedge the GPU.
+                if (desiredCanvas !== panel) return@synchronized
+                // Fresh native context bound to THIS surface (wid is set-once pre-init).
+                val c = runCatching { l.mpv_create() }.getOrNull()
+                if (c == null) {
+                    _status.update { it.copy(error = "mpv init failed: could not create player context") }
+                    return@synchronized
+                }
+                applyPreInitOptions(l, c)
+                l.mpv_set_option_string(c, "wid", hwnd.toString())
+                // Assert the UI's volume as a pre-init option so mpv doesn't start at its
+                // own default (100) — this app has a documented "volume desync at startup"
+                // bug class; reading _status here captures any pre-init slider change.
+                l.mpv_set_option_string(c, "volume", _status.value.volume.toString())
+                val rc = l.mpv_initialize(c)
+                if (rc < 0) {
+                    _status.update { it.copy(error = "mpv init failed: ${l.mpv_error_string(rc)}") }
+                    runCatching { l.mpv_terminate_destroy(c) }
+                    return@synchronized
+                }
+                ctx = c
+                initialized = true
+                attachedCanvas = panel
+                observedProps.forEach { l.mpv_observe_property(c, 0L, it, MpvConst.MPV_FORMAT_NONE) }
+                val handle = EventLoopHandle()
+                loopHandle = handle
+                startEventLoop(l, c, handle)
+                pendingUrl?.let { doPlay(l, c, it) }
             }
-            applyPreInitOptions(l, c)
-            val hwnd = Native.getComponentID(panel)
-            l.mpv_set_option_string(c, "wid", hwnd.toString())
-            // Assert the UI's volume as a pre-init option so mpv doesn't start at its
-            // own default (100) — this app has a documented "volume desync at startup"
-            // bug class; reading _status here captures any pre-init slider change.
-            l.mpv_set_option_string(c, "volume", _status.value.volume.toString())
-            val rc = l.mpv_initialize(c)
-            if (rc < 0) {
-                _status.update { it.copy(error = "mpv init failed: ${l.mpv_error_string(rc)}") }
-                runCatching { l.mpv_terminate_destroy(c) }
-                return
-            }
-            ctx = c
-            initialized = true
-            attachedCanvas = panel
-            observedProps.forEach { l.mpv_observe_property(c, 0L, it, MpvConst.MPV_FORMAT_NONE) }
-            val handle = EventLoopHandle()
-            loopHandle = handle
-            startEventLoop(l, c, handle)
-            pendingUrl?.let { doPlay(l, c, it) }
         }
     }
 
     /**
-     * Tear the live context down BEFORE its Canvas/HWND is destroyed. Order
-     * mirrors [release]: `quit` → join the event loop → `terminate_destroy`, so
-     * nothing runs on `ctx` concurrently with the destroy (a use-after-free).
+     * Tear the live context down BEFORE its Canvas/HWND is destroyed.
+     *
+     * ORDERING (the subtle part of A1): this is driven from Canvas.removeNotify,
+     * and the HWND is destroyed the instant removeNotify returns. mpv's VO must
+     * release the HWND first (rendering into a dead window wedges the GPU/render
+     * path — a whole-window freeze), and mpv_terminate_destroy is what blocks until
+     * that release. So the teardown CANNOT be fire-and-forget — it must complete
+     * before this call returns. We run it on [lifecycleExecutor] (FIFO behind any
+     * in-flight attach, so we never destroy a half-built context) and BLOCK the
+     * caller on the result. That keeps the heavyweight work serialized off the EDT
+     * for the create/initialize side while still guaranteeing release-before-
+     * destruction here; the EDT block is unavoidable and bounded by the GPU release
+     * (the same cost the inline version paid), not by any newly-introduced wait.
+     *
      * Idempotent — safe to call repeatedly or when not attached.
      */
     override fun detachFromPanel() {
         val l = lib ?: return
+        // Clear the EDT-visible intent FIRST (synchronously) so any attach task still
+        // queued on the lifecycle thread early-outs instead of binding a context to a
+        // Canvas about to be destroyed, and so a subsequent re-attach isn't NOOP'd.
+        desiredCanvas = null
+        // Submit the teardown and WAIT for it: removeNotify must not return (peer
+        // destruction) until terminate_destroy has released the HWND. No timeout — a
+        // bounded wait that let removeNotify proceed early would re-introduce the
+        // HWND wedge; the inline version also blocked unboundedly here. The event-loop
+        // join inside [teardown] stays bounded by detachJoinTimeoutMs.
+        // Explicit Runnable so submit() doesn't hit the Runnable/Callable overload
+        // ambiguity; we only need the Future to await completion, not a result.
+        runCatching { lifecycleExecutor.submit(Runnable { teardown(l) }).get() }
+    }
+
+    /**
+     * The actual context teardown, run on [lifecycleExecutor]. Order mirrors
+     * [release]: `quit` → `terminate_destroy` → join the event loop, so nothing runs
+     * on `ctx` concurrently with the destroy (a use-after-free). No-op when not
+     * attached.
+     */
+    private fun teardown(l: MpvLibrary) {
         var threadToJoin: Thread? = null
         synchronized(nativeLock) {
             val c = ctx ?: return
@@ -320,8 +398,13 @@ class MpvPlayer(private val settingsStore: DesktopSettingsStore) : DesktopPlayer
     }
 
     override fun release() {
-        // App shutdown — tear the live context down exactly like a surface detach.
+        // App shutdown — tear the live context down exactly like a surface detach
+        // (detachFromPanel runs + awaits teardown on the lifecycle thread), then stop
+        // the executor since no further attach/detach can occur. shutdown() lets the
+        // already-submitted teardown finish; the thread is a daemon so it can't hold
+        // up JVM exit regardless.
         detachFromPanel()
+        lifecycleExecutor.shutdown()
     }
 
     /**

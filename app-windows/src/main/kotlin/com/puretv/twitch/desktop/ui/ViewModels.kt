@@ -38,6 +38,8 @@ import com.puretv.twitch.desktop.player.ProxyUnavailableException
 import com.puretv.twitch.desktop.player.DesktopPlayer
 import com.puretv.twitch.desktop.ui.chat.buildSelfEcho
 import io.ktor.client.HttpClient
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -243,14 +245,22 @@ class SearchViewModel(private val channelRepository: ChannelRepository) : Deskto
     private val _state = MutableStateFlow(SearchUiState())
     val state: StateFlow<SearchUiState> = _state.asStateFlow()
 
+    // One in-flight search at a time. Cancelling the previous job both debounces
+    // typing and prevents an earlier query's slower response from overwriting a
+    // newer query's results (the out-of-order/stale-result race) — without it,
+    // typing "ab" then "abc" could leave "ab"'s results showing under "abc".
+    private var searchJob: Job? = null
+
     fun onQueryChange(query: String) {
         _state.update { it.copy(query = query) }
+        searchJob?.cancel()
         if (query.length < 2) {
             _state.update { it.copy(results = emptyList(), isSearching = false, error = null) }
             return
         }
-        scope.launch {
+        searchJob = scope.launch {
             _state.update { it.copy(isSearching = true, error = null) }
+            delay(300) // debounce: wait for typing to settle before hitting the network
             runCatching { channelRepository.search(query) }
                 .onSuccess { results -> _state.update { it.copy(results = results, isSearching = false, error = null) } }
                 .onFailure { _state.update { it.copy(results = emptyList(), isSearching = false, error = "Search failed. Check your connection and try again.") } }
@@ -462,6 +472,12 @@ class StreamViewModel(
         chatClient.sendMessage(channelLogin, text, replyParent?.id)
         // Optimistic local echo — Twitch never sends our own message back to us,
         // so render it ourselves or the sender never sees what they typed.
+        // Echo ONLY what actually went on the wire: buildPrivmsgLine truncates the
+        // body to MAX_CHAT_MESSAGE_LENGTH, so clamp the echo to the same limit or the
+        // sender sees more than was sent (M8). CRLF is neutralised to spaces on the
+        // wire too; the composer sends on Enter so newlines don't reach here, but
+        // mirror it so the echo can never diverge from the delivered text.
+        val wireText = text.replace('\r', ' ').replace('\n', ' ').take(MAX_CHAT_MESSAGE_LENGTH)
         val echo = buildSelfEcho(
             id = "self-" + (echoCounter++).toString(),
             login = selfLogin ?: "you",
@@ -469,7 +485,7 @@ class StreamViewModel(
             color = selfColor,
             badges = selfBadges,
             channel = channelLogin,
-            text = text,
+            text = wireText,
             timestamp = System.currentTimeMillis(),
             replyParent = replyParent,
             emoteIndex = selfEchoIndex,
@@ -507,6 +523,14 @@ class StreamViewModel(
     override fun onCleared() {
         chatClient.disconnect()
         vlcPlayer.stop()
+    }
+
+    private companion object {
+        // Twitch (and core's buildPrivmsgLine) hard-cap the wire body at 500 chars.
+        // Mirrored here so the optimistic echo never shows more than was sent (M8);
+        // kept in sync with core's internal MAX_CHAT_MESSAGE_LENGTH, which isn't
+        // visible across the module boundary.
+        private const val MAX_CHAT_MESSAGE_LENGTH = 500
     }
 }
 
@@ -673,22 +697,32 @@ class LoginViewModel(
     }
 
     private suspend fun onAuthenticated(token: TokenResponse) {
-        runCatching {
-            // ORDERING IS LOAD-BEARING: push the token before the first authed call.
-            tokenHolder.update(token.accessToken)
-            val me = apiClient.getUsers().firstOrNull()
-            val expiresAt = System.currentTimeMillis() / 1000 + token.expiresInSeconds
+        // ORDERING IS LOAD-BEARING: push the token before the first authed call.
+        tokenHolder.update(token.accessToken)
+        val expiresAt = System.currentTimeMillis() / 1000 + token.expiresInSeconds
+        // Persist the session FIRST, before the /users identity lookup. Previously
+        // the lookup and the saveTokens lived in one runCatching, so a transient
+        // failure of getUsers() threw BEFORE the save — silently discarding a
+        // freshly-minted access+refresh token and dropping the whole login. Now the
+        // token is durable immediately; identity (needed for the followed rail) is
+        // filled in best-effort and never gates the session.
+        settingsStore.saveTokens(
+            accessToken = token.accessToken,
+            refreshToken = token.refreshToken,
+            expiresAtEpochSeconds = expiresAt,
+            userId = null,
+            login = null,
+        )
+        val me = runCatching { apiClient.getUsers().firstOrNull() }.getOrNull()
+        if (me != null) {
             settingsStore.saveTokens(
                 accessToken = token.accessToken,
                 refreshToken = token.refreshToken,
                 expiresAtEpochSeconds = expiresAt,
-                userId = me?.id,
-                login = me?.login,
+                userId = me.id,
+                login = me.login,
             )
-        }.onSuccess {
-            _state.update { it.copy(isAuthenticating = false, userCode = null, isLoggedIn = true) }
-        }.onFailure { e ->
-            _state.update { it.copy(isAuthenticating = false, userCode = null, error = e.message ?: "Login failed") }
         }
+        _state.update { it.copy(isAuthenticating = false, userCode = null, isLoggedIn = true) }
     }
 }

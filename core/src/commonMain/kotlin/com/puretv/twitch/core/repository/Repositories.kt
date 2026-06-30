@@ -8,6 +8,8 @@ import com.puretv.twitch.core.stream.StreamResolver
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 /**
  * Wraps [TwitchApiClient] with light in-memory caching the UI layer can
@@ -47,12 +49,19 @@ class StreamRepository(
 }
 
 class ChannelRepository(private val apiClient: TwitchApiClient) {
+    // Audit M7: this cache is read and written from suspend funcs that may run on
+    // different dispatchers/threads; a plain mutableMapOf gives no happens-before
+    // guarantee and concurrent puts can corrupt or lose entries. A Mutex
+    // serializes all access without changing the public API. The network fetch is
+    // deliberately kept OUTSIDE the lock so a slow /users call never blocks cache
+    // reads for other logins.
+    private val cacheMutex = Mutex()
     private val cache = mutableMapOf<String, ChannelInfo>()
 
     suspend fun getChannel(login: String): ChannelInfo? {
-        cache[login]?.let { return it }
+        cacheMutex.withLock { cache[login] }?.let { return it }
         val channel = apiClient.getUsers(logins = listOf(login)).firstOrNull()
-        channel?.let { cache[login] = it }
+        channel?.let { cacheMutex.withLock { cache[login] = it } }
         return channel
     }
 
