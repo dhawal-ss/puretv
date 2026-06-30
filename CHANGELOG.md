@@ -13,7 +13,7 @@ release notes automatically.
 
 ## 1.9.4 - 2026-06-30
 
-Fixes the two biggest annoyances — being asked to sign in every time, and a blank white box over the video — plus a freeze and a round of reliability fixes.
+Fixes the two biggest annoyances (being asked to sign in every time, and a blank white box over the video), plus a freeze and a round of reliability fixes.
 
 ### Fixed
 - **You stay signed in.** PureTV no longer makes you reconnect your Twitch account every time you open it. Your session is now kept and refreshed properly, so you sign in once and it sticks across restarts.
