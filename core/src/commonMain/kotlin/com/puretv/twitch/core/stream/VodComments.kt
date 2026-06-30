@@ -5,6 +5,7 @@ import com.puretv.twitch.core.emotes.applyThirdPartyEmotes
 import com.puretv.twitch.core.model.Badge
 import com.puretv.twitch.core.model.ChatMessage
 import com.puretv.twitch.core.model.MessagePart
+import kotlin.concurrent.Volatile
 import kotlinx.serialization.Serializable
 
 // ---- GQL wire types for video(id).comments ----
@@ -78,15 +79,31 @@ object CommentMapper {
         }
 }
 
-/** Accumulates replay comments (deduped by id) and yields those due at a position. */
+/**
+ * Accumulates replay comments (deduped by id) and yields those due at a position.
+ *
+ * COPY-ON-WRITE for concurrency safety: VodChatViewModel touches a single buffer
+ * from three coroutines on a thread-pool dispatcher (the load coroutine → [add],
+ * the emote-index coroutine → [due], and the player.status collector →
+ * [reset]/[isEmpty]/[maxOffsetSeconds]/[due]). A bare mutable [LinkedHashMap]
+ * would throw ConcurrentModificationException (crashing the VOD screen) the moment
+ * a reader iterated its values while a writer mutated it. Here the entries live in
+ * an IMMUTABLE map behind a single [Volatile] reference: every reader captures the
+ * reference once and only ever iterates that frozen snapshot, while writers publish
+ * a brand-new map with one atomic volatile store. No lock is taken, so the public
+ * API stays non-suspend and pure-commonMain (usable on every target).
+ */
 class ReplayBuffer {
-    private val byId = LinkedHashMap<String, ReplayComment>()
+    @Volatile private var byId: Map<String, ReplayComment> = emptyMap()
 
     fun add(items: List<ReplayComment>) {
-        items.forEach { byId[it.message.id] = it }
+        if (items.isEmpty()) return
+        // Build a fresh map off the current snapshot (preserving insertion order +
+        // dedupe-by-id), then publish it atomically — never mutate the live snapshot.
+        byId = LinkedHashMap(byId).apply { items.forEach { put(it.message.id, it) } }
     }
 
-    fun reset() = byId.clear()
+    fun reset() { byId = emptyMap() }
 
     fun isEmpty(): Boolean = byId.isEmpty()
 

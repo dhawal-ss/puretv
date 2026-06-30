@@ -7,6 +7,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.awt.SwingPanel
+import androidx.compose.ui.graphics.Color as ComposeColor
 import java.awt.BorderLayout
 import java.awt.Canvas
 import java.awt.Color
@@ -138,6 +139,13 @@ fun VlcPlayerView(
     }
 
     SwingPanel(
+        // CMP 1.7's SwingPanel defaults `background` to Color.White, which Compose
+        // paints into the interop "hole" whenever the heavyweight Canvas doesn't
+        // fully/promptly cover it — before VLC's first frame, during resize, and
+        // during z-order handoff. That is the literal white blank square. The
+        // Canvas + JPanel are already BLACK; this is the one background Compose
+        // itself paints, so it must be black too.
+        background = ComposeColor.Black,
         modifier = modifier,
         factory = { panel },
     )

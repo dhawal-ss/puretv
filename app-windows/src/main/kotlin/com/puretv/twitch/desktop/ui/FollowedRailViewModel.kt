@@ -3,6 +3,7 @@ package com.puretv.twitch.desktop.ui
 import com.puretv.twitch.core.follows.FollowRow
 import com.puretv.twitch.core.follows.FollowedChannelsSource
 import com.puretv.twitch.core.follows.FollowedRef
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -32,8 +33,17 @@ class FollowedRailViewModel(
     private val _state = MutableStateFlow(FollowedRailState(isLoggedIn = loggedInUserId() != null))
     val state: StateFlow<FollowedRailState> = _state.asStateFlow()
 
+    // A single in-flight load. Cancel-and-replace on refresh() so the 60s poll and
+    // the sign-in collector can't run two loadOnce()s concurrently — without this,
+    // both apply onSuccess and the slower (possibly stale) writer wins, and jobs
+    // stack up (M4). Mirrors SearchViewModel's searchJob pattern.
+    private var loadJob: Job? = null
+
     /** Fire-and-forget reload (used by the composable's focus-aware poll loop). */
-    fun refresh() { scope.launch { loadOnce() } }
+    fun refresh() {
+        loadJob?.cancel()
+        loadJob = scope.launch { loadOnce() }
+    }
 
     fun toggleOffline() = _state.update { it.copy(offlineExpanded = !it.offlineExpanded) }
 

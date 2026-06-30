@@ -44,11 +44,18 @@ class DeviceAuthTest {
     }
 
     @Test
-    fun refreshForm_is_public_client_refresh_with_no_secret() {
-        val form = DeviceAuth.refreshForm("CID", "RT").toMap()
+    fun refreshForm_includes_client_secret_for_confidential_client() {
+        // Twitch's /oauth2/token refresh endpoint requires client_secret for a
+        // confidential client (which this app is — it ships and uses a secret for
+        // the PKCE/auth-code flow). Omitting it made every device-flow refresh fail
+        // and the desktop store then cleared the session, forcing a re-login on
+        // essentially every launch. Twitch ignores the secret for a public client,
+        // so sending it is safe regardless of client type.
+        val form = DeviceAuth.refreshForm("CID", "RT", "SECRET").toMap()
         assertEquals("refresh_token", form["grant_type"])
         assertEquals("RT", form["refresh_token"])
-        assertFalse(form.containsKey("client_secret"))
+        assertEquals("CID", form["client_id"])
+        assertEquals("SECRET", form["client_secret"])
     }
 
     @Test

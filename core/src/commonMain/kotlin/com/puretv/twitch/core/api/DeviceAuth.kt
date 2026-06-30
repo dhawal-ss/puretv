@@ -82,9 +82,22 @@ object DeviceAuth {
             "scopes" to scopes,
         )
 
-    fun refreshForm(clientId: String, refreshToken: String): List<Pair<String, String>> =
+    /**
+     * Refresh form. Unlike the device-code REQUEST and POLL (which are genuine
+     * public-client calls and must NOT carry a secret), Twitch's /oauth2/token
+     * refresh endpoint requires `client_secret` for a *confidential* client —
+     * which this app is (it ships and uses a secret for the PKCE/auth-code flow,
+     * see [TwitchConfig.CLIENT_SECRET] and [PkceAuth.refreshToken]). Omitting it
+     * here made every refresh fail with a `{status,message}` envelope ->
+     * [TokenRefreshException] -> the desktop store cleared the session, forcing a
+     * re-login on (essentially) every launch once the ~4h access token went stale.
+     * Twitch ignores the secret for a public client, so sending it is safe either
+     * way.
+     */
+    fun refreshForm(clientId: String, refreshToken: String, clientSecret: String): List<Pair<String, String>> =
         listOf(
             "client_id" to clientId,
+            "client_secret" to clientSecret,
             "grant_type" to "refresh_token",
             "refresh_token" to refreshToken,
         )
@@ -118,10 +131,11 @@ object DeviceAuth {
         http: HttpClient,
         refreshToken: String,
         clientId: String = TwitchConfig.CLIENT_ID,
+        clientSecret: String = TwitchConfig.CLIENT_SECRET,
     ): TokenResponse {
         val response = http.submitForm(
             url = "${TwitchConfig.AUTH_BASE}/token",
-            formParameters = parameters { refreshForm(clientId, refreshToken).forEach { (k, v) -> append(k, v) } },
+            formParameters = parameters { refreshForm(clientId, refreshToken, clientSecret).forEach { (k, v) -> append(k, v) } },
         )
         return parseRefreshResponse(response.bodyAsText())
     }

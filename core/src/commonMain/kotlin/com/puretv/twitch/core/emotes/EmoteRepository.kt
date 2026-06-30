@@ -50,11 +50,23 @@ class EmoteRepository(
     }
 
     suspend fun loadChannelEmotes(channelId: String, channelLogin: String): List<ChannelEmote> = coroutineScope {
-        val bttv = async { runCatching { fetchBttvChannel(channelId) }.getOrDefault(emptyList()) }
-        val ffz = async { runCatching { fetchFfzChannel(channelLogin) }.getOrDefault(emptyList()) }
-        val seventv = async { runCatching { fetchSevenTvChannel(channelId) }.getOrDefault(emptyList()) }
-        val all = bttv.await() + ffz.await() + seventv.await()
-        cache.putChannelEmotes(channelId, all)
+        val bttv = async { runCatching { fetchBttvChannel(channelId) } }
+        val ffz = async { runCatching { fetchFfzChannel(channelLogin) } }
+        val seventv = async { runCatching { fetchSevenTvChannel(channelId) } }
+        val bttvResult = bttv.await()
+        val ffzResult = ffz.await()
+        val seventvResult = seventv.await()
+        val all = bttvResult.getOrDefault(emptyList()) +
+            ffzResult.getOrDefault(emptyList()) +
+            seventvResult.getOrDefault(emptyList())
+        // Only persist when every provider fetch succeeded (audit M3). Mirrors
+        // loadGlobalEmotes: caching a partial/all-failed combined set would
+        // clobber a good cached set with a degraded or empty one on a transient
+        // outage (offline, provider 5xx). The live (possibly partial) `all` is
+        // still returned to the caller for this session.
+        if (bttvResult.isSuccess && ffzResult.isSuccess && seventvResult.isSuccess) {
+            cache.putChannelEmotes(channelId, all)
+        }
         all
     }
 
@@ -62,14 +74,15 @@ class EmoteRepository(
 
     private suspend fun fetchBttvGlobal(): List<ChannelEmote> {
         val raw: JsonArray = httpClient.get("https://api.betterttv.net/3/cached/emotes/global").body()
-        return raw.map { it.jsonObject.toBttvEmote(channelEmote = false) }
+        // Skip individual malformed entries instead of failing the whole set (audit L6).
+        return raw.mapNotNull { runCatching { it.jsonObject.toBttvEmote(channelEmote = false) }.getOrNull() }
     }
 
     private suspend fun fetchBttvChannel(channelId: String): List<ChannelEmote> {
         val raw: JsonObject = httpClient.get("https://api.betterttv.net/3/cached/users/twitch/$channelId").body()
         val channelEmotes = raw["channelEmotes"]?.jsonArray.orEmpty()
         val sharedEmotes = raw["sharedEmotes"]?.jsonArray.orEmpty()
-        return (channelEmotes + sharedEmotes).map { it.jsonObject.toBttvEmote(channelEmote = true) }
+        return (channelEmotes + sharedEmotes).mapNotNull { runCatching { it.jsonObject.toBttvEmote(channelEmote = true) }.getOrNull() }
     }
 
     private fun JsonObject.toBttvEmote(channelEmote: Boolean): ChannelEmote {
@@ -91,7 +104,8 @@ class EmoteRepository(
         val raw: JsonObject = httpClient.get("https://api.frankerfacez.com/v1/room/$channelLogin").body()
         val sets = raw["sets"]?.jsonObject ?: return emptyList()
         return sets.values.flatMap { set ->
-            set.jsonObject["emoticons"]?.jsonArray.orEmpty().map { it.jsonObject.toFfzEmote() }
+            set.jsonObject["emoticons"]?.jsonArray.orEmpty()
+                .mapNotNull { runCatching { it.jsonObject.toFfzEmote() }.getOrNull() } // skip malformed entries (audit L6)
         }
     }
 
@@ -113,13 +127,15 @@ class EmoteRepository(
 
     private suspend fun fetchSevenTvGlobal(): List<ChannelEmote> {
         val raw: JsonObject = httpClient.get("https://7tv.io/v3/emote-sets/global").body()
-        return raw["emotes"]?.jsonArray.orEmpty().map { it.jsonObject.toSevenTvEmote() }
+        return raw["emotes"]?.jsonArray.orEmpty()
+            .mapNotNull { runCatching { it.jsonObject.toSevenTvEmote() }.getOrNull() } // skip malformed entries (audit L6)
     }
 
     private suspend fun fetchSevenTvChannel(channelId: String): List<ChannelEmote> {
         val raw: JsonObject = httpClient.get("https://7tv.io/v3/users/twitch/$channelId").body()
         val emoteSet = raw["emote_set"]?.jsonObject ?: return emptyList()
-        return emoteSet["emotes"]?.jsonArray.orEmpty().map { it.jsonObject.toSevenTvEmote() }
+        return emoteSet["emotes"]?.jsonArray.orEmpty()
+            .mapNotNull { runCatching { it.jsonObject.toSevenTvEmote() }.getOrNull() } // skip malformed entries (audit L6)
     }
 }
 

@@ -11,6 +11,20 @@ release notes automatically.
 
 ---
 
+## 1.9.4 - 2026-06-30
+
+Fixes the two biggest annoyances — being asked to sign in every time, and a blank white box over the video — plus a freeze and a round of reliability fixes.
+
+### Fixed
+- **You stay signed in.** PureTV no longer makes you reconnect your Twitch account every time you open it. Your session is now kept and refreshed properly, so you sign in once and it sticks across restarts.
+- **No more white box over the player.** The video area could show a blank white square instead of the stream (most noticeable right when a stream opens or while resizing). It now stays black until the picture appears.
+- **The window no longer freezes or stops responding.** Clicking the title bar or the menus could briefly lock everything up, and switching streams on the GPU player could stall the app. The player and window handling now do that heavy work off the main thread, so the interface stays responsive.
+- **Search shows what you actually typed.** Typing quickly could leave older results on screen; search now follows your latest query and waits for you to stop typing before looking.
+
+### Improved
+- **Clearer when something fails instead of looking empty.** Your followed/live lists and the category pages now show an error you can retry, rather than a blank that looks like "nothing's on."
+- **Chat is more dependable.** Messages can no longer end up in the wrong channel after reconnecting, emoji and emotes line up correctly, and your saved emotes aren't dropped by a temporary hiccup.
+
 ## 1.9.3 - 2026-06-19
 
 Makes recovering from a failed update simple, with a one-click way to grab the latest version.

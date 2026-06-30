@@ -140,6 +140,18 @@ class TwitchChatClient(
         connectionJob?.cancel()
         connectionJob = null
         currentChannel = null
+        // Drain any still-queued outbound messages (audit M2). Each queued line
+        // has its target channel baked in by buildPrivmsgLine (`PRIVMSG #chanA`),
+        // so leaving them queued is unsafe on two counts:
+        //   1) Cross-channel leak: disconnect() clears currentChannel, so the
+        //      connect()-time channel-switch drain (gated on currentChannel !=
+        //      null) won't fire — a later connect(chanB) would flush chanA's
+        //      lines into chanB.
+        //   2) Unbounded growth: outbox is UNLIMITED and never closed, so the
+        //      ClosedSendChannelException "drop when disconnected" path in
+        //      sendMessage never triggers and offline sends accumulate forever.
+        // Dropping them here matches the documented "drop when disconnected" intent.
+        while (outbox.tryReceive().isSuccess) { /* drop queued lines */ }
         _events.tryEmit(ChatEvent.ConnectionState(connected = false, reason = "user disconnected"))
     }
 
@@ -341,20 +353,67 @@ object TwitchIrcParser {
 
         val parts = mutableListOf<MessagePart>()
         var cursor = 0
-        val codePoints = message.toCharArray() // Twitch ranges are UTF-16 code-unit offsets
+        // Twitch `emotes=` ranges are INCLUSIVE offsets counted in Unicode CODE
+        // POINTS, not UTF-16 code units (audit M5). Slicing the raw char array
+        // mis-aligns every index after an astral char (emoji), producing wrong
+        // emote-name slices. Walk the message as code points instead.
+        val codePoints = message.toCodePointArray()
+        val size = codePoints.size
         for (range in ranges) {
             if (range.start > cursor) {
-                parts += MessagePart.Text(String(codePoints, cursor, (range.start - cursor).coerceAtLeast(0)))
+                parts += MessagePart.Text(codePoints.sliceToString(cursor, (range.start - cursor).coerceAtLeast(0)))
             }
-            val end = (range.end + 1).coerceAtMost(codePoints.size)
-            val name = if (range.start in codePoints.indices && end <= codePoints.size) {
-                String(codePoints, range.start, (end - range.start).coerceAtLeast(0))
+            val end = (range.end + 1).coerceAtMost(size)
+            val name = if (range.start in 0 until size && end <= size) {
+                codePoints.sliceToString(range.start, (end - range.start).coerceAtLeast(0))
             } else ""
             parts += MessagePart.TwitchEmote(id = range.emoteId, name = name)
             cursor = end
         }
-        if (cursor < codePoints.size) parts += MessagePart.Text(String(codePoints, cursor, codePoints.size - cursor))
+        if (cursor < size) parts += MessagePart.Text(codePoints.sliceToString(cursor, size - cursor))
         return parts
+    }
+
+    /**
+     * KMP-common has no `String.codePointAt` (JVM-only), so we collapse the
+     * string's UTF-16 units into an IntArray of Unicode code points by hand,
+     * folding valid high+low surrogate pairs into a single astral code point.
+     * A lone/unpaired surrogate is kept as-is so round-tripping never loses data.
+     */
+    private fun String.toCodePointArray(): IntArray {
+        val out = ArrayList<Int>(length)
+        var i = 0
+        while (i < length) {
+            val c = this[i]
+            if (c.isHighSurrogate() && i + 1 < length && this[i + 1].isLowSurrogate()) {
+                out += 0x10000 + ((c.code - 0xD800) shl 10) + (this[i + 1].code - 0xDC00)
+                i += 2
+            } else {
+                out += c.code
+                i++
+            }
+        }
+        return out.toIntArray()
+    }
+
+    /** Rebuilds a String from [count] code points starting at [start], re-splitting astral ones into surrogate pairs. */
+    private fun IntArray.sliceToString(start: Int, count: Int): String {
+        if (count <= 0) return ""
+        val sb = StringBuilder(count)
+        var idx = start
+        val endExclusive = start + count
+        while (idx < endExclusive) {
+            val cp = this[idx]
+            if (cp >= 0x10000) {
+                val v = cp - 0x10000
+                sb.append(((v shr 10) + 0xD800).toChar())
+                sb.append(((v and 0x3FF) + 0xDC00).toChar())
+            } else {
+                sb.append(cp.toChar())
+            }
+            idx++
+        }
+        return sb.toString()
     }
 
     private fun parseTags(tagBlock: String): Map<String, String> =
