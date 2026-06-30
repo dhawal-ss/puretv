@@ -477,13 +477,15 @@ private fun NavigationSidebar(
         }
     }
 
-    // Reload the rail the instant the user signs in. Without this the rail would sit on the
-    // signed-out/empty state with no loading feedback until the next 60s poll tick. drop(1)
-    // skips the current value (startup is already covered by the initial refresh above), so
-    // this fires only on a real sign-in transition.
+    // Reload the rail on EVERY auth transition, both directions. On sign-in it
+    // populates immediately (instead of sitting empty until the next 60s poll); on
+    // sign-out it must reload too so loadOnce() sees the null user id and CLEARS the
+    // rail — otherwise the previous account's follows linger on screen after logout.
+    // drop(1) skips the current value (startup is already covered by the initial
+    // refresh above), so this fires only on a real login/logout transition.
     LaunchedEffect(Unit) {
-        koin.get<DesktopSettingsStore>().loggedInState.drop(1).collect { loggedIn ->
-            if (loggedIn) railVm.refresh()
+        koin.get<DesktopSettingsStore>().loggedInState.drop(1).collect {
+            railVm.refresh()
         }
     }
 

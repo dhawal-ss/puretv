@@ -700,29 +700,26 @@ class LoginViewModel(
         // ORDERING IS LOAD-BEARING: push the token before the first authed call.
         tokenHolder.update(token.accessToken)
         val expiresAt = System.currentTimeMillis() / 1000 + token.expiresInSeconds
-        // Persist the session FIRST, before the /users identity lookup. Previously
-        // the lookup and the saveTokens lived in one runCatching, so a transient
-        // failure of getUsers() threw BEFORE the save — silently discarding a
-        // freshly-minted access+refresh token and dropping the whole login. Now the
-        // token is durable immediately; identity (needed for the followed rail) is
-        // filled in best-effort and never gates the session.
+        // Resolve identity BEST-EFFORT first, then persist the session EXACTLY ONCE
+        // with whatever identity we got. Two reasons this ordering matters:
+        //  1. getUsers() is wrapped in runCatching, so a transient /users failure no
+        //     longer throws past saveTokens and silently discards a freshly-minted
+        //     access+refresh token (the durability bug this method originally had).
+        //  2. saveTokens flips DesktopSettingsStore.loggedInState, which the shell
+        //     uses to trigger the followed rail's load. That load needs the user id
+        //     (GET /channels/followed). Saving once, AFTER identity is known, means
+        //     the single logged-in emission already carries the userId — saving first
+        //     with userId=null fired the rail load against a null id (empty rail) and
+        //     the later id-bearing save did NOT re-emit (StateFlow dedupes true==true),
+        //     so the rail never populated on sign-in.
+        val me = runCatching { apiClient.getUsers().firstOrNull() }.getOrNull()
         settingsStore.saveTokens(
             accessToken = token.accessToken,
             refreshToken = token.refreshToken,
             expiresAtEpochSeconds = expiresAt,
-            userId = null,
-            login = null,
+            userId = me?.id,
+            login = me?.login,
         )
-        val me = runCatching { apiClient.getUsers().firstOrNull() }.getOrNull()
-        if (me != null) {
-            settingsStore.saveTokens(
-                accessToken = token.accessToken,
-                refreshToken = token.refreshToken,
-                expiresAtEpochSeconds = expiresAt,
-                userId = me.id,
-                login = me.login,
-            )
-        }
         _state.update { it.copy(isAuthenticating = false, userCode = null, isLoggedIn = true) }
     }
 }
