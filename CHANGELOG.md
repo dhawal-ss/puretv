@@ -11,6 +11,14 @@ release notes automatically.
 
 ---
 
+## 1.9.5 - 2026-06-30
+
+Fixes staying signed in between launches, and makes your followed list react the moment you sign in or out.
+
+### Fixed
+- **Staying signed in between launches now works.** A start-up problem was throwing away your saved sign-in every time PureTV opened, so it kept asking you to reconnect Twitch even though your login was stored safely on your PC. Your session is now restored correctly on launch, so you sign in once and it sticks.
+- **Your followed list reacts instantly to signing in and out.** It fills in right after you sign in, and clears right away when you sign out, instead of lagging behind or briefly showing the previous account's channels.
+
 ## 1.9.4 - 2026-06-30
 
 Fixes the two biggest annoyances (being asked to sign in every time, and a blank white box over the video), plus a freeze and a round of reliability fixes.
