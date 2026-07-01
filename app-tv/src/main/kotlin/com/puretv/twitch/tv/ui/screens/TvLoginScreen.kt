@@ -26,17 +26,14 @@ import com.puretv.twitch.tv.ui.theme.PureTvTvColors
 import org.koin.androidx.compose.koinViewModel
 
 /**
- * SECTION 03.2 / 07 — TV login entry point.
+ * SECTION 03.2 / 07: TV login entry point (Twitch Device Code Grant flow).
  *
- * As documented on [LoginViewModel]: typing a full Twitch username/password
- * with a D-pad is painful, so this screen renders the `authorizeUrl` (and a
- * QR-code placeholder — wiring an actual QR generator is a follow-up; the
- * spec's "companion-device handoff" note applies) for the viewer to open on
- * their phone. The OAuth redirect still completes *on this device* via the
- * shared `puretv-twitch://auth` deep link — [LoginViewModel] is already
- * collecting [com.puretv.twitch.tv.AuthRedirectBus] from `init{}`, so once
- * the phone browser redirects back, `TvMainActivity.onNewIntent` captures it
- * and this screen auto-advances via [onLoggedIn].
+ * Typing a Twitch username/password with a D-pad is painful and Twitch rejects
+ * custom-scheme redirects, so this screen shows a short [LoginUiState.userCode]
+ * and points the viewer at [LoginUiState.verificationUri] (twitch.tv/activate)
+ * to enter on a phone or computer. [LoginViewModel] polls Twitch in the
+ * background; once the code is approved the session persists on THIS device and
+ * the screen auto-advances via [onLoggedIn]. No redirect/QR round-trip needed.
  */
 @Composable
 fun TvLoginScreen(onLoggedIn: () -> Unit, onBack: () -> Unit, viewModel: LoginViewModel = koinViewModel()) {
@@ -65,36 +62,40 @@ fun TvLoginScreen(onLoggedIn: () -> Unit, onBack: () -> Unit, viewModel: LoginVi
                 .padding(32.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
+            val verificationUri = state.verificationUri ?: "twitch.tv/activate"
             Text(
-                text = "On your phone or computer, open this address to sign in:",
+                text = "On your phone or computer, go to:",
                 style = MaterialTheme.typography.bodyLarge,
                 color = PureTvTvColors.TextPrimary,
             )
-
-            // QR placeholder — replace with a real QR bitmap generator (e.g. ZXing)
-            // once a CLIENT_ID is registered; the authorizeUrl below is fully
-            // functional and can be typed manually in the meantime.
-            Column(
-                modifier = Modifier
-                    .width(220.dp)
-                    .background(PureTvTvColors.SurfaceVariant, RoundedCornerShape(12.dp))
-                    .padding(24.dp),
-            ) {
-                Text(
-                    text = "[ QR code placeholder ]",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = PureTvTvColors.TextMuted,
-                )
-            }
-
             Text(
-                text = state.authorizeUrl ?: "Generating sign-in link…",
-                style = MaterialTheme.typography.titleLarge,
+                text = verificationUri.removePrefix("https://").removePrefix("http://"),
+                style = MaterialTheme.typography.headlineMedium,
                 color = PureTvTvColors.TwitchPurpleLight,
             )
 
             Text(
-                text = "After approving access on Twitch, you'll be returned here automatically.",
+                text = "and enter this code:",
+                style = MaterialTheme.typography.bodyLarge,
+                color = PureTvTvColors.TextPrimary,
+            )
+
+            // The user code, rendered large and monospace-spaced so it's readable
+            // from the couch. Falls back to a waiting message until Twitch returns it.
+            Column(
+                modifier = Modifier
+                    .background(PureTvTvColors.SurfaceVariant, RoundedCornerShape(12.dp))
+                    .padding(horizontal = 40.dp, vertical = 24.dp),
+            ) {
+                Text(
+                    text = state.userCode ?: "Requesting code…",
+                    style = MaterialTheme.typography.displayMedium,
+                    color = PureTvTvColors.TextPrimary,
+                )
+            }
+
+            Text(
+                text = "Keep this screen open. You'll be signed in automatically once you approve access on Twitch.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = PureTvTvColors.TextSecondary,
             )
@@ -103,7 +104,7 @@ fun TvLoginScreen(onLoggedIn: () -> Unit, onBack: () -> Unit, viewModel: LoginVi
                 Text(text = error, style = MaterialTheme.typography.bodyMedium, color = PureTvTvColors.Live)
             }
 
-            Button(onClick = viewModel::beginLogin) { Text("Generate a new sign-in link") }
+            Button(onClick = viewModel::beginLogin) { Text("Get a new code") }
         }
     }
 }
