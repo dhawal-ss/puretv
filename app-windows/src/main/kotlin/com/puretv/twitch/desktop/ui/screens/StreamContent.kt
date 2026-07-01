@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -54,6 +55,7 @@ import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -97,6 +99,7 @@ import com.puretv.twitch.desktop.ui.StreamViewModel
 import com.puretv.twitch.desktop.ui.rememberDesktopViewModel
 import com.puretv.twitch.desktop.ui.components.AdBlockPill
 import com.puretv.twitch.desktop.ui.components.ChatMessageRow
+import com.puretv.twitch.desktop.ui.components.LocalBadgeIndex
 import com.puretv.twitch.desktop.ui.components.LiveDot
 import com.puretv.twitch.desktop.ui.components.SegmentedControl
 import com.puretv.twitch.desktop.ui.chat.ComposerKeyAction
@@ -411,29 +414,50 @@ fun StreamContent(koin: Koin, channelLogin: String, onBack: () -> Unit, onReques
                             .fillMaxHeight()
                             .background(c.surface),
                     ) {
-                        // Header
+                        var chatTab by remember { mutableStateOf(ChatTab.Chat) }
+                        // Header: Chat / Mentions tabs + close button
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(horizontal = 14.dp, vertical = 10.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Text(
-                                "Chat",
-                                style = MaterialTheme.typography.titleMedium,
-                                color = c.textPrimary,
-                                modifier = Modifier.weight(1f),
+                            SegmentedControl(
+                                options = ChatTab.entries.toList(),
+                                selected = chatTab,
+                                label = { tab ->
+                                    // Surface the unread-mention count on the tab itself.
+                                    if (tab == ChatTab.Mentions && state.mentionMessages.isNotEmpty()) {
+                                        "Mentions (${state.mentionMessages.size})"
+                                    } else tab.label
+                                },
+                                onSelect = { chatTab = it },
                             )
+                            Spacer(Modifier.weight(1f))
                             IconButton(onClick = { shell.toggleChat() }) {
                                 Icon(Icons.Filled.Close, "Close chat", tint = c.textSecondary, modifier = Modifier.size(16.dp))
                             }
                         }
                         Box(Modifier.fillMaxWidth().height(1.dp).background(c.hairline))
-                        ChatMessageList(
-                            messages = state.chatMessages,
-                            onReply = viewModel::startReply,
-                            modifier = Modifier.weight(1f),
-                        )
+                        CompositionLocalProvider(LocalBadgeIndex provides state.badges) {
+                            when (chatTab) {
+                                ChatTab.Chat -> ChatMessageList(
+                                    messages = state.chatMessages,
+                                    onReply = viewModel::startReply,
+                                    modifier = Modifier.weight(1f),
+                                )
+                                ChatTab.Mentions ->
+                                    if (state.mentionMessages.isEmpty()) {
+                                        MentionsEmptyState(Modifier.weight(1f))
+                                    } else {
+                                        ChatMessageList(
+                                            messages = state.mentionMessages,
+                                            onReply = viewModel::startReply,
+                                            modifier = Modifier.weight(1f),
+                                        )
+                                    }
+                            }
+                        }
                         ChatInputBar(
                             canChat = state.canChat,
                             emotes = state.emotes,
@@ -599,6 +623,34 @@ private fun PlaybackControls(
 }
 
 // ── Chat UI ───────────────────────────────────────────────────────────────────
+
+/** The two views the chat panel can show: the live feed, or just messages that @-mention you. */
+private enum class ChatTab(val label: String) { Chat("Chat"), Mentions("Mentions") }
+
+/** Shown in the Mentions tab when nobody has pinged you yet. */
+@Composable
+private fun MentionsEmptyState(modifier: Modifier = Modifier) {
+    val c = PureTvTheme.colors
+    Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.padding(24.dp),
+        ) {
+            Text(
+                "No mentions yet",
+                style = MaterialTheme.typography.titleSmall,
+                color = c.textSecondary,
+            )
+            Spacer(Modifier.height(6.dp))
+            Text(
+                "Messages that @ your name will show up here.",
+                style = MaterialTheme.typography.bodySmall,
+                color = c.textMuted,
+                textAlign = TextAlign.Center,
+            )
+        }
+    }
+}
 
 @Composable
 private fun ChatMessageList(

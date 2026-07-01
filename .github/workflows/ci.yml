@@ -34,12 +34,16 @@ jobs:
       - name: Cache Gradle
         uses: gradle/actions/setup-gradle@3f131e8634966bd73d06cc69884922b02e6faf92 # v6.2.0
 
-      # Android/TV builds are intentionally not run here for now (they have a
-      # separate KSP/Room issue and aren't being distributed). Re-add
-      # :app-android / :app-tv tasks here when that work resumes.
+      # app-android is built below. The build break that kept it out of CI (a
+      # Kotlin/KSP JVM-target mismatch, javac=11 vs Kotlin=17) is fixed via
+      # kotlinOptions jvmTarget=11 in app-android/build.gradle.kts. app-tv
+      # (Android TV) stays excluded until that app's revival resumes.
 
       - name: Unit tests (core commonTest + desktop unit tests)
         run: ./gradlew :core:allTests :app-windows:test
+
+      - name: Build Android phone app (debug APK)
+        run: ./gradlew :app-android:assembleDebug
 
       - name: Package Windows desktop distributable (current OS image only — full MSI/EXE requires windows-latest, see release.yml)
         run: ./gradlew :app-windows:createDistributable

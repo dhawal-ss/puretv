@@ -9,19 +9,27 @@ import com.puretv.twitch.core.api.DeviceCodeResponse
 import com.puretv.twitch.core.api.DevicePollResult
 import com.puretv.twitch.core.api.TokenResponse
 import com.puretv.twitch.core.api.TwitchApiClient
+import com.puretv.twitch.core.chat.BadgeIndex
+import com.puretv.twitch.core.chat.BadgeRepository
 import com.puretv.twitch.core.chat.TwitchChatClient
 import com.puretv.twitch.core.di.TokenHolder
 import com.puretv.twitch.core.emotes.EmoteRepository
 import com.puretv.twitch.core.emotes.PickableEmote
 import com.puretv.twitch.core.emotes.ResolvedEmote
+import com.puretv.twitch.core.emotes.SevenTvEmoteDelta
+import com.puretv.twitch.core.emotes.SevenTvEventClient
 import com.puretv.twitch.core.emotes.buildEmoteIndex
 import com.puretv.twitch.core.emotes.applyThirdPartyEmotes
 import com.puretv.twitch.core.emotes.buildPickableEmotes
+import com.puretv.twitch.core.emotes.prioritizeThirdParty
+import com.puretv.twitch.core.model.ChannelEmote
+import com.puretv.twitch.core.model.EmoteProvider
 import com.puretv.twitch.core.model.AppSettings
 import com.puretv.twitch.core.model.Badge
 import com.puretv.twitch.core.model.ChannelInfo
 import com.puretv.twitch.core.model.ChatEvent
 import com.puretv.twitch.core.model.ChatMessage
+import com.puretv.twitch.core.model.MessagePart
 import com.puretv.twitch.core.model.GameInfo
 import com.puretv.twitch.core.model.StreamInfo
 import com.puretv.twitch.core.model.StreamQuality
@@ -36,13 +44,18 @@ import com.puretv.twitch.desktop.data.FollowedChannel
 import com.puretv.twitch.desktop.player.LocalStreamProxy
 import com.puretv.twitch.desktop.player.ProxyUnavailableException
 import com.puretv.twitch.desktop.player.DesktopPlayer
+import com.puretv.twitch.desktop.ui.chat.ChatModeration
 import com.puretv.twitch.desktop.ui.chat.buildSelfEcho
 import io.ktor.client.HttpClient
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -243,14 +256,22 @@ class SearchViewModel(private val channelRepository: ChannelRepository) : Deskto
     private val _state = MutableStateFlow(SearchUiState())
     val state: StateFlow<SearchUiState> = _state.asStateFlow()
 
+    // One in-flight search at a time. Cancelling the previous job both debounces
+    // typing and prevents an earlier query's slower response from overwriting a
+    // newer query's results (the out-of-order/stale-result race) — without it,
+    // typing "ab" then "abc" could leave "ab"'s results showing under "abc".
+    private var searchJob: Job? = null
+
     fun onQueryChange(query: String) {
         _state.update { it.copy(query = query) }
+        searchJob?.cancel()
         if (query.length < 2) {
             _state.update { it.copy(results = emptyList(), isSearching = false, error = null) }
             return
         }
-        scope.launch {
+        searchJob = scope.launch {
             _state.update { it.copy(isSearching = true, error = null) }
+            delay(300) // debounce: wait for typing to settle before hitting the network
             runCatching { channelRepository.search(query) }
                 .onSuccess { results -> _state.update { it.copy(results = results, isSearching = false, error = null) } }
                 .onFailure { _state.update { it.copy(results = emptyList(), isSearching = false, error = "Search failed. Check your connection and try again.") } }
@@ -270,7 +291,12 @@ data class StreamUiState(
     val currentQuality: StreamQuality = StreamQuality.AUTO,
     val adBlockStatus: AdBlockStatus = AdBlockStatus.UNKNOWN,
     val chatMessages: List<ChatMessage> = emptyList(),
+    /** Messages that @-mention the local viewer, kept in their own buffer so the
+     *  Mentions tab survives the main chat buffer churning past its cap. */
+    val mentionMessages: List<ChatMessage> = emptyList(),
     val emotes: List<PickableEmote> = emptyList(),
+    /** Resolved chat badge art (global ∪ channel) for rendering real badge icons. */
+    val badges: BadgeIndex = BadgeIndex.EMPTY,
     /** True only when we hold both a token and the token-owner's login (can speak). */
     val canChat: Boolean = false,
     /** The message the composer is currently replying to, if any. */
@@ -293,6 +319,8 @@ class StreamViewModel(
     private val localStreamProxy: LocalStreamProxy,
     private val followStore: FollowStore,
     private val apiClient: TwitchApiClient,
+    private val sevenTvEventClient: SevenTvEventClient,
+    private val badgeRepository: BadgeRepository,
 ) : DesktopViewModel() {
     private val _state = MutableStateFlow(StreamUiState())
     val state: StateFlow<StreamUiState> = _state.asStateFlow()
@@ -304,6 +332,7 @@ class StreamViewModel(
     private var selfColor: String? = null
     private var selfBadges: List<Badge> = emptyList()
     private var echoCounter = 0
+    private var systemCounter = 0
 
     // Written on the emote-load coroutine, read on the chat-collect + send paths.
     // Safe as a @Volatile reference because the map is immutable after publish:
@@ -320,6 +349,16 @@ class StreamViewModel(
     //    emote (Kappa, your sub emotes) can only be resolved here by name.
     @Volatile private var emoteIndex: Map<String, ResolvedEmote> = emptyMap()
     @Volatile private var selfEchoIndex: Map<String, ResolvedEmote> = emptyMap()
+
+    // The four emote source lists the indices + picker are built from. Held as fields
+    // (not init-coroutine locals) so a live 7TV EventAPI delta can mutate the channel
+    // set and rebuild everything without re-fetching. Mutated only on the single chat
+    // scope, so a plain var is safe; the @Volatile indices above are what other
+    // coroutines read.
+    private var tpGlobalEmotes: List<ChannelEmote> = emptyList()
+    private var tpChannelEmotes: List<ChannelEmote> = emptyList()
+    private var twitchGlobalEmotes: List<ChannelEmote> = emptyList()
+    private var twitchChannelEmotes: List<ChannelEmote> = emptyList()
 
     val isFollowed: StateFlow<Boolean> = followStore.followed
         .map { list -> list.any { it.login.equals(channelLogin, ignoreCase = true) } }
@@ -361,32 +400,42 @@ class StreamViewModel(
             // Assemble the unified pickable-emote list: third-party (BTTV/FFZ/7TV)
             // globals + first-party Twitch globals, then the channel-specific sets.
             // Each fetch is best-effort so one provider failing doesn't sink the rest.
-            val tpGlobal = runCatching { emoteRepository.loadGlobalEmotes() }.getOrDefault(emptyList())
-            val tGlobal = runCatching { apiClient.getGlobalEmotes() }.getOrDefault(emptyList())
+            tpGlobalEmotes = runCatching { emoteRepository.loadGlobalEmotes() }.getOrDefault(emptyList())
+            twitchGlobalEmotes = runCatching { apiClient.getGlobalEmotes() }.getOrDefault(emptyList())
             // Resolve globals immediately (before channel emotes load): incoming gets
             // third-party globals; self-echo additionally gets first-party Twitch
-            // globals so a typed emote in your own message renders right away.
-            emoteIndex = buildEmoteIndex(emptyList(), tpGlobal)
-            selfEchoIndex = buildEmoteIndex(emptyList(), tpGlobal, emptyList(), tGlobal)
+            // globals so a typed emote in your own message renders right away. Honor the
+            // provider toggles/priority here too so a disabled provider never flashes in.
+            val globEnabled = enabledThirdPartyProviders()
+            val tpGlobFiltered = prioritizeThirdParty(tpGlobalEmotes, globEnabled)
+            emoteIndex = buildEmoteIndex(emptyList(), tpGlobFiltered)
+            selfEchoIndex = buildEmoteIndex(emptyList(), tpGlobFiltered, emptyList(), twitchGlobalEmotes)
             channel?.let { ch ->
-                val tpChan = runCatching { emoteRepository.loadChannelEmotes(ch.id, ch.login) }.getOrDefault(emptyList())
-                val tChan = runCatching { apiClient.getChannelTwitchEmotes(ch.id) }.getOrDefault(emptyList())
-                val picks = buildPickableEmotes(tChan, tpChan, tGlobal, tpGlobal)
-                // Incoming: third-party only (Twitch emotes arrive tagged — never
-                // name-match them, or typed sub-emote names mis-render). Self-echo:
-                // add first-party Twitch (your own message has no `emotes=` tag).
-                emoteIndex = buildEmoteIndex(tpChan, tpGlobal)
-                selfEchoIndex = buildEmoteIndex(tpChan, tpGlobal, tChan, tGlobal)
-                _state.update { st ->
-                    st.copy(
-                        emotes = picks,
-                        // Re-map messages already received before emotes finished loading.
-                        chatMessages = st.chatMessages.map {
-                            it.copy(parsedParts = applyThirdPartyEmotes(it.parsedParts, emoteIndex))
-                        },
-                    )
-                }
+                tpChannelEmotes = runCatching { emoteRepository.loadChannelEmotes(ch.id, ch.login) }.getOrDefault(emptyList())
+                twitchChannelEmotes = runCatching { apiClient.getChannelTwitchEmotes(ch.id) }.getOrDefault(emptyList())
+                // Build indices + picker from the now-complete source lists and re-map
+                // any messages that arrived before emotes finished loading.
+                rebuildEmoteIndicesAndPublish()
+                // Subscribe to live 7TV emote add/remove for this channel (EventAPI).
+                sevenTvEventClient.connect(ch.id)
+                // Real badge art (global ∪ channel). Best-effort: failure leaves text-free rows.
+                val badgeIndex = runCatching { badgeRepository.loadForChannel(ch.id) }.getOrDefault(BadgeIndex.EMPTY)
+                _state.update { it.copy(badges = badgeIndex) }
             }
+        }
+        // Live 7TV emote updates: fold each delta into the channel set and rebuild.
+        scope.launch {
+            sevenTvEventClient.updates.collect { applyEmoteDelta(it) }
+        }
+        // Per-provider emote toggles are live: flipping show7tv/showBttv/showFfz in
+        // Settings re-filters the visible emotes without leaving the stream. drop(1)
+        // skips the initial value (the channel load already builds from current settings).
+        scope.launch {
+            settingsStore.settings
+                .map { Triple(it.show7tvEmotes, it.showBttvEmotes, it.showFfzEmotes) }
+                .distinctUntilChanged()
+                .drop(1)
+                .collect { rebuildEmoteIndicesAndPublish() }
         }
         scope.launch {
             adBlockEngine.status.collect { status -> _state.update { it.copy(adBlockStatus = status) } }
@@ -406,15 +455,46 @@ class StreamViewModel(
                     is ChatEvent.Message -> _state.update { current ->
                         val mapped = event.message.copy(
                             parsedParts = applyThirdPartyEmotes(event.message.parsedParts, emoteIndex),
+                            mentionsSelf = mentionsSelf(event.message.message),
                         )
-                        current.copy(chatMessages = current.chatMessages.appendCapped(mapped))
+                        current.copy(
+                            chatMessages = current.chatMessages.appendCapped(mapped),
+                            mentionMessages = if (mapped.mentionsSelf) {
+                                current.mentionMessages.appendCapped(mapped)
+                            } else current.mentionMessages,
+                        )
                     }
                     is ChatEvent.SelfState -> {
                         event.displayName.ifBlank { null }?.let { selfDisplayName = it }
                         selfColor = event.color
                         selfBadges = event.badges
                     }
-                    else -> {}
+                    // Moderator timed out/banned a user (targetUser set) or cleared the
+                    // whole room (targetUser null). Twitch removes the affected history,
+                    // so tombstone matching messages rather than deleting the rows —
+                    // Chatterino-style "<message deleted>" keeps the conversation legible.
+                    is ChatEvent.ClearChat -> _state.update { current ->
+                        val target = event.targetUser
+                        if (target == null) {
+                            current.copy(
+                                chatMessages = current.chatMessages
+                                    .appendCapped(systemMessage("Chat cleared by a moderator")),
+                            )
+                        } else {
+                            current.copy(chatMessages = ChatModeration.markUserDeleted(current.chatMessages, target))
+                        }
+                    }
+                    is ChatEvent.ClearMessage -> _state.update { current ->
+                        current.copy(chatMessages = ChatModeration.markMessageDeleted(current.chatMessages, event.targetMessageId))
+                    }
+                    // Subs, resubs, raids, gifts: Twitch hands us a ready-made
+                    // human-readable system line. Render it as a centred system row.
+                    is ChatEvent.UserNotice -> event.systemMessage.ifBlank { null }?.let { sys ->
+                        _state.update { it.copy(chatMessages = it.chatMessages.appendCapped(systemMessage(sys))) }
+                    }
+                    // RoomState/ConnectionState are parsed in core but not surfaced in
+                    // this panel yet (no slow-mode / connection banner). Intentionally ignored.
+                    is ChatEvent.RoomState, is ChatEvent.ConnectionState -> {}
                 }
             }
         }
@@ -462,6 +542,12 @@ class StreamViewModel(
         chatClient.sendMessage(channelLogin, text, replyParent?.id)
         // Optimistic local echo — Twitch never sends our own message back to us,
         // so render it ourselves or the sender never sees what they typed.
+        // Echo ONLY what actually went on the wire: buildPrivmsgLine truncates the
+        // body to MAX_CHAT_MESSAGE_LENGTH, so clamp the echo to the same limit or the
+        // sender sees more than was sent (M8). CRLF is neutralised to spaces on the
+        // wire too; the composer sends on Enter so newlines don't reach here, but
+        // mirror it so the echo can never diverge from the delivered text.
+        val wireText = text.replace('\r', ' ').replace('\n', ' ').take(MAX_CHAT_MESSAGE_LENGTH)
         val echo = buildSelfEcho(
             id = "self-" + (echoCounter++).toString(),
             login = selfLogin ?: "you",
@@ -469,7 +555,7 @@ class StreamViewModel(
             color = selfColor,
             badges = selfBadges,
             channel = channelLogin,
-            text = text,
+            text = wireText,
             timestamp = System.currentTimeMillis(),
             replyParent = replyParent,
             emoteIndex = selfEchoIndex,
@@ -484,6 +570,86 @@ class StreamViewModel(
      * this allocates ONE list of [max] rather than the `(list + msg).takeLast(max)` pattern's
      * two (an n+1 temp, then the capped copy) — less per-message GC churn in a fast chat.
      */
+    /** Rebuild both emote indices + the picker list from the current source lists and
+     *  re-tokenize the visible buffer. Called after channel emotes load and on every
+     *  live 7TV delta. Cheap enough to run wholesale: deltas are infrequent and the
+     *  buffer is capped at 200. Runs on the chat scope (single-threaded for these fields). */
+    private fun rebuildEmoteIndicesAndPublish() {
+        // Honor the per-provider toggles and apply 7TV > BTTV > FFZ collision priority,
+        // so a disabled provider's emotes never render and 7TV wins name clashes.
+        val enabled = enabledThirdPartyProviders()
+        val tpChan = prioritizeThirdParty(tpChannelEmotes, enabled)
+        val tpGlob = prioritizeThirdParty(tpGlobalEmotes, enabled)
+        // Incoming: third-party only (Twitch emotes arrive tagged — never name-match
+        // them, or typed sub-emote names mis-render). Self-echo: add first-party Twitch
+        // (your own message carries no `emotes=` tag).
+        emoteIndex = buildEmoteIndex(tpChan, tpGlob)
+        selfEchoIndex = buildEmoteIndex(tpChan, tpGlob, twitchChannelEmotes, twitchGlobalEmotes)
+        val picks = buildPickableEmotes(twitchChannelEmotes, tpChan, twitchGlobalEmotes, tpGlob)
+        _state.update { st ->
+            st.copy(
+                emotes = picks,
+                chatMessages = st.chatMessages.map {
+                    it.copy(parsedParts = applyThirdPartyEmotes(it.parsedParts, emoteIndex))
+                },
+                mentionMessages = st.mentionMessages.map {
+                    it.copy(parsedParts = applyThirdPartyEmotes(it.parsedParts, emoteIndex))
+                },
+            )
+        }
+    }
+
+    /** Third-party providers currently enabled in settings (Twitch is always on). */
+    private fun enabledThirdPartyProviders(): Set<EmoteProvider> {
+        val s = settingsStore.settings.value
+        return buildSet {
+            if (s.show7tvEmotes) add(EmoteProvider.SEVENTV)
+            if (s.showBttvEmotes) add(EmoteProvider.BTTV)
+            if (s.showFfzEmotes) add(EmoteProvider.FFZ)
+        }
+    }
+
+    /**
+     * Fold a live 7TV EventAPI delta into the channel emote set, then rebuild.
+     * Removals match 7TV emotes by name; additions are de-duped against existing 7TV
+     * names so a repeated push can't double-insert. No-ops (no rebuild) when the delta
+     * changes nothing. Note: a removed emote already rendered in an OLD message stays
+     * as-is — re-tokenizing only re-scans text, it doesn't revert existing emote parts.
+     */
+    private fun applyEmoteDelta(delta: SevenTvEmoteDelta) {
+        val removedNames = delta.removed.mapTo(HashSet()) { it.name }
+        val afterRemoval =
+            if (removedNames.isEmpty()) tpChannelEmotes
+            else tpChannelEmotes.filterNot { it.provider == EmoteProvider.SEVENTV && it.name in removedNames }
+        val present7tv = afterRemoval.filterTo(HashSet()) { it.provider == EmoteProvider.SEVENTV }.mapTo(HashSet()) { it.name }
+        val additions = delta.added.filter { it.name.isNotBlank() && present7tv.add(it.name) }
+        val changed = afterRemoval.size != tpChannelEmotes.size || additions.isNotEmpty()
+        if (!changed) return
+        tpChannelEmotes = afterRemoval + additions
+        rebuildEmoteIndicesAndPublish()
+    }
+
+    /** True when [body] @-mentions the local viewer. Viewer-relative, so it is
+     *  evaluated here where [selfLogin] is known rather than in the row. */
+    private fun mentionsSelf(body: String): Boolean = ChatModeration.mentionsSelf(body, selfLogin)
+
+    /** Build a synthetic, non-user system row (sub/raid notices, "chat cleared"). */
+    private fun systemMessage(text: String): ChatMessage = ChatMessage(
+        id = "sys-" + (systemCounter++).toString(),
+        channel = channelLogin,
+        username = "",
+        displayName = "",
+        color = "",
+        message = text,
+        parsedParts = listOf(MessagePart.Text(text)),
+        badges = emptyList(),
+        timestamp = System.currentTimeMillis(),
+        isSubscriber = false,
+        isModerator = false,
+        isBroadcaster = false,
+        isSystem = true,
+    )
+
     private fun List<ChatMessage>.appendCapped(msg: ChatMessage, max: Int = 200): List<ChatMessage> =
         if (size < max) this + msg
         else ArrayList<ChatMessage>(max).also {
@@ -506,7 +672,16 @@ class StreamViewModel(
 
     override fun onCleared() {
         chatClient.disconnect()
+        sevenTvEventClient.disconnect()
         vlcPlayer.stop()
+    }
+
+    private companion object {
+        // Twitch (and core's buildPrivmsgLine) hard-cap the wire body at 500 chars.
+        // Mirrored here so the optimistic echo never shows more than was sent (M8);
+        // kept in sync with core's internal MAX_CHAT_MESSAGE_LENGTH, which isn't
+        // visible across the module boundary.
+        private const val MAX_CHAT_MESSAGE_LENGTH = 500
     }
 }
 
@@ -673,22 +848,29 @@ class LoginViewModel(
     }
 
     private suspend fun onAuthenticated(token: TokenResponse) {
-        runCatching {
-            // ORDERING IS LOAD-BEARING: push the token before the first authed call.
-            tokenHolder.update(token.accessToken)
-            val me = apiClient.getUsers().firstOrNull()
-            val expiresAt = System.currentTimeMillis() / 1000 + token.expiresInSeconds
-            settingsStore.saveTokens(
-                accessToken = token.accessToken,
-                refreshToken = token.refreshToken,
-                expiresAtEpochSeconds = expiresAt,
-                userId = me?.id,
-                login = me?.login,
-            )
-        }.onSuccess {
-            _state.update { it.copy(isAuthenticating = false, userCode = null, isLoggedIn = true) }
-        }.onFailure { e ->
-            _state.update { it.copy(isAuthenticating = false, userCode = null, error = e.message ?: "Login failed") }
-        }
+        // ORDERING IS LOAD-BEARING: push the token before the first authed call.
+        tokenHolder.update(token.accessToken)
+        val expiresAt = System.currentTimeMillis() / 1000 + token.expiresInSeconds
+        // Resolve identity BEST-EFFORT first, then persist the session EXACTLY ONCE
+        // with whatever identity we got. Two reasons this ordering matters:
+        //  1. getUsers() is wrapped in runCatching, so a transient /users failure no
+        //     longer throws past saveTokens and silently discards a freshly-minted
+        //     access+refresh token (the durability bug this method originally had).
+        //  2. saveTokens flips DesktopSettingsStore.loggedInState, which the shell
+        //     uses to trigger the followed rail's load. That load needs the user id
+        //     (GET /channels/followed). Saving once, AFTER identity is known, means
+        //     the single logged-in emission already carries the userId — saving first
+        //     with userId=null fired the rail load against a null id (empty rail) and
+        //     the later id-bearing save did NOT re-emit (StateFlow dedupes true==true),
+        //     so the rail never populated on sign-in.
+        val me = runCatching { apiClient.getUsers().firstOrNull() }.getOrNull()
+        settingsStore.saveTokens(
+            accessToken = token.accessToken,
+            refreshToken = token.refreshToken,
+            expiresAtEpochSeconds = expiresAt,
+            userId = me?.id,
+            login = me?.login,
+        )
+        _state.update { it.copy(isAuthenticating = false, userCode = null, isLoggedIn = true) }
     }
 }

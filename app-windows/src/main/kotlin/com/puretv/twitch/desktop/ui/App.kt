@@ -260,11 +260,15 @@ private fun CustomTitleBar(shell: AppShellController, onClose: () -> Unit, awtWi
         verticalAlignment = Alignment.CenterVertically,
     ) {
         // Drag zone — fills available width to the left of the window buttons.
-        // On the first real drag movement we hand the gesture to Windows via a
-        // native move loop (WindowsNative.startWindowDrag), which gives us Aero
-        // Snap / Snap Layouts for free. A double-click toggles maximize, matching
-        // native title-bar behavior. If the native call is unavailable we fall
-        // back to manual repositioning so the title bar is never "stuck".
+        // A press alone does NOTHING heavy: the native OS move loop
+        // (WindowsNative.startWindowDrag) BLOCKS the EDT until mouse-release, so
+        // entering it on every button-down — even a plain click — froze the UI for
+        // the whole press. Instead we wait for real drag INTENT (the pointer moving
+        // past a small threshold while held); only then do we hand the gesture to
+        // Windows, which gives us Aero Snap / Snap Layouts for free. A double-click
+        // toggles maximize, matching native title-bar behavior. If the native call
+        // is unavailable we fall back to manual repositioning so the bar is never
+        // "stuck".
         Row(
             modifier = Modifier
                 .weight(1f)
@@ -273,6 +277,12 @@ private fun CustomTitleBar(shell: AppShellController, onClose: () -> Unit, awtWi
                 .pointerInput(awtWindow) {
                     var lastDownTime = 0L
                     var manualDrag = false
+                    // armed: pressed on the caption and eligible to start a drag (not a
+                    // double-click, not maximized) but no drag intent yet.
+                    // handedOff: this press already started a drag (native or manual),
+                    // so further Moves don't re-trigger the handoff.
+                    var armed = false
+                    var handedOff = false
                     var winX0 = 0; var winY0 = 0
                     var ptrX0 = 0; var ptrY0 = 0
                     awaitPointerEventScope {
@@ -282,11 +292,11 @@ private fun CustomTitleBar(shell: AppShellController, onClose: () -> Unit, awtWi
                             when (ev.type) {
                                 PointerEventType.Press -> {
                                     val t = change?.uptimeMillis ?: 0L
+                                    armed = false; manualDrag = false; handedOff = false
                                     if (t - lastDownTime in 1..400) {
                                         // Double-click on the caption → maximize/restore.
                                         shell.toggleMaximize()
                                         lastDownTime = 0L
-                                        manualDrag = false
                                     } else if (shell.isMaximized) {
                                         // Maximized = locked. Ignore drags so the filled window
                                         // can't be nudged or accidentally un-maximized mid-drag.
@@ -294,16 +304,30 @@ private fun CustomTitleBar(shell: AppShellController, onClose: () -> Unit, awtWi
                                         // double-click), and then it's draggable again — a
                                         // calmer, more predictable feel than Windows' default.
                                         lastDownTime = t
-                                        manualDrag = false
                                     } else {
                                         lastDownTime = t
-                                        // Hand the drag to the OS at button-down. startWindowDrag
-                                        // BLOCKS in the OS move loop until the mouse is released
+                                        // Record the press anchor (screen coords) and arm — but do
+                                        // NOT enter the blocking OS move loop yet. We only commit to
+                                        // a drag once the pointer actually moves (see Move below), so
+                                        // a plain click never stalls the EDT.
+                                        val press = MouseInfo.getPointerInfo().location
+                                        ptrX0 = press.x; ptrY0 = press.y
+                                        armed = true
+                                    }
+                                }
+                                PointerEventType.Move -> if (change?.pressed == true && (armed || manualDrag)) {
+                                    // Only hit MouseInfo (a native round-trip) while a press is
+                                    // actually in progress — never on a plain hover-move.
+                                    val p = MouseInfo.getPointerInfo().location
+                                    if (armed && !handedOff &&
+                                        kotlin.math.abs(p.x - ptrX0) + kotlin.math.abs(p.y - ptrY0) > DRAG_THRESHOLD
+                                    ) {
+                                        // Drag intent confirmed — hand the gesture to the OS now.
+                                        // startWindowDrag BLOCKS in the OS move loop until release
                                         // *if* it takes over; if it returns almost immediately it
                                         // didn't engage, so we drive a manual drag instead (the bar
                                         // is never left unresponsive).
-                                        val press = MouseInfo.getPointerInfo().location
-                                        ptrX0 = press.x; ptrY0 = press.y
+                                        handedOff = true
                                         val startNs = System.nanoTime()
                                         val native = WindowsNative.startWindowDrag(awtWindow)
                                         val blockedMs = (System.nanoTime() - startNs) / 1_000_000
@@ -314,18 +338,16 @@ private fun CustomTitleBar(shell: AppShellController, onClose: () -> Unit, awtWi
                                             // Native move loop just ended (mouse released). The OS
                                             // snap engine doesn't engage for a synthesized HTCAPTION
                                             // drag, so snap it ourselves if it was dragged to an edge.
-                                            manualDrag = false
+                                            armed = false
                                             snapOnDrop(shell, ptrX0, ptrY0)
                                         }
+                                    } else if (manualDrag && change?.pressed == true) {
+                                        awtWindow.setLocation(winX0 + p.x - ptrX0, winY0 + p.y - ptrY0)
                                     }
-                                }
-                                PointerEventType.Move -> if (manualDrag && change?.pressed == true) {
-                                    val p = MouseInfo.getPointerInfo().location
-                                    awtWindow.setLocation(winX0 + p.x - ptrX0, winY0 + p.y - ptrY0)
                                 }
                                 PointerEventType.Release -> {
                                     if (manualDrag) snapOnDrop(shell, ptrX0, ptrY0)
-                                    manualDrag = false
+                                    armed = false; manualDrag = false; handedOff = false
                                 }
                             }
                         }
@@ -353,6 +375,13 @@ private fun CustomTitleBar(shell: AppShellController, onClose: () -> Unit, awtWi
         }
     }
 }
+
+/**
+ * Manhattan distance in screen px the pointer must travel while pressed before a
+ * title-bar press is treated as a drag (and the blocking OS move loop is entered).
+ * Small enough to feel immediate, large enough that a plain click never qualifies.
+ */
+private const val DRAG_THRESHOLD = 4
 
 /**
  * Snaps the window when a title-bar drag is released at a screen edge. Requires
@@ -448,13 +477,15 @@ private fun NavigationSidebar(
         }
     }
 
-    // Reload the rail the instant the user signs in. Without this the rail would sit on the
-    // signed-out/empty state with no loading feedback until the next 60s poll tick. drop(1)
-    // skips the current value (startup is already covered by the initial refresh above), so
-    // this fires only on a real sign-in transition.
+    // Reload the rail on EVERY auth transition, both directions. On sign-in it
+    // populates immediately (instead of sitting empty until the next 60s poll); on
+    // sign-out it must reload too so loadOnce() sees the null user id and CLEARS the
+    // rail — otherwise the previous account's follows linger on screen after logout.
+    // drop(1) skips the current value (startup is already covered by the initial
+    // refresh above), so this fires only on a real login/logout transition.
     LaunchedEffect(Unit) {
-        koin.get<DesktopSettingsStore>().loggedInState.drop(1).collect { loggedIn ->
-            if (loggedIn) railVm.refresh()
+        koin.get<DesktopSettingsStore>().loggedInState.drop(1).collect {
+            railVm.refresh()
         }
     }
 

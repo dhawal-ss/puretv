@@ -111,6 +111,25 @@ class TwitchApiClient(
         parseTwitchEmotes(resp)
     }.getOrDefault(emptyList())
 
+    /**
+     * GET /chat/badges/global — Twitch's first-party global chat badges
+     * (admin, staff, turbo, global mod, …). Best-effort: failures degrade to empty.
+     */
+    suspend fun getGlobalChatBadges(): List<ChatBadgeSetDto> = runCatching {
+        val resp: HelixEnvelope<ChatBadgeSetDto> = get("/chat/badges/global")
+        resp.data
+    }.getOrDefault(emptyList())
+
+    /**
+     * GET /chat/badges?broadcaster_id= — a channel's own badge sets (subscriber
+     * tiers, bits, founder, …). Channel sets override global on a set-id collision.
+     * Best-effort: failures degrade to an empty list.
+     */
+    suspend fun getChannelChatBadges(broadcasterId: String): List<ChatBadgeSetDto> = runCatching {
+        val resp: HelixEnvelope<ChatBadgeSetDto> = get("/chat/badges", mapOf("broadcaster_id" to broadcasterId))
+        resp.data
+    }.getOrDefault(emptyList())
+
     /** GET /users/follows — channels followed by [userId]. Requires user:read:follows scope. */
     suspend fun getFollowedChannels(userId: String, first: Int = 100): List<FollowedChannel> {
         val resp: HelixEnvelope<FollowedChannel> = get("/channels/followed", mapOf("user_id" to userId, "first" to first.toString()))
@@ -211,6 +230,25 @@ class TwitchApiClient(
 
 class RateLimitedException(val resetEpochSeconds: Long?) : Exception("Twitch Helix rate limited (429)")
 
+/**
+ * Thrown by the shared HttpClient's response validator (see `buildKtorClient`)
+ * when a Helix (api.twitch.tv/helix) call returns a non-2xx status OTHER than 429.
+ *
+ * Audit H1: without this, a 401/403/500 JSON error envelope deserialized cleanly
+ * into an empty [HelixEnvelope] (`data` defaults to `[]`), so calls silently
+ * returned no data and — critically — cursor-paginated loops truncated mid-stream
+ * as if they were complete. This surfaces those failures loudly instead.
+ *
+ * Distinct from [RateLimitedException] (429): [withRateLimitRetry] retries that
+ * one with backoff, but lets a [HelixApiException] propagate so callers that
+ * `runCatching`-degrade still see "empty", while pagination can no longer be
+ * silently cut short.
+ */
+class HelixApiException(
+    val statusCode: Int,
+    val statusDescription: String,
+) : Exception("Twitch Helix request failed: HTTP $statusCode $statusDescription")
+
 @Serializable
 data class HelixEnvelope<T>(val data: List<T> = emptyList())
 
@@ -234,6 +272,23 @@ internal fun parseTwitchEmotes(env: HelixEnvelope<TwitchEmoteDto>): List<Channel
         val animated = it.format.contains("animated")
         ChannelEmote(it.id, it.name, twitchEmoteImageUrl(it.id, animated), EmoteProvider.TWITCH, animated)
     }
+
+/** One version (tier) of a chat badge set, with CDN image URLs at 1x/2x/4x. */
+@Serializable
+data class ChatBadgeVersionDto(
+    val id: String = "",
+    @SerialName("image_url_1x") val imageUrl1x: String = "",
+    @SerialName("image_url_2x") val imageUrl2x: String = "",
+    @SerialName("image_url_4x") val imageUrl4x: String = "",
+    val title: String = "",
+)
+
+/** A chat badge set (e.g. "subscriber", "moderator") and its versions. */
+@Serializable
+data class ChatBadgeSetDto(
+    @SerialName("set_id") val setId: String = "",
+    val versions: List<ChatBadgeVersionDto> = emptyList(),
+)
 
 @Serializable
 data class HelixPagination(val cursor: String? = null)

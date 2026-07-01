@@ -11,6 +11,45 @@ release notes automatically.
 
 ---
 
+## 1.10.0 - 2026-06-30
+
+Brings the chat experience closer to 7TV and Chatterino, with live emotes, real badge icons, and proper moderation and event messages.
+
+### New
+- **Emotes update live, no restart needed.** When a channel adds, removes, or renames a 7TV emote, it now appears in chat right away, the same way Chatterino and the 7TV extension work.
+- **Real badge icons in chat.** Subscriber, moderator, VIP, and other badges now show their actual Twitch icons instead of plain text labels.
+- **Sub, resub, and raid announcements show up.** Chat now displays the same celebratory lines you see on Twitch when someone subscribes, gifts subs, or raids the channel.
+- **Messages that mention you stand out.** Any message that tags your username is highlighted so you do not miss replies.
+
+### Improved
+- **Deleted and timed-out messages are handled properly.** When a moderator removes a message or times someone out, those messages now show as removed instead of staying on screen, and a note appears when a moderator clears the chat.
+- **Your emote on/off switches actually work.** The 7TV, BTTV, and FrankerFaceZ toggles in Settings now take effect immediately while you watch, and when two providers share an emote name, the 7TV version wins.
+
+### Fixed
+- **Installing an update no longer breaks the app.** After a one-click update, opening PureTV from the Start menu, a shortcut, or Windows search could fail with a "cannot open ...cfg" error, and the only fix was reinstalling from GitHub by hand. The updater now waits for the app to fully close before applying the update, so its files are never replaced while they are still in use.
+
+## 1.9.5 - 2026-06-30
+
+Fixes staying signed in between launches, and makes your followed list react the moment you sign in or out.
+
+### Fixed
+- **Staying signed in between launches now works.** A start-up problem was throwing away your saved sign-in every time PureTV opened, so it kept asking you to reconnect Twitch even though your login was stored safely on your PC. Your session is now restored correctly on launch, so you sign in once and it sticks.
+- **Your followed list reacts instantly to signing in and out.** It fills in right after you sign in, and clears right away when you sign out, instead of lagging behind or briefly showing the previous account's channels.
+
+## 1.9.4 - 2026-06-30
+
+Fixes the two biggest annoyances (being asked to sign in every time, and a blank white box over the video), plus a freeze and a round of reliability fixes.
+
+### Fixed
+- **You stay signed in.** PureTV no longer makes you reconnect your Twitch account every time you open it. Your session is now kept and refreshed properly, so you sign in once and it sticks across restarts.
+- **No more white box over the player.** The video area could show a blank white square instead of the stream (most noticeable right when a stream opens or while resizing). It now stays black until the picture appears.
+- **The window no longer freezes or stops responding.** Clicking the title bar or the menus could briefly lock everything up, and switching streams on the GPU player could stall the app. The player and window handling now do that heavy work off the main thread, so the interface stays responsive.
+- **Search shows what you actually typed.** Typing quickly could leave older results on screen; search now follows your latest query and waits for you to stop typing before looking.
+
+### Improved
+- **Clearer when something fails instead of looking empty.** Your followed/live lists and the category pages now show an error you can retry, rather than a blank that looks like "nothing's on."
+- **Chat is more dependable.** Messages can no longer end up in the wrong channel after reconnecting, emoji and emotes line up correctly, and your saved emotes aren't dropped by a temporary hiccup.
+
 ## 1.9.3 - 2026-06-19
 
 Makes recovering from a failed update simple, with a one-click way to grab the latest version.

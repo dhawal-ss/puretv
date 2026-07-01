@@ -93,6 +93,28 @@ class DesktopSettingsStore(
     private val _settings = MutableStateFlow(loadSettingsFromDisk())
     val settings: StateFlow<AppSettings> = _settings.asStateFlow()
 
+    /**
+     * Per-machine AES-256 key, derived ONCE and memoized. We try the Windows
+     * `MachineGuid` registry value first (stable across reinstalls, unique per
+     * Windows install); if unavailable (non-Windows dev machine, registry access
+     * denied) we fall back to a randomly generated seed persisted to `.keyseed`.
+     * Lazy so the `reg query` subprocess runs at most once per session instead of
+     * on every encrypt/decrypt.
+     *
+     * MUST be declared ABOVE [init]: this `by lazy` delegate is a backing field
+     * initialized in source order, and [init] decrypts the saved token on the very
+     * first line of work. Declared after `init` (as it once was), the delegate was
+     * still null when `init` -> loadTokens -> decrypt first touched `machineKey`,
+     * throwing NullPointerException("Cannot invoke kotlin.Lazy.getValue()"), which
+     * loadTokens swallowed to null — so the restored session was silently dropped
+     * and the user was asked to sign in again on EVERY launch.
+     */
+    private val machineKey: SecretKeySpec by lazy {
+        val seed = readMachineGuid() ?: readOrCreateKeySeedFile()
+        val digest = MessageDigest.getInstance("SHA-256").digest(seed.toByteArray(Charsets.UTF_8))
+        SecretKeySpec(digest, "AES")
+    }
+
     init {
         appDataDir.mkdirs()
         runMigrations()
@@ -319,29 +341,6 @@ class DesktopSettingsStore(
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
         cipher.init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(128, iv))
         return cipher.doFinal(ciphertext)
-    }
-
-    /**
-     * Derives a stable AES-256 key from a per-machine seed. We try the
-     * Windows `MachineGuid` registry value first (stable across reinstalls
-     * of this app, unique per Windows install); if that's unavailable
-     * (non-Windows dev machine, registry access denied), we fall back to a
-     * randomly generated seed persisted to `.keyseed` — still "this machine
-     * only", just regenerated if the file is lost (which invalidates any
-     * previously saved tokens — acceptable for a local cache of refresh
-     * tokens that can simply be re-obtained via login).
-     */
-    /**
-     * Derived ONCE and memoized. Deriving it used to run a `reg query` SUBPROCESS
-     * (readMachineGuid) on EVERY encrypt/decrypt — i.e. on every token save, load, and
-     * refresh, plus once synchronously on the main thread at startup. The MachineGuid is
-     * invariant within a session, so derive the AES key lazily on first use and cache it,
-     * eliminating the repeated subprocess spawns.
-     */
-    private val machineKey: SecretKeySpec by lazy {
-        val seed = readMachineGuid() ?: readOrCreateKeySeedFile()
-        val digest = MessageDigest.getInstance("SHA-256").digest(seed.toByteArray(Charsets.UTF_8))
-        SecretKeySpec(digest, "AES")
     }
 
     private fun readMachineGuid(): String? = runCatching {
