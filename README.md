@@ -46,11 +46,13 @@ PureTV has a separate build made for the TV, with a 10-foot layout you drive ent
 
 1. On your TV, install **Downloader** from the Amazon Appstore (Fire TV) or the Google Play Store (Google TV), and open it.
 2. First time only: your TV has to allow installs from Downloader. Fire TV walks you through this the first time; on Google TV go to *Settings, then Apps, then Security & restrictions, then Unknown sources*, and turn Downloader on.
-3. In Downloader's URL box, type this address and press Go:
+3. In Downloader's URL box, enter the link to the TV APK and press Go:
 
    ```
    https://github.com/dhawal-ss/puretv/releases/download/tv-v1.0.0/PureTV-FireTV-AndroidTV-1.0.0.apk
    ```
+
+   > **Easier: use a short Downloader code instead of typing that whole link.** Downloader (AFTVnews) has a companion URL shortener at **[aftv.news](https://aftv.news)**. On your phone or computer, open aftv.news, paste the link above, and it gives you a short numeric code (usually 6 to 7 digits). Then in Downloader on your TV, just type that code in the URL box and press Go, and it jumps straight to this download, no long link to peck out with the remote.
 
 4. It downloads the APK, then asks to install it. Choose Install, and when it finishes you can delete the downloaded file to save space.
 5. Open PureTV from your app list. To sign in (optional, only needed to see the channels you follow), scan the on-screen QR code with your phone, or go to **twitch.tv/activate** and enter the short code shown. You can also just start watching top and category streams without signing in.
