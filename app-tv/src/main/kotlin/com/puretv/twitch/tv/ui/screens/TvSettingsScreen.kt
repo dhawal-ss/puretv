@@ -4,9 +4,12 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.runtime.Composable
@@ -25,7 +28,10 @@ import com.puretv.twitch.core.adblock.AdBlockStrategy
 import com.puretv.twitch.core.model.StreamQuality
 import com.puretv.twitch.tv.ui.SettingsViewModel
 import com.puretv.twitch.tv.ui.theme.PureTvTvColors
+import com.puretv.twitch.tv.update.TvUpdateManager
+import com.puretv.twitch.tv.update.TvUpdateState
 import org.koin.androidx.compose.koinViewModel
+import org.koin.compose.koinInject
 
 /**
  * SECTION 07.2 / 10.4 — focusable settings rows mirroring the phone app's
@@ -37,10 +43,14 @@ import org.koin.androidx.compose.koinViewModel
 @Composable
 fun TvSettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = koinViewModel()) {
     val state by viewModel.state.collectAsState()
+    val updateManager = koinInject<TvUpdateManager>()
+    val updateState by updateManager.state.collectAsState()
 
     Column(
         modifier = Modifier
+            .fillMaxSize()
             .background(PureTvTvColors.Background)
+            .verticalScroll(rememberScrollState())
             .padding(32.dp),
         verticalArrangement = Arrangement.spacedBy(20.dp),
     ) {
@@ -83,6 +93,15 @@ fun TvSettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = koinView
             }
         }
 
+        SettingsSection(title = "Software update") {
+            UpdateSettingsContent(
+                currentVersion = updateManager.currentVersionName,
+                state = updateState,
+                onCheck = { updateManager.checkForUpdates(force = true) },
+                onInstall = { info -> updateManager.downloadAndInstall(info) },
+            )
+        }
+
         SettingsSection(title = "Account") {
             if (state.isLoggedIn) {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -101,6 +120,57 @@ fun TvSettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = koinView
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun UpdateSettingsContent(
+    currentVersion: String,
+    state: TvUpdateState,
+    onCheck: () -> Unit,
+    onInstall: (com.puretv.twitch.tv.update.TvUpdateInfo) -> Unit,
+) {
+    Text(
+        text = "Installed version $currentVersion",
+        style = MaterialTheme.typography.bodyLarge,
+        color = PureTvTvColors.TextSecondary,
+    )
+    when (state) {
+        is TvUpdateState.Available -> {
+            Text(
+                text = "Update available: ${state.info.versionName}",
+                style = MaterialTheme.typography.bodyLarge,
+                color = PureTvTvColors.TwitchPurple,
+            )
+            if (state.info.notes.isNotBlank()) {
+                Text(
+                    text = state.info.notes.lineSequence().firstOrNull().orEmpty(),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = PureTvTvColors.TextSecondary,
+                )
+            }
+            Button(onClick = { onInstall(state.info) }) { Text("Download & install") }
+        }
+        is TvUpdateState.Downloading ->
+            Text(
+                text = "Downloading… ${(state.progress * 100).toInt()}%",
+                style = MaterialTheme.typography.bodyLarge,
+                color = PureTvTvColors.TextPrimary,
+            )
+        TvUpdateState.Installing ->
+            Text("Starting installer…", style = MaterialTheme.typography.bodyLarge, color = PureTvTvColors.TextPrimary)
+        TvUpdateState.Checking ->
+            Text("Checking for updates…", style = MaterialTheme.typography.bodyLarge, color = PureTvTvColors.TextSecondary)
+        TvUpdateState.UpToDate -> {
+            Text("You're on the latest version.", style = MaterialTheme.typography.bodyLarge, color = PureTvTvColors.TextSecondary)
+            Button(onClick = onCheck) { Text("Check again") }
+        }
+        is TvUpdateState.Error -> {
+            Text(state.message, style = MaterialTheme.typography.bodyLarge, color = PureTvTvColors.Live)
+            Button(onClick = onCheck) { Text("Try again") }
+        }
+        TvUpdateState.Idle ->
+            Button(onClick = onCheck) { Text("Check for updates") }
     }
 }
 

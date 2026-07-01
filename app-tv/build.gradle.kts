@@ -36,8 +36,11 @@ android {
         applicationId = "com.puretv.twitch.tv"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0.0"
+        // versionCode is the monotonic value the in-app updater compares against
+        // the published tv-version.json (see docs/tv-version.json). Bump it on
+        // every TV release so the updater offers the new APK.
+        versionCode = 2
+        versionName = "1.1.0"
         ndk { abiFilters += listOf("armeabi-v7a", "arm64-v8a") }
     }
 

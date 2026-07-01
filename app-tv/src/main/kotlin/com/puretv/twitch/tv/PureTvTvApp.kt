@@ -6,6 +6,7 @@ import com.puretv.twitch.core.di.coreModule
 import com.puretv.twitch.tv.data.AppSettingsStore
 import com.puretv.twitch.tv.data.TokenRefresher
 import com.puretv.twitch.tv.di.tvModule
+import com.puretv.twitch.tv.update.TvUpdateManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -54,6 +55,11 @@ class PureTvTvApp : Application() {
             // Best-effort: extend the session with the stored refresh token once per
             // process (off-main, fail-soft, a failure keeps the current session).
             koinApp.koin.get<TokenRefresher>().refreshIfPossible()
+
+            // Silent launch update check: surfaces an "Update available" banner on
+            // Home / a prompt in Settings when a newer TV APK is published. Fully
+            // fail-soft (no manifest / offline → stays idle, no nagging).
+            koinApp.koin.get<TvUpdateManager>().checkForUpdates()
         }
 
         // Keep the in-process ad-block interceptor in sync with the user's

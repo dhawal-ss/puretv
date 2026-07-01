@@ -80,6 +80,9 @@ fun TvStreamScreen(
 
     LaunchedEffect(Unit) {
         runCatching { rootFocusRequester.requestFocus() }
+        // Reveal the chrome on entry, then let the auto-hide timer take it away
+        // after 3s (kick-starts the LaunchedEffect(lastInputAt) countdown below).
+        lastInputAt = System.currentTimeMillis()
     }
 
     LaunchedEffect(state.playableUrl) {
@@ -122,16 +125,26 @@ fun TvStreamScreen(
             .focusable()
             .onKeyEvent { event ->
                 if (event.type != KeyEventType.KeyDown) return@onKeyEvent false
+
+                // BACK is resolved BEFORE bumping the activity timestamp. It must
+                // never count as "activity": the auto-hide effect re-shows the
+                // controls on every input, so if BACK bumped the timer it would
+                // resurrect the chrome and the viewer could never leave the player
+                // (the reported "back button does nothing in a stream" lockup).
+                // Order: dismiss the chat overlay if open, otherwise exit the screen.
+                if (event.key == Key.Back) {
+                    return@onKeyEvent if (chatVisible) {
+                        chatVisible = false
+                        true
+                    } else {
+                        onBack()
+                        true
+                    }
+                }
+
                 lastInputAt = System.currentTimeMillis()
 
                 when (event.key) {
-                    Key.Back -> {
-                        when {
-                            chatVisible -> { chatVisible = false; true }
-                            controlsVisible -> { controlsVisible = false; true }
-                            else -> { onBack(); true }
-                        }
-                    }
                     Key.DirectionRight -> {
                         if (!chatVisible) { chatVisible = true; true } else false
                     }
@@ -172,6 +185,13 @@ fun TvStreamScreen(
                     PlayerView(context).apply {
                         useController = false
                         player = tvPlayer.exoPlayer
+                        // The player surface must never take D-pad focus: the root
+                        // Box owns every remote key via onKeyEvent (incl. BACK). If
+                        // PlayerView grabbed focus, key events would bypass that
+                        // handler and BACK/quality/chat would stop responding.
+                        isFocusable = false
+                        isFocusableInTouchMode = false
+                        descendantFocusability = android.view.ViewGroup.FOCUS_BLOCK_DESCENDANTS
                     }
                 },
                 update = { view -> view.player = tvPlayer.exoPlayer },

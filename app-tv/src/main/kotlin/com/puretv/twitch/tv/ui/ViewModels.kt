@@ -12,10 +12,15 @@ import com.puretv.twitch.core.model.AppSettings
 import com.puretv.twitch.core.model.ChatEvent
 import com.puretv.twitch.core.model.ChatMessage
 import com.puretv.twitch.core.model.StreamInfo
+import com.puretv.twitch.core.model.GameInfo
 import com.puretv.twitch.core.repository.ChannelRepository
 import com.puretv.twitch.core.repository.StreamRepository
 import com.puretv.twitch.core.repository.UserRepository
 import com.puretv.twitch.tv.data.AppSettingsStore
+import com.puretv.twitch.tv.data.TokenRefresher
+import com.puretv.twitch.tv.data.db.CachedStreamDao
+import com.puretv.twitch.tv.data.db.toCachedStream
+import com.puretv.twitch.tv.data.db.toStreamInfo
 import io.ktor.client.HttpClient
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -40,23 +45,65 @@ data class HomeUiState(
     val followedLive: List<StreamInfo> = emptyList(),
     val topStreams: List<StreamInfo> = emptyList(),
     val isLoading: Boolean = false,
+    val error: String? = null,
 )
 
+/**
+ * Landing-screen state. Rebuilt (from the one-shot loader the TV app shipped
+ * with) to match the phone app's resilience:
+ *   • Cached-first paint — last session's streams show instantly from Room,
+ *     so the grid is never empty on a cold, offline, or token-expired start.
+ *   • Write-through — every fresh network result is persisted (24h TTL).
+ *   • [refresh] is re-runnable and IS wired (resume + periodic, see
+ *     `TvHomeScreen`), so "Live Now" repopulates instead of freezing on the
+ *     first snapshot. On a failed refresh it refreshes the token once and
+ *     retries, recovering the expired-token case that used to 401 silently.
+ */
 class HomeViewModel(
     private val streamRepository: StreamRepository,
     private val userRepository: UserRepository,
     private val settings: AppSettingsStore,
+    private val cachedStreamDao: CachedStreamDao,
+    private val tokenRefresher: TokenRefresher,
 ) : ViewModel() {
     private val _state = MutableStateFlow(HomeUiState())
     val state: StateFlow<HomeUiState> = _state.asStateFlow()
 
+    // Once the network returns a fresh top-streams list, stop letting the cached
+    // snapshot overwrite it (the cache is only for the instant first paint).
+    @Volatile private var freshTopStreamsArrived = false
+
+    // Cancel-and-replace so a resume + timer refresh landing together can't run
+    // two overlapping loads that flicker isLoading against each other.
+    private var refreshJob: Job? = null
+
     init {
+        // Cached-first: paint last session's streams instantly, before any network.
         viewModelScope.launch {
-            _state.update { it.copy(isLoading = true) }
-            val prefs = settings.flow.first()
-            if (prefs.userId.isNotBlank()) runCatching { userRepository.loadFollows(prefs.userId) }
-            runCatching { streamRepository.refreshTopStreams() }
+            cachedStreamDao.observeAll().collect { cached ->
+                if (!freshTopStreamsArrived && cached.isNotEmpty()) {
+                    _state.update { it.copy(topStreams = cached.map { c -> c.toStreamInfo() }, isLoading = false) }
+                }
+            }
         }
+        // Fresh top streams from the network + write-through to the cache.
+        viewModelScope.launch {
+            streamRepository.topStreams.collect { top ->
+                if (top.isNotEmpty()) {
+                    freshTopStreamsArrived = true
+                    _state.update { it.copy(topStreams = top, error = null) }
+                    runCatching {
+                        val now = System.currentTimeMillis()
+                        cachedStreamDao.upsertAll(top.map { it.toCachedStream(now) })
+                        // Bound the cache so the instant-paint snapshot can't accumulate
+                        // thousands of stale rows.
+                        cachedStreamDao.pruneStaleEntries(now - CACHE_TTL_MS)
+                    }
+                }
+            }
+        }
+        // Login flag + "Following — Live now" (followed channels present in the
+        // top-streams set), recomputed whenever the follow set / session changes.
         viewModelScope.launch {
             combine(
                 streamRepository.topStreams,
@@ -69,28 +116,97 @@ class HomeViewModel(
                     it.copy(
                         isLoggedIn = prefs.accessToken.isNotBlank(),
                         followedLive = top.filter { s -> s.userLogin in follows },
-                        topStreams = top,
-                        isLoading = false,
                     )
                 }
             }
         }
+        refresh()
     }
 
-    fun refresh() = viewModelScope.launch { runCatching { streamRepository.refreshTopStreams() } }
+    fun refresh() {
+        refreshJob?.cancel()
+        refreshJob = viewModelScope.launch {
+            _state.update { it.copy(isLoading = it.topStreams.isEmpty(), error = null) }
+            val prefs = settings.flow.first()
+            if (prefs.userId.isNotBlank()) runCatching { userRepository.loadFollows(prefs.userId) }
+            val ok = loadTopStreamsResilient()
+            _state.update {
+                it.copy(
+                    isLoading = false,
+                    error = if (!ok && it.topStreams.isEmpty()) "Couldn't load. Check your connection and try again." else null,
+                )
+            }
+        }
+    }
+
+    /**
+     * Refresh top streams; if it fails (a Helix 401 on an expired user token is
+     * the common cause) refresh the token once and retry. On success the
+     * write-through collector above updates the UI + cache.
+     */
+    private suspend fun loadTopStreamsResilient(): Boolean {
+        if (runCatching { streamRepository.refreshTopStreams() }.isSuccess) return true
+        runCatching { tokenRefresher.refreshIfPossible() }
+        return runCatching { streamRepository.refreshTopStreams() }.isSuccess
+    }
+
+    private companion object {
+        // Streams older than this are dropped from the instant-paint cache.
+        const val CACHE_TTL_MS = 24L * 60 * 60 * 1000
+    }
 }
 
-data class BrowseUiState(val games: List<com.puretv.twitch.core.model.GameInfo> = emptyList())
+data class BrowseUiState(
+    val games: List<GameInfo> = emptyList(),
+    val isLoading: Boolean = true,
+    val error: String? = null,
+)
 
-class BrowseViewModel(private val channelRepository: ChannelRepository) : ViewModel() {
+/**
+ * Category grid. Previously a one-shot load that swallowed any failure into an
+ * empty list — so a transient network/token failure blanked the grid until a
+ * full relaunch (the reported "categories just disappear" bug). Now it keeps the
+ * last-known games on failure, surfaces an error + retry only when it has nothing
+ * to show, and refreshes the token once before giving up.
+ */
+class BrowseViewModel(
+    private val channelRepository: ChannelRepository,
+    private val tokenRefresher: TokenRefresher,
+) : ViewModel() {
     private val _state = MutableStateFlow(BrowseUiState())
     val state: StateFlow<BrowseUiState> = _state.asStateFlow()
 
-    init {
-        viewModelScope.launch {
-            val games = runCatching { channelRepository.topGames() }.getOrDefault(emptyList())
-            _state.update { it.copy(games = games) }
+    private var loadJob: Job? = null
+
+    init { refresh() }
+
+    fun retry() = refresh()
+
+    fun refresh() {
+        loadJob?.cancel()
+        loadJob = viewModelScope.launch {
+            _state.update { it.copy(isLoading = it.games.isEmpty(), error = null) }
+            loadGamesResilient()
+                .onSuccess { games ->
+                    // ifEmpty: a transient empty response must not wipe a good grid.
+                    _state.update { it.copy(games = games.ifEmpty { it.games }, isLoading = false, error = null) }
+                }
+                .onFailure { e ->
+                    _state.update {
+                        it.copy(
+                            isLoading = false,
+                            error = if (it.games.isEmpty()) (e.message ?: "Couldn't load categories.") else null,
+                        )
+                    }
+                }
         }
+    }
+
+    private suspend fun loadGamesResilient(): Result<List<GameInfo>> {
+        val first = runCatching { channelRepository.topGames() }
+        if (first.isSuccess) return first
+        runCatching { tokenRefresher.refreshIfPossible() }
+        return runCatching { channelRepository.topGames() }
     }
 }
 
