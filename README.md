@@ -5,9 +5,9 @@
 A clean, ad-free way to watch live streams, on Windows and Android.
 
 [![Download for Windows](https://img.shields.io/badge/Download-Windows%20Installer-7C3AED?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/dhawal-ss/puretv/releases/latest)
-[![Download for Android](https://img.shields.io/badge/Download-Android%20APK-3DDC84?style=for-the-badge&logo=android&logoColor=white)](https://github.com/dhawal-ss/puretv/releases/latest)
+[![Download for Android](https://img.shields.io/badge/Download-Android%20APK-3DDC84?style=for-the-badge&logo=android&logoColor=white)](https://github.com/dhawal-ss/puretv/releases?q=android&expanded=true)
 
-**[Open the latest release](https://github.com/dhawal-ss/puretv/releases/latest).** Under "Assets", pick the `.exe` for Windows or the `.apk` for Android.
+Windows and Android ship on separate release tracks. The Windows button opens the latest desktop release (grab the `.exe`); the Android button opens the Android releases (grab the newest `.apk`).
 
 </div>
 
@@ -27,7 +27,7 @@ Everything the app needs is included in the installer, so there is nothing else 
 
 ### Android
 
-1. On your phone, click the "Download for Android" button above.
+1. On your phone, click the "Download for Android" button above and open the newest release in the list.
 2. Under "Assets", tap the file that ends in `.apk` to download it.
 3. Open the downloaded file. Android may ask you to allow installs from your browser or Files app the first time, tap Allow, then Install.
 4. Open PureTV and sign in.
