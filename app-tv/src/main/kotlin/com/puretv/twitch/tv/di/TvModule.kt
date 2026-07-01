@@ -5,6 +5,7 @@ import androidx.room.Room
 import com.puretv.twitch.core.di.TokenHolder
 import com.puretv.twitch.tv.data.AppSettingsStore
 import com.puretv.twitch.tv.data.SecureTokenStore
+import com.puretv.twitch.tv.data.TokenRefresher
 import com.puretv.twitch.tv.data.db.PureTvTvDatabase
 import com.puretv.twitch.tv.player.TvPlayer
 import com.puretv.twitch.tv.ui.BrowseViewModel
@@ -14,6 +15,8 @@ import com.puretv.twitch.tv.ui.LoginViewModel
 import com.puretv.twitch.tv.ui.SearchViewModel
 import com.puretv.twitch.tv.ui.SettingsViewModel
 import com.puretv.twitch.tv.ui.StreamViewModel
+import io.ktor.client.engine.HttpClientEngine
+import io.ktor.client.engine.okhttp.OkHttp
 import org.koin.androidx.viewmodel.dsl.viewModel
 import org.koin.dsl.module
 
@@ -25,6 +28,14 @@ import org.koin.dsl.module
  */
 @OptIn(UnstableApi::class)
 val tvModule = module {
+    // --- Networking engine -------------------------------------------------
+    // coreModule's `single { buildKtorClient(get()) }` resolves an
+    // HttpClientEngine from here (OkHttp, matching androidModule / core's
+    // android target). Without it the whole networking graph (HttpClient ->
+    // TwitchApiClient -> repositories -> ViewModels) cannot construct, and the
+    // app crashes on the first screen.
+    single<HttpClientEngine> { OkHttp.create() }
+
     // --- Persistence -----------------------------------------------------
     single {
         Room.databaseBuilder(get(), PureTvTvDatabase::class.java, PureTvTvDatabase.DB_NAME)
@@ -39,13 +50,16 @@ val tvModule = module {
 
     single { SecureTokenStore(get()) }
     single { AppSettingsStore(get(), get(), get<TokenHolder>()) }
+    // Launch-time access-token refresh + identity backfill (fail-soft).
+    single { TokenRefresher(get(), get(), get()) }
 
     // --- Playback ---------------------------------------------------------
     // Singleton: Section 7.4's immersive fullscreen stream screen is the only
     // consumer, but keeping it a Koin singleton (rather than per-screen) keeps
     // the wiring identical to the phone app and avoids re-creating ExoPlayer
-    // on configuration changes.
-    single { TvPlayer(get(), get()) }
+    // on configuration changes. TvPlayer(context, adBlockEngine, backupStreamResolver):
+    // the last one powers the seamless ad-free backup player-type swap.
+    single { TvPlayer(get(), get(), get()) }
 
     // --- ViewModels --------------------------------------------------------
     viewModel { HomeViewModel(get(), get(), get()) }
@@ -54,5 +68,6 @@ val tvModule = module {
     viewModel { (channelLogin: String) -> StreamViewModel(channelLogin, get(), get(), get(), get(), get(), get()) }
     viewModel { (channelLogin: String) -> ChannelViewModel(channelLogin, get(), get()) }
     viewModel { SettingsViewModel(get()) }
-    viewModel { LoginViewModel(get()) }
+    // Device Code Grant flow: (httpClient, settingsStore, userRepository).
+    viewModel { LoginViewModel(get(), get(), get()) }
 }
