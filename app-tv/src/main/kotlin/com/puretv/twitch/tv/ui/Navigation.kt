@@ -6,6 +6,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.puretv.twitch.tv.ui.screens.TvBrowseScreen
+import com.puretv.twitch.tv.ui.screens.TvCategoryScreen
 import com.puretv.twitch.tv.ui.screens.TvChannelScreen
 import com.puretv.twitch.tv.ui.screens.TvHomeScreen
 import com.puretv.twitch.tv.ui.screens.TvLoginScreen
@@ -35,9 +36,11 @@ object Routes {
     const val LOGIN = "login"
     const val STREAM = "stream/{channelLogin}"
     const val CHANNEL = "channel/{channelLogin}"
+    const val CATEGORY = "category/{gameId}"
 
     fun stream(channelLogin: String) = "stream/$channelLogin"
     fun channel(channelLogin: String) = "channel/$channelLogin"
+    fun category(gameId: String) = "category/$gameId"
 }
 
 @Composable
@@ -54,7 +57,15 @@ fun PureTvTvNavHost(navController: NavHostController = rememberNavController()) 
             )
         }
         composable(Routes.BROWSE) {
-            TvBrowseScreen(onOpenChannel = { navController.navigate(Routes.channel(it)) }, onBack = navController::popBackStack)
+            TvBrowseScreen(onOpenCategory = { navController.navigate(Routes.category(it)) }, onBack = navController::popBackStack)
+        }
+        composable(Routes.CATEGORY) { backStackEntry ->
+            val gameId = backStackEntry.arguments?.getString("gameId").orEmpty()
+            TvCategoryScreen(
+                gameId = gameId,
+                onOpenStream = { navController.navigate(Routes.stream(it)) },
+                onBack = navController::popBackStack,
+            )
         }
         composable(Routes.SEARCH) {
             TvSearchScreen(

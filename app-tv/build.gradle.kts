@@ -148,4 +148,8 @@ dependencies {
 
     implementation(libs.coil.compose)
     implementation(libs.coil.network)
+
+    // QR generation for the device-code login screen (encoder only, no Android
+    // integration module needed; we render the BitMatrix to a Compose bitmap).
+    implementation("com.google.zxing:core:3.5.3")
 }

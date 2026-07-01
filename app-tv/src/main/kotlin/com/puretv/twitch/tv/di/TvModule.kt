@@ -9,6 +9,7 @@ import com.puretv.twitch.tv.data.TokenRefresher
 import com.puretv.twitch.tv.data.db.PureTvTvDatabase
 import com.puretv.twitch.tv.player.TvPlayer
 import com.puretv.twitch.tv.ui.BrowseViewModel
+import com.puretv.twitch.tv.ui.CategoryViewModel
 import com.puretv.twitch.tv.ui.ChannelViewModel
 import com.puretv.twitch.tv.ui.HomeViewModel
 import com.puretv.twitch.tv.ui.LoginViewModel
@@ -64,6 +65,7 @@ val tvModule = module {
     // --- ViewModels --------------------------------------------------------
     viewModel { HomeViewModel(get(), get(), get()) }
     viewModel { BrowseViewModel(get()) }
+    viewModel { (gameId: String) -> CategoryViewModel(gameId, get()) }
     viewModel { SearchViewModel(get()) }
     viewModel { (channelLogin: String) -> StreamViewModel(channelLogin, get(), get(), get(), get(), get(), get()) }
     viewModel { (channelLogin: String) -> ChannelViewModel(channelLogin, get(), get()) }
