@@ -88,7 +88,12 @@ class ManifestRewriter {
                     // content discontinuity.
                     cleaned += line
                 }
-                line.startsWith("#EXT-X-DATERANGE") && line.contains("stitched-ad") -> {
+                line.startsWith("#EXT-X-DATERANGE") && line.contains(AdMarkers.SIGNIFIER, ignoreCase = true) -> {
+                    // Match the SAME canonical `stitched` signifier the detector
+                    // (AdMarkers) uses, not the narrower `stitched-ad` literal: if
+                    // Twitch ever reformats the CLASS (it has before), the normal
+                    // pass would otherwise miss a pod the detector still flags,
+                    // leaning entirely on the mid-break fail-safe to catch it.
                     // A repeated DATERANGE inside an already-open pod must not
                     // reset progress — only (re)arm the duration target.
                     if (!inAdBreak) {

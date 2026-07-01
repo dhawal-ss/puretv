@@ -69,7 +69,7 @@ fun CategoryScreen(gameId: String, onOpenStream: (String) -> Unit, onBack: () ->
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                items(state.streams, key = { it.id }) { stream ->
+                items(state.streams, key = { it.userLogin }) { stream ->
                     StreamCard(stream = stream, onClick = { onOpenStream(stream.userLogin) })
                 }
             }

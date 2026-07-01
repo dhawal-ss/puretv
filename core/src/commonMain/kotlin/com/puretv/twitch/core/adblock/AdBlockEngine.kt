@@ -44,6 +44,22 @@ class AdBlockEngine(
     private val healthTracker = ProxyHealthTracker()
 
     /**
+     * Runtime master switch for the in-process interceptor path (Android). When a
+     * user turns ad blocking off in Settings, the interceptor consults this and
+     * passes playlists through untouched. Volatile because it is written from the
+     * settings collector and read on the player's network threads. Desktop uses
+     * [AdBlockStrategy.DISABLED] via config and ignores this flag.
+     */
+    @Volatile
+    var isEnabled: Boolean = true
+        private set
+
+    fun setEnabled(enabled: Boolean) {
+        isEnabled = enabled
+        if (!enabled) _status.value = AdBlockStatus.DISABLED
+    }
+
+    /**
      * Returns a clean m3u8 master/media playlist URL or content that the player
      * can consume without showing ads. Tries strategies in order based on
      * [AdBlockConfig.strategy] and current proxy health.
@@ -101,14 +117,51 @@ class AdBlockEngine(
     fun filterPlaylist(playlistContent: String): FilteredPlaylist {
         val filtered = rewriter.filter(playlistContent)
         // Fail-safe (audit AD-1, Rule #5 "a stream playing with ads is a failure
-        // state"): detection sees an ad in this window but the normal pass
-        // stripped nothing — the pod's opening marker has scrolled out of the
-        // live window, so the leading segments are mid-pod ad content that would
-        // otherwise be served as content. Re-strip assuming we start mid-pod.
-        if (filtered.adSegmentsRemoved == 0 && AdMarkers.containsAds(playlistContent)) {
+        // state"): the normal pass starts in content, so a pod whose OPENING marker
+        // has scrolled out of the live window leaks its leading (mid-pod) segments
+        // as content. Re-strip assuming we start mid-pod when an ad is detected and
+        // EITHER:
+        //   (a) the normal pass stripped nothing at all (the classic AD-1 case), OR
+        //   (b) it stripped a LATER, fully-marked pod (adSegmentsRemoved > 0) yet the
+        //       window still opens with an unmarked ad tail closed by a bare
+        //       return-to-content discontinuity — `adSegmentsRemoved == 0` alone
+        //       misses this, so the leading tail leaked. Preferring a brief
+        //       over-strip to a played ad is exactly Rule #5.
+        if (AdMarkers.containsAds(playlistContent) &&
+            (filtered.adSegmentsRemoved == 0 || startsWithUnmarkedAdTail(playlistContent))
+        ) {
             return rewriter.filter(playlistContent, assumeStartInAdBreak = true)
         }
         return filtered
+    }
+
+    /**
+     * True when the playlist opens with an unmarked ad tail: one or more segment
+     * URIs appear before the first ad-opening marker (a `stitched` DATERANGE or an
+     * #EXT-X-CUE-OUT), and a bare #EXT-X-DISCONTINUITY (a return-to-content
+     * boundary) sits between those leading segments and that first opener. That is
+     * the signature of a pod whose opener scrolled out of the live window while a
+     * fresh pod begins later in the same window. Only considered for playlists
+     * already known to contain ads, so clean streams are never touched.
+     */
+    private fun startsWithUnmarkedAdTail(playlist: String): Boolean {
+        var sawLeadingSegment = false
+        var sawBareDiscontinuity = false
+        for (raw in playlist.lineSequence()) {
+            val line = raw.trim()
+            when {
+                line.isEmpty() -> {}
+                line.startsWith("#EXT-X-DATERANGE") && line.contains(AdMarkers.SIGNIFIER, ignoreCase = true) ->
+                    return sawLeadingSegment && sawBareDiscontinuity
+                line.startsWith("#EXT-X-CUE-OUT") ->
+                    return sawLeadingSegment && sawBareDiscontinuity
+                line.startsWith("#EXT-X-DISCONTINUITY-SEQUENCE") -> {} // header, not a boundary
+                line.startsWith("#EXT-X-DISCONTINUITY") -> if (sawLeadingSegment) sawBareDiscontinuity = true
+                line.startsWith("#") -> {} // any other tag
+                else -> sawLeadingSegment = true // a segment URI
+            }
+        }
+        return false
     }
 
     /**
@@ -119,6 +172,15 @@ class AdBlockEngine(
      */
     fun reportFiltered(filtered: FilteredPlaylist) {
         _status.value = if (filtered.containedAds) AdBlockStatus.AD_FILTERED else AdBlockStatus.AD_BLOCKED
+    }
+
+    /**
+     * No ad was shown this refresh: either the playlist was already clean, or a
+     * seamless backup player-type swap replaced the ad pod with real content
+     * (the good case that avoids the [AdBlockStatus.AD_FILTERED] stall). Green pill.
+     */
+    fun reportAdBlocked() {
+        _status.value = AdBlockStatus.AD_BLOCKED
     }
 
     /**
