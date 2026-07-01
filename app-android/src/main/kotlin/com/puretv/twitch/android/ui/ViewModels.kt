@@ -76,6 +76,10 @@ class HomeViewModel(
     // dispatcher; it keeps the contract correct if a collector ever moves off it.
     @Volatile private var freshTopStreamsArrived = false
 
+    // Cancel-and-replace handle so a double-tapped refresh cannot run two
+    // overlapping loads that flicker isLoading/error against each other.
+    private var refreshJob: Job? = null
+
     init {
         // "Continue watching": most recently opened channels, newest first.
         viewModelScope.launch {
@@ -101,6 +105,10 @@ class HomeViewModel(
                     runCatching {
                         val now = System.currentTimeMillis()
                         cachedStreamDao.upsertAll(top.map { it.toCachedStream(now) })
+                        // Bound the cache: drop channels not seen in the last day so the
+                        // instant-paint snapshot can't accumulate thousands of stale rows
+                        // (and Home's observeAll re-read stays cheap).
+                        cachedStreamDao.pruneStaleEntries(now - CACHE_TTL_MS)
                     }
                 }
             }
@@ -140,13 +148,21 @@ class HomeViewModel(
         }
     }
 
-    fun refresh() = viewModelScope.launch {
-        _state.update { it.copy(isLoading = true, error = null) }
-        val ok = runCatching { streamRepository.refreshTopStreams() }.isSuccess
-        runCatching { channelRepository.topGames() }.onSuccess { g -> _state.update { it.copy(games = g) } }
-        _state.update {
-            it.copy(isLoading = false, error = if (!ok && it.topStreams.isEmpty()) "Couldn't refresh. Check your connection." else null)
+    fun refresh() {
+        refreshJob?.cancel()
+        refreshJob = viewModelScope.launch {
+            _state.update { it.copy(isLoading = true, error = null) }
+            val ok = runCatching { streamRepository.refreshTopStreams() }.isSuccess
+            runCatching { channelRepository.topGames() }.onSuccess { g -> _state.update { it.copy(games = g) } }
+            _state.update {
+                it.copy(isLoading = false, error = if (!ok && it.topStreams.isEmpty()) "Couldn't refresh. Check your connection." else null)
+            }
         }
+    }
+
+    private companion object {
+        // Streams older than this are dropped from the instant-paint cache.
+        const val CACHE_TTL_MS = 24L * 60 * 60 * 1000
     }
 }
 
@@ -374,8 +390,7 @@ class StreamViewModel(
         // Teardown lives here, not in PlayerSurface.onDispose: onCleared fires only
         // on a real back-stack pop (leaving the stream), not on rotation or PiP,
         // so playback is not torn down and re-buffered on a config change.
-        twitchPlayer.exoPlayer.stop()
-        twitchPlayer.exoPlayer.clearMediaItems()
+        twitchPlayer.stop()
     }
 }
 
@@ -575,6 +590,10 @@ class FollowingViewModel(
     private val _state = MutableStateFlow(FollowingUiState())
     val state: StateFlow<FollowingUiState> = _state.asStateFlow()
 
+    // Cancel-and-replace so a double-tapped pull-to-refresh cannot run two
+    // overlapping follow loads.
+    private var refreshJob: Job? = null
+
     init {
         viewModelScope.launch {
             sessionManager.state.collect { session ->
@@ -596,10 +615,13 @@ class FollowingViewModel(
         }
     }
 
-    fun refresh() = viewModelScope.launch {
-        _state.update { it.copy(isLoading = true, error = null) }
-        runCatching { userRepository.loadFollowsForCurrentUser() }
-        _state.update { it.copy(isLoading = false) }
+    fun refresh() {
+        refreshJob?.cancel()
+        refreshJob = viewModelScope.launch {
+            _state.update { it.copy(isLoading = true, error = null) }
+            runCatching { userRepository.loadFollowsForCurrentUser() }
+            _state.update { it.copy(isLoading = false) }
+        }
     }
 }
 

@@ -7,6 +7,8 @@ import io.ktor.client.call.body
 import io.ktor.client.request.get
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -170,13 +172,20 @@ interface EmoteCache {
     suspend fun putChannelEmotes(channelId: String, emotes: List<ChannelEmote>)
 }
 
-/** In-memory cache used in tests and as the Desktop default until SQLite-backed cache lands. */
+/**
+ * In-memory cache used in tests and as the Desktop default until SQLite-backed
+ * cache lands. The single [EmoteRepository] is shared across screens, so rapid
+ * channel switches (or PiP + a second stream) can call these overlapping; a
+ * [Mutex] keeps the backing map from corrupting (mirrors ChannelRepository).
+ */
 class InMemoryEmoteCache : EmoteCache {
+    private val lock = Mutex()
     private var globals: List<ChannelEmote>? = null
     private val channels = mutableMapOf<String, List<ChannelEmote>>()
 
-    override suspend fun globalEmotes(): List<ChannelEmote>? = globals
-    override suspend fun putGlobalEmotes(emotes: List<ChannelEmote>) { globals = emotes }
-    override suspend fun channelEmotes(channelId: String): List<ChannelEmote>? = channels[channelId]
-    override suspend fun putChannelEmotes(channelId: String, emotes: List<ChannelEmote>) { channels[channelId] = emotes }
+    override suspend fun globalEmotes(): List<ChannelEmote>? = lock.withLock { globals }
+    override suspend fun putGlobalEmotes(emotes: List<ChannelEmote>) = lock.withLock { globals = emotes }
+    override suspend fun channelEmotes(channelId: String): List<ChannelEmote>? = lock.withLock { channels[channelId] }
+    override suspend fun putChannelEmotes(channelId: String, emotes: List<ChannelEmote>) =
+        lock.withLock { channels[channelId] = emotes }
 }

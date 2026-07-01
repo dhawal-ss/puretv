@@ -7,6 +7,9 @@ build/
 .idea/
 *.iml
 
+# Android SDK location (machine-specific, never commit)
+local.properties
+
 # Kotlin / JVM
 *.class
 *.jar

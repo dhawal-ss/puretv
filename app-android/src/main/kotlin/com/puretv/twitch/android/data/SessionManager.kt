@@ -24,5 +24,9 @@ class SessionManager(settingsStore: AppSettingsStore) {
     val state: StateFlow<SessionState> = settingsStore.flow
         .map { deriveSessionState(it) }
         .distinctUntilChanged()
-        .stateIn(scope, SharingStarted.Eagerly, SessionState.LoggedOut)
+        // Seed with the session known synchronously from encrypted storage rather
+        // than a hardcoded LoggedOut, so a returning signed-in user never sees the
+        // Welcome connect gate flash on cold start while DataStore's first async
+        // read is still in flight.
+        .stateIn(scope, SharingStarted.Eagerly, settingsStore.initialSession)
 }

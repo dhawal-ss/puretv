@@ -1,6 +1,7 @@
 package com.puretv.twitch.android.data
 
 import com.puretv.twitch.core.api.DeviceAuth
+import com.puretv.twitch.core.repository.UserRepository
 import io.ktor.client.HttpClient
 import kotlinx.coroutines.flow.first
 
@@ -21,21 +22,45 @@ import kotlinx.coroutines.flow.first
 class TokenRefresher(
     private val httpClient: HttpClient,
     private val settingsStore: AppSettingsStore,
+    private val userRepository: UserRepository,
 ) {
     suspend fun refreshIfPossible() {
-        val refresh = settingsStore.currentRefreshToken()?.takeIf { it.isNotBlank() } ?: return
-        val current = settingsStore.flow.first()
-        runCatching { DeviceAuth.refreshToken(httpClient, refresh) }
-            .onSuccess { token ->
-                settingsStore.setSession(
-                    accessToken = token.accessToken,
-                    // Twitch may or may not rotate the refresh token; keep the old
-                    // one if the response omits a new one.
-                    refreshToken = token.refreshToken ?: refresh,
-                    username = current.username,
-                    userId = current.userId,
-                )
-            }
-        // Deliberately no onFailure: keep the current session on any failure.
+        val refresh = settingsStore.currentRefreshToken()?.takeIf { it.isNotBlank() }
+        if (refresh != null) {
+            val current = settingsStore.flow.first()
+            runCatching { DeviceAuth.refreshToken(httpClient, refresh) }
+                .onSuccess { token ->
+                    settingsStore.setSession(
+                        accessToken = token.accessToken,
+                        // Twitch may or may not rotate the refresh token; keep the old
+                        // one if the response omits a new one.
+                        refreshToken = token.refreshToken ?: refresh,
+                        username = current.username,
+                        userId = current.userId,
+                    )
+                }
+            // Deliberately no onFailure: keep the current session on any failure.
+        }
+        backfillIdentityIfMissing()
+    }
+
+    /**
+     * If the user is signed in but the username/userId are blank, the post-login
+     * identity lookup must have failed on a network blip (the session was saved
+     * token-first, so the token still landed). Nothing else ever backfills it, so
+     * chat would send under no name and Settings would show none. Retry the
+     * lookup here on launch, best-effort: a failure leaves the session untouched.
+     */
+    private suspend fun backfillIdentityIfMissing() {
+        val settings = settingsStore.flow.first()
+        if (settings.accessToken.isBlank()) return
+        if (settings.username.isNotBlank() && settings.userId.isNotBlank()) return
+        val me = runCatching { userRepository.getCurrentUser() }.getOrNull() ?: return
+        settingsStore.setSession(
+            accessToken = settings.accessToken,
+            refreshToken = settingsStore.currentRefreshToken(),
+            username = me.login,
+            userId = me.id,
+        )
     }
 }

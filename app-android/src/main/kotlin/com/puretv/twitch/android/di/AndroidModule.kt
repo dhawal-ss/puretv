@@ -58,10 +58,12 @@ val androidModule = module {
     single { SecureTokenStore(get()) }
     single { AppSettingsStore(get(), get(), get<TokenHolder>()) }
     single { SessionManager(get()) }
-    single { TokenRefresher(get(), get()) }
+    single { TokenRefresher(get(), get(), get()) }
 
     // --- Playback ---------------------------------------------------------
-    single { TwitchPlayer(get(), get()) }
+    // TwitchPlayer(context, adBlockEngine, backupStreamResolver) — the last one
+    // powers the seamless ad-free backup player-type swap in the interceptor.
+    single { TwitchPlayer(get(), get(), get()) }
 
     // --- ViewModels --------------------------------------------------------
     // get() resolves each constructor argument by type, so argument order does
