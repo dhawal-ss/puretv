@@ -8,6 +8,7 @@ import com.puretv.twitch.tv.data.SecureTokenStore
 import com.puretv.twitch.tv.data.TokenRefresher
 import com.puretv.twitch.tv.data.db.PureTvTvDatabase
 import com.puretv.twitch.tv.player.TvPlayer
+import com.puretv.twitch.tv.update.TvUpdateManager
 import com.puretv.twitch.tv.ui.BrowseViewModel
 import com.puretv.twitch.tv.ui.CategoryViewModel
 import com.puretv.twitch.tv.ui.ChannelViewModel
@@ -54,6 +55,10 @@ val tvModule = module {
     // Launch-time access-token refresh + identity backfill (fail-soft).
     single { TokenRefresher(get(), get(), get()) }
 
+    // In-app updater (GitHub Releases → PackageInstaller). Singleton so the
+    // Settings section and the Home update banner observe one state.
+    single { TvUpdateManager(get()) }
+
     // --- Playback ---------------------------------------------------------
     // Singleton: Section 7.4's immersive fullscreen stream screen is the only
     // consumer, but keeping it a Koin singleton (rather than per-screen) keeps
@@ -63,8 +68,13 @@ val tvModule = module {
     single { TvPlayer(get(), get(), get()) }
 
     // --- ViewModels --------------------------------------------------------
-    viewModel { HomeViewModel(get(), get(), get()) }
-    viewModel { BrowseViewModel(get()) }
+    // HomeViewModel(streamRepo, userRepo, settings, cachedStreamDao, tokenRefresher):
+    // the last two power cached-first paint/write-through + the on-failure token
+    // refresh so "Live Now" survives token expiry and repopulates on refresh.
+    viewModel { HomeViewModel(get(), get(), get(), get(), get()) }
+    // BrowseViewModel(channelRepo, tokenRefresher): tokenRefresher recovers the
+    // expired-token 401 that used to blank the category grid.
+    viewModel { BrowseViewModel(get(), get()) }
     viewModel { (gameId: String) -> CategoryViewModel(gameId, get()) }
     viewModel { SearchViewModel(get()) }
     viewModel { (channelLogin: String) -> StreamViewModel(channelLogin, get(), get(), get(), get(), get(), get()) }
