@@ -96,7 +96,7 @@ val desktopModule = module {
     factory { (gameId: String, gameName: String) -> CategoryViewModel(gameId, gameName, get()) }
     factory { SearchViewModel(get()) }
     factory { (channelLogin: String) ->
-        StreamViewModel(channelLogin, get(), get(), get(), get(), get(), get(), get(), get(), get(), get())
+        StreamViewModel(channelLogin, get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get())
     }
     factory { (channelLogin: String) -> ChannelViewModel(channelLogin, get(), get(), get()) }
     factory { (channelLogin: String) -> ChannelStatsViewModel(channelLogin, get(), get()) }

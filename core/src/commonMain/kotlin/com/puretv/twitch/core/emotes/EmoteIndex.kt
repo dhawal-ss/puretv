@@ -40,6 +40,29 @@ fun buildEmoteIndex(
 }
 
 /**
+ * Default third-party emote priority for name collisions: 7TV > BTTV > FFZ. This
+ * is Chatterino's default, and what users asking for "the 7TV experience" expect
+ * (when two providers define `catJAM`, the 7TV one should win).
+ *
+ * Filters [emotes] to the [enabled] providers, then STABLE-sorts by that priority
+ * so [buildEmoteIndex]/[buildPickableEmotes] — which both resolve collisions by
+ * first-occurrence — agree on the winner. Within a provider, the input order
+ * (e.g. channel-set order) is preserved. Non-third-party providers sort last.
+ */
+fun prioritizeThirdParty(
+    emotes: List<ChannelEmote>,
+    enabled: Set<EmoteProvider>,
+): List<ChannelEmote> =
+    emotes.filter { it.provider in enabled }
+        .sortedBy { thirdPartyPriority[it.provider] ?: Int.MAX_VALUE }
+
+private val thirdPartyPriority: Map<EmoteProvider, Int> = mapOf(
+    EmoteProvider.SEVENTV to 0,
+    EmoteProvider.BTTV to 1,
+    EmoteProvider.FFZ to 2,
+)
+
+/**
  * Second pass over already-parsed [parts]: replaces words that exactly match a
  * third-party emote [index] with [MessagePart.ThirdPartyEmote]. A zero-width
  * emote is merged as an overlay onto the immediately-preceding emote (Twitch or

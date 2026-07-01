@@ -44,6 +44,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -55,7 +56,9 @@ import com.puretv.twitch.core.model.ChatMessage
 import com.puretv.twitch.core.model.EmoteLayer
 import com.puretv.twitch.core.model.MessagePart
 import com.puretv.twitch.desktop.ui.emotes.AnimatedEmote
+import com.puretv.twitch.core.chat.BadgeIndex
 import com.puretv.twitch.desktop.ui.emotes.LocalEmoteAnimation
+import androidx.compose.runtime.staticCompositionLocalOf
 import com.puretv.twitch.desktop.ui.theme.PureTvShape
 import com.puretv.twitch.desktop.ui.theme.PureTvTheme
 import com.puretv.twitch.desktop.ui.theme.PureTvType
@@ -362,6 +365,10 @@ fun EditorialEmptyState(
     }
 }
 
+/** Per-stream chat badge art, provided around the chat panel; defaults to no art
+ *  (chips fall back) so rows outside a stream context still render. */
+val LocalBadgeIndex = staticCompositionLocalOf { BadgeIndex.EMPTY }
+
 // ── Rich chat message row (timestamp · badges · emotes) ──────────────────────────
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -373,11 +380,36 @@ fun ChatMessageRow(
     onReply: ((ChatMessage) -> Unit)? = null,
 ) {
     val c = PureTvTheme.colors
+
+    // System rows (subs, raids, "chat cleared") carry no user identity — render a
+    // single centred, muted line and skip the whole badge/username/emote pipeline.
+    if (message.isSystem) {
+        Text(
+            message.message,
+            style = MaterialTheme.typography.labelMedium,
+            color = c.textMuted,
+            modifier = modifier
+                .fillMaxWidth()
+                .padding(vertical = 2.dp),
+        )
+        return
+    }
+
     val nameColor = remember(message.color) {
         runCatching { Color(AwtColor.decode(message.color).rgb or (0xFF shl 24)) }
             .getOrDefault(c.twitchPurpleLight)
     }
-    Column(modifier = modifier.fillMaxWidth()) {
+    // Highlight @-mentions of the local viewer with a faint accent wash + leading bar,
+    // matching Twitch/Chatterino's "someone pinged you" affordance.
+    val rowModifier = if (message.mentionsSelf) {
+        modifier
+            .fillMaxWidth()
+            .background(c.twitchPurple.copy(alpha = 0.12f))
+            .padding(start = 4.dp)
+    } else {
+        modifier.fillMaxWidth()
+    }
+    Column(modifier = rowModifier) {
         val parentName = message.replyParentDisplayName
         if (parentName != null) {
             Text(
@@ -398,9 +430,18 @@ fun ChatMessageRow(
             val ts = remember(message.timestamp) { formatClock(message.timestamp) }
             Text(ts, style = PureTvType.dataSmall, color = c.textMuted, modifier = Modifier.padding(end = 2.dp))
         }
-        if (message.isBroadcaster) ChatBadge("HOST", c.twitchPurple, c.background)
-        else if (message.isModerator) ChatBadge("MOD", c.online, Color.White)
-        if (message.isSubscriber) ChatBadge("SUB", c.twitchPurpleLight.copy(alpha = 0.22f), c.twitchPurpleLight)
+        val badgeIndex = LocalBadgeIndex.current
+        val resolvedBadges = if (badgeIndex === BadgeIndex.EMPTY) emptyList()
+            else message.badges.mapNotNull { badgeIndex.resolve(it.setId, it.version) }
+        if (resolvedBadges.isNotEmpty()) {
+            resolvedBadges.forEach { EmoteImage(it.url, it.title, Modifier.size(18.dp)) }
+        } else {
+            // Badge art not loaded yet (or this channel returned none) — fall back to
+            // the lightweight text chips so rank is still legible.
+            if (message.isBroadcaster) ChatBadge("HOST", c.twitchPurple, c.background)
+            else if (message.isModerator) ChatBadge("MOD", c.online, Color.White)
+            if (message.isSubscriber) ChatBadge("SUB", c.twitchPurpleLight.copy(alpha = 0.22f), c.twitchPurpleLight)
+        }
 
         Text(
             message.displayName,
@@ -409,17 +450,28 @@ fun ChatMessageRow(
             fontWeight = FontWeight.Bold,
         )
 
-        val parts = message.parsedParts.ifEmpty { listOf(MessagePart.Text(message.message)) }
-        parts.forEach { part ->
-            when (part) {
-                is MessagePart.Text -> Text(part.content, color = c.textPrimary, style = MaterialTheme.typography.bodyMedium)
-                is MessagePart.TwitchEmote -> StackedEmote(
-                    "https://static-cdn.jtvnw.net/emoticons/v2/${part.id}/default/dark/2.0",
-                    part.name,
-                    animated = false,
-                    part.overlays,
-                )
-                is MessagePart.ThirdPartyEmote -> StackedEmote(part.url, part.name, part.animated, part.overlays)
+        if (message.deleted) {
+            // Moderator removed this message (timeout/ban/delete). Tombstone it
+            // instead of dropping the row so the thread stays readable.
+            Text(
+                "<message deleted>",
+                color = c.textMuted,
+                style = MaterialTheme.typography.bodyMedium,
+                fontStyle = FontStyle.Italic,
+            )
+        } else {
+            val parts = message.parsedParts.ifEmpty { listOf(MessagePart.Text(message.message)) }
+            parts.forEach { part ->
+                when (part) {
+                    is MessagePart.Text -> Text(part.content, color = c.textPrimary, style = MaterialTheme.typography.bodyMedium)
+                    is MessagePart.TwitchEmote -> StackedEmote(
+                        "https://static-cdn.jtvnw.net/emoticons/v2/${part.id}/default/dark/2.0",
+                        part.name,
+                        animated = false,
+                        part.overlays,
+                    )
+                    is MessagePart.ThirdPartyEmote -> StackedEmote(part.url, part.name, part.animated, part.overlays)
+                }
             }
         }
         if (onReply != null) {

@@ -23,6 +23,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeoutOrNull
+import kotlin.system.exitProcess
 import org.koin.core.context.GlobalContext.startKoin
 import org.koin.dsl.koinApplication
 
@@ -81,4 +83,18 @@ fun main() {
             App(koin = koinApp.koin, windowState = windowState, onClose = ::exitApplication, awtWindow = window)
         }
     }
+
+    // The Compose UI loop has ended (window closed, or the updater called
+    // exitApplication). Returning from main() is NOT enough to end the process:
+    // the Netty stream proxy runs NON-DAEMON threads that keep the JVM alive
+    // indefinitely, and the shutdown hook that stops it only runs once the JVM is
+    // already exiting — a standoff that left the process (and its file locks)
+    // lingering long after the window closed. That lingering process is what
+    // corrupted in-place updates (files replaced while still locked). Tear the
+    // proxy down explicitly (bounded so a wedged stop can't hang the quit), release
+    // the player, then hard-exit. exitProcess still runs the shutdown hook above,
+    // which flushes the persistence stores.
+    runCatching { runBlocking { withTimeoutOrNull(3_000) { localStreamProxy.stop() } } }
+    runCatching { vlcPlayer.release() }
+    exitProcess(0)
 }

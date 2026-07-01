@@ -115,6 +115,15 @@ data class ChatMessage(
     val isBroadcaster: Boolean,
     val replyParentDisplayName: String? = null,
     val replyParentBody: String? = null,
+    /** Set when a moderator deletes this message (CLEARMSG) or times out / bans the
+     *  author (CLEARCHAT). Rendered as a greyed "<message deleted>" placeholder. */
+    val deleted: Boolean = false,
+    /** A non-user system line (sub/resub/raid USERNOTICE, "chat cleared", etc.).
+     *  Rendered centred and muted, without a username or badges. */
+    val isSystem: Boolean = false,
+    /** This incoming message @-mentions the local viewer; drives row highlighting.
+     *  Viewer-relative, so it is computed at receipt (when selfLogin is known). */
+    val mentionsSelf: Boolean = false,
 )
 
 /** A non-base emote drawn over a base emote (7TV zero-width / overlay cosmetics). */
