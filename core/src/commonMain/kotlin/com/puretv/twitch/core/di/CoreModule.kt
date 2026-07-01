@@ -13,6 +13,7 @@ import com.puretv.twitch.core.repository.UserRepository
 import com.puretv.twitch.core.stream.StreamResolver
 import com.puretv.twitch.core.stream.TwitchGqlClient
 import com.puretv.twitch.core.api.RateLimitedException
+import com.puretv.twitch.core.api.HelixApiException
 import io.ktor.client.HttpClient
 import io.ktor.client.plugins.HttpResponseValidator
 import io.ktor.client.plugins.HttpTimeout
@@ -21,6 +22,7 @@ import io.ktor.client.plugins.logging.LogLevel
 import io.ktor.client.plugins.logging.Logging
 import io.ktor.client.plugins.websocket.WebSockets
 import io.ktor.http.HttpStatusCode
+import io.ktor.http.isSuccess
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.json.Json
 import org.koin.dsl.module
@@ -51,10 +53,13 @@ val coreModule = module {
 
     // Chat
     factory { TwitchChatClient(get()) }
+    single { com.puretv.twitch.core.chat.BadgeRepository(get()) }
 
     // Emotes
     single<com.puretv.twitch.core.emotes.EmoteCache> { InMemoryEmoteCache() }
     single { EmoteRepository(get(), get()) }
+    // 7TV live emote updates (EventAPI websocket) — one per stream session, like the chat client.
+    factory { com.puretv.twitch.core.emotes.SevenTvEventClient(get()) }
 
     // Repositories
     single { StreamRepository(get(), get()) }
@@ -111,6 +116,25 @@ fun buildKtorClient(engine: io.ktor.client.engine.HttpClientEngine): HttpClient 
         validateResponse { response ->
             if (response.status == HttpStatusCode.TooManyRequests) {
                 throw RateLimitedException(response.headers["Ratelimit-Reset"]?.toLongOrNull())
+            }
+            // Audit H1: a non-2xx Helix error body ({"error","status","message"})
+            // otherwise deserializes CLEANLY into an empty HelixEnvelope (data
+            // defaults to [], ignoreUnknownKeys=true), so 401/403/500 silently
+            // returned "no results" with NO exception — and, worse, truncated the
+            // cursor-paginated loops in TwitchApiClient (getAllFollowedChannels,
+            // getVideos) mid-stream as if the list were complete. Fail loudly so
+            // partial pages are never mistaken for the full set.
+            //
+            // Scope: Helix ONLY (api.twitch.tv/helix). The OAuth flows on this same
+            // shared client deliberately read their own non-2xx bodies — DeviceAuth
+            // polling expects 400 "authorization_pending"; PkceAuth surfaces the raw
+            // error body; refresh parses {status,message} envelopes — so they MUST
+            // NOT be intercepted here. GQL/usher (stream resolution) likewise handle
+            // their own error responses and are left untouched.
+            val url = response.call.request.url
+            val isHelix = url.host == "api.twitch.tv" && url.encodedPath.startsWith("/helix")
+            if (isHelix && !response.status.isSuccess()) {
+                throw HelixApiException(response.status.value, response.status.description)
             }
         }
     }

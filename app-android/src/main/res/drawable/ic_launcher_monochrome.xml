@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Adaptive-icon MONOCHROME layer for Android 13+ themed icons. A single solid
+  silhouette (the system recolors it to match the user's wallpaper-derived
+  palette), so it must be one flat color with the meaning carried by SHAPE. The
+  shield is solid and the play triangle is knocked out as negative space via
+  evenOdd, so the mark still reads when tinted to a single hue. Same 66x66dp
+  safe zone as the foreground.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:fillType="evenOdd"
+        android:pathData="M54,25
+            C61,30 70,32 78,32
+            L78,54
+            C78,69 68,79 54,85
+            C40,79 30,69 30,54
+            L30,32
+            C38,32 47,30 54,25 Z
+            M48,45
+            L48,65
+            L66,55 Z" />
+</vector>

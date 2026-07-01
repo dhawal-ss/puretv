@@ -8,6 +8,8 @@ import com.puretv.twitch.core.stream.StreamResolver
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 /**
  * Wraps [TwitchApiClient] with light in-memory caching the UI layer can
@@ -47,12 +49,19 @@ class StreamRepository(
 }
 
 class ChannelRepository(private val apiClient: TwitchApiClient) {
+    // Audit M7: this cache is read and written from suspend funcs that may run on
+    // different dispatchers/threads; a plain mutableMapOf gives no happens-before
+    // guarantee and concurrent puts can corrupt or lose entries. A Mutex
+    // serializes all access without changing the public API. The network fetch is
+    // deliberately kept OUTSIDE the lock so a slow /users call never blocks cache
+    // reads for other logins.
+    private val cacheMutex = Mutex()
     private val cache = mutableMapOf<String, ChannelInfo>()
 
     suspend fun getChannel(login: String): ChannelInfo? {
-        cache[login]?.let { return it }
+        cacheMutex.withLock { cache[login] }?.let { return it }
         val channel = apiClient.getUsers(logins = listOf(login)).firstOrNull()
-        channel?.let { cache[login] = it }
+        channel?.let { cacheMutex.withLock { cache[login] = it } }
         return channel
     }
 
@@ -68,5 +77,23 @@ class UserRepository(private val apiClient: TwitchApiClient) {
     suspend fun loadFollows(userId: String) {
         val follows = apiClient.getFollowedChannels(userId)
         _followedLogins.value = follows.map { it.broadcaster_login }
+    }
+
+    /**
+     * The authenticated account (Helix /users with no login/id returns the
+     * current token's owner), or null if there is no token or the call fails.
+     * Used right after sign-in to capture the username/userId for chat identity
+     * and the Settings screen.
+     */
+    suspend fun getCurrentUser(): ChannelInfo? = apiClient.getUsers().firstOrNull()
+
+    /**
+     * Loads follows for whoever owns the current token. Helix /users with no
+     * login/id returns the authenticated user, so this works right after a
+     * device-code sign-in even before the user id has been persisted to settings.
+     */
+    suspend fun loadFollowsForCurrentUser() {
+        val me = getCurrentUser() ?: return
+        loadFollows(me.id)
     }
 }

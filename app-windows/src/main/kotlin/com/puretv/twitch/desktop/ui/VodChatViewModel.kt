@@ -9,6 +9,7 @@ import com.puretv.twitch.core.repository.VodRepository
 import com.puretv.twitch.core.stream.ReplayBuffer
 import com.puretv.twitch.core.stream.withThirdPartyEmotes
 import com.puretv.twitch.desktop.player.DesktopPlayer
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -41,8 +42,23 @@ class VodChatViewModel(
     private val _messages = MutableStateFlow<List<ChatMessage>>(emptyList())
     val messages: StateFlow<List<ChatMessage>> = _messages.asStateFlow()
 
+    // Surfaced when a comment fetch fails so the screen can show an error instead
+    // of a permanently-blank replay panel (M6). Cleared by the next good load.
+    private val _error = MutableStateFlow<String?>(null)
+    val error: StateFlow<String?> = _error.asStateFlow()
+
+    // Load lifecycle + buffer-mutation state, all guarded by [loadLock] so the
+    // collector, the load coroutine and the emote-index coroutine never race on it.
+    private val loadLock = Any()
+    private var loading = false               // @GuardedBy(loadLock)
+    private var loadJob: Job? = null          // @GuardedBy(loadLock)
+    // Bumped on a backward-seek reset; a load captures it at launch and discards
+    // its result (and leaves the loading flag to the current load) if it has since
+    // moved on — so an in-flight forward prefetch can't dump pre-seek comments into
+    // the freshly-reset buffer (M6).
+    private var generation = 0                // @GuardedBy(loadLock)
+
     // Touched from collector + load coroutines on a thread-pool dispatcher → @Volatile.
-    @Volatile private var loading = false
     @Volatile private var lastSec = -1L
     @Volatile private var exhausted = false   // no more pages after the loaded window
     // Published once when the parallel load finishes; immutable map after publish.
@@ -86,7 +102,20 @@ class VodChatViewModel(
         lastSec = sec
         when {
             // Backward seek: chat for that point may differ; reload from scratch.
-            backward -> { buffer.reset(); exhausted = false; requestLoad(sec.toInt()) }
+            // Void any in-flight load (its window is now stale) AND clear the loading
+            // guard so the reload below isn't blocked by it — the original bug was the
+            // reset buffer never reloading because a forward prefetch held `loading`.
+            backward -> {
+                synchronized(loadLock) {
+                    generation++
+                    loadJob?.cancel()
+                    loadJob = null
+                    loading = false
+                    buffer.reset()
+                    exhausted = false
+                }
+                requestLoad(sec.toInt())
+            }
             buffer.isEmpty() -> requestLoad(sec.toInt())
             !exhausted && sec.toInt() >= buffer.maxOffsetSeconds - PREFETCH_LEAD_SECONDS ->
                 requestLoad(buffer.maxOffsetSeconds)
@@ -96,17 +125,35 @@ class VodChatViewModel(
 
     /** Fetch a window; guarded so overlapping ticks don't stack requests. */
     private fun requestLoad(offsetSeconds: Int) {
-        if (loading) return
-        loading = true
-        scope.launch {
-            runCatching { vodRepository.videoComments(vodId, offsetSeconds) }
-                .onSuccess { batch ->
-                    buffer.add(batch.comments)
-                    if (!batch.hasNextPage) exhausted = true
-                }
-            loading = false
+        // Atomic check-and-set of the loading guard (no TOCTOU): one fetch in flight
+        // at a time, and we capture the generation this fetch belongs to.
+        val gen = synchronized(loadLock) {
+            if (loading) return
+            loading = true
+            generation
+        }
+        val job = scope.launch {
+            val result = runCatching { vodRepository.videoComments(vodId, offsetSeconds) }
+            synchronized(loadLock) {
+                // Drop a load superseded by a backward-seek reset: its comments belong
+                // to a window we've already thrown away, and the current generation now
+                // owns the loading flag + buffer/error state.
+                if (gen != generation) return@launch
+                result
+                    .onSuccess { batch ->
+                        buffer.add(batch.comments)
+                        if (!batch.hasNextPage) exhausted = true
+                        _error.value = null
+                    }
+                    .onFailure {
+                        // Surface the failure instead of leaving the panel silently blank.
+                        _error.value = "Couldn't load chat replay. It may catch up shortly."
+                    }
+                loading = false
+            }
             emitDue(lastSec.coerceAtLeast(0))
         }
+        synchronized(loadLock) { loadJob = job }
     }
 
     companion object {

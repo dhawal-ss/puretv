@@ -294,6 +294,10 @@ class UpdateManager {
             isMsi = installer.extension.equals("msi", ignoreCase = true),
             appExePath = exe,
             batPath = batFile.absolutePath,
+            // The launcher .exe hosts the JVM in-process, so our own PID is the
+            // process holding the app's files. The script waits for it to exit
+            // (and force-closes it if it lingers) before installing.
+            appPid = ProcessHandle.current().pid(),
         )
         batFile.writeText(scripts.bat)
         vbsFile.writeText(scripts.vbs)
@@ -393,11 +397,23 @@ internal data class UpdateScripts(val bat: String, val vbs: String)
 /**
  * Builds the detached self-update scripts.
  *
- * The .bat waits (via `ping`, NOT `timeout` — timeout needs console input that a
- * hidden launch doesn't have), runs the installer silently, relaunches the app,
- * then exits. The .vbs runs that .bat through a HIDDEN window (style 0) via
- * WScript.Shell, so the update never shows — or leaves open — a console window.
- * (The old `cmd /c start "" /min <bat>` left a prompt window sitting open.)
+ * The .bat first WAITS FOR THE APP TO FULLY EXIT, then runs the installer
+ * silently, relaunches the app, then exits. The .vbs runs that .bat through a
+ * HIDDEN window (style 0) via WScript.Shell, so the update never shows — or
+ * leaves open — a console window. (The old `cmd /c start "" /min <bat>` left a
+ * prompt window sitting open.)
+ *
+ * Why the explicit process wait ([appPid]): `exitApplication()` stops the Compose
+ * UI but does NOT guarantee the JVM process has terminated — the local stream
+ * proxy and VLC keep non-daemon threads alive, so the launcher process (which
+ * hosts the JVM in-process and holds a lock on every jar + runtime DLL) can
+ * outlive the window by several seconds. The Inno installer's `[InstallDelete]`
+ * wipes and re-copies `{app}\app`; if that runs while those files are still
+ * locked, the copy is skipped and the app is left WITHOUT its launcher `.cfg`,
+ * so it won't start until a manual reinstall. A fixed sleep raced this and lost.
+ * We poll the PID for a short grace period, then force-close it as a last resort
+ * (no `/T`: the tree would include this very script), guaranteeing the files are
+ * unlocked before the in-place upgrade touches them.
  *
  * Built with string concatenation (not templates) and launched via
  * [ProcessBuilder] with a fixed arg array — no shell, no interpolated command.
@@ -407,10 +423,21 @@ internal fun buildUpdateScripts(
     isMsi: Boolean,
     appExePath: String?,
     batPath: String,
+    appPid: Long,
 ): UpdateScripts {
     val lines = mutableListOf<String>()
     lines += "@echo off"
-    // ~2s so this process fully exits before the installer touches locked files.
+    lines += "set \"APPPID=" + appPid + "\""
+    // Wait up to ~10s for the app process to close on its own so its files unlock.
+    lines += "for /l %%i in (1,1,10) do ("
+    lines += "  tasklist /fi \"PID eq %APPPID%\" 2>nul | find \"%APPPID%\" >nul || goto puretv_app_closed"
+    lines += "  ping 127.0.0.1 -n 2 >nul"
+    lines += ")"
+    // Still alive (lingering non-daemon threads) — force it so files unlock.
+    lines += "taskkill /f /pid %APPPID% >nul 2>&1"
+    lines += "ping 127.0.0.1 -n 3 >nul"
+    lines += ":puretv_app_closed"
+    // ~2s settle so the OS fully releases the file handles after the process dies.
     lines += "ping 127.0.0.1 -n 3 >nul"
     lines += if (isMsi) {
         "msiexec /i \"" + installerPath + "\" /passive /norestart"

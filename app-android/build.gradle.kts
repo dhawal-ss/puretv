@@ -38,7 +38,27 @@ android {
         targetCompatibility = JavaVersion.VERSION_11
     }
 
-    buildFeatures { compose = true }
+    // Kotlin/KSP default to the build JDK (17); javac is pinned to 11 above.
+    // KSP fails the build on that mismatch, so pin Kotlin to 11 too. This is
+    // the build break that kept app-android out of CI.
+    kotlinOptions {
+        jvmTarget = "11"
+        freeCompilerArgs += listOf(
+            "-opt-in=androidx.compose.material3.ExperimentalMaterial3Api",
+        )
+    }
+
+    buildFeatures {
+        compose = true
+        buildConfig = true
+    }
+}
+
+// PureTvDatabase declares exportSchema = true, so point Room's KSP processor at
+// a checked-in schemas/ directory. This emits the version JSON that future
+// Migration tests assert against; without it exportSchema is a silent no-op.
+ksp {
+    arg("room.schemaLocation", "$projectDir/schemas")
 }
 
 dependencies {
@@ -48,20 +68,27 @@ dependencies {
     implementation(libs.compose.material3)
     implementation(libs.compose.foundation)
     implementation(libs.compose.runtime)
+    // Full Material icon set (send, fullscreen, shield, etc.) for the player and
+    // chat chrome. R8 + shrinkResources strips the unused icons from release.
+    implementation(compose.materialIconsExtended)
     implementation("androidx.activity:activity-compose:1.9.3")
     implementation("androidx.navigation:navigation-compose:2.8.4")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
 
     implementation(libs.koin.android)
     implementation(libs.koin.compose)
+    implementation(libs.koin.androidx.compose)
 
     implementation(libs.kotlinx.coroutines.android)
+
+    // Ktor OkHttp engine: coreModule's shared HttpClient needs a platform engine
+    // (mirrors app-windows / core's android target). Pulls ktor-client-core in.
+    implementation(libs.ktor.client.okhttp)
 
     implementation(libs.media3.exoplayer)
     implementation(libs.media3.exoplayer.hls)
     implementation(libs.media3.ui)
     implementation(libs.media3.datasource.okhttp)
-    implementation(libs.media3.session)
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
 
     implementation(libs.room.runtime)

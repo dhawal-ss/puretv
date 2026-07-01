@@ -1,6 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  Minimal: only what the launch theme (themes.xml) needs to paint the window
+  before Compose takes over (no white flash on cold start). The real palette
+  lives in Kotlin (PureTvColors); do not duplicate it here.
+-->
 <resources>
     <color name="background">#FF0A0A0F</color>
-    <color name="surface">#FF141420</color>
-    <color name="twitch_purple">#FF9B5DE5</color>
 </resources>
