@@ -2,11 +2,12 @@
 
 # PureTV
 
-A clean, ad-free way to watch live streams on Windows.
+A clean, ad-free way to watch live streams, on Windows and Android.
 
-[![Download PureTV](https://img.shields.io/badge/Download%20PureTV-Windows%20Installer-7C3AED?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/dhawal-ss/puretv/releases/latest)
+[![Download for Windows](https://img.shields.io/badge/Download-Windows%20Installer-7C3AED?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/dhawal-ss/puretv/releases/latest)
+[![Download for Android](https://img.shields.io/badge/Download-Android%20APK-3DDC84?style=for-the-badge&logo=android&logoColor=white)](https://github.com/dhawal-ss/puretv/releases/latest)
 
-**[Click here to download the latest version](https://github.com/dhawal-ss/puretv/releases/latest)**
+**[Open the latest release](https://github.com/dhawal-ss/puretv/releases/latest).** Under "Assets", pick the `.exe` for Windows or the `.apk` for Android.
 
 </div>
 
@@ -14,13 +15,24 @@ A clean, ad-free way to watch live streams on Windows.
 
 ## Install (about a minute)
 
-1. Click the Download PureTV button above.
+### Windows
+
+1. Click the "Download for Windows" button above.
 2. On the page that opens, under "Assets", click the file that ends in `.exe`.
 3. Open the downloaded file and follow the prompts.
 4. If Windows shows a blue "Windows protected your PC" screen, click "More info", then "Run anyway". This only appears because the app is not code-signed yet, and it is safe to continue.
 5. Open PureTV from your Start menu and sign in.
 
 Everything the app needs is included in the installer, so there is nothing else to set up.
+
+### Android
+
+1. On your phone, click the "Download for Android" button above.
+2. Under "Assets", tap the file that ends in `.apk` to download it.
+3. Open the downloaded file. Android may ask you to allow installs from your browser or Files app the first time, tap Allow, then Install.
+4. Open PureTV and sign in.
+
+The Android app is a sideloaded build (not from the Play Store), so it is normal for Android to warn about installing it. The Android app is newer than the Windows one, so expect a few rough edges.
 
 ## What you get
 
