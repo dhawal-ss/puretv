@@ -33,6 +33,13 @@ secrets.properties
 # *.pem) must be generated OUTSIDE the repo (see UpdateSigning.kt).
 *.pem
 
+# Android release signing — NEVER commit. The keystore + its credentials sign
+# the release APK; losing them means future updates can't install over an
+# installed build. Back them up somewhere safe outside the repo.
+*.jks
+*.keystore
+keystore.properties
+
 # Internal build/design docs (specs, plans, prompts) — kept out of the repo.
 docs/superpowers/
 

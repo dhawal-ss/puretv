@@ -2,12 +2,13 @@
 
 # PureTV
 
-A clean, ad-free way to watch live streams on Windows and Android.
+A clean, ad-free way to watch live streams on Windows, Android, and Android TV / Fire TV.
 
 [![Download for Windows](https://img.shields.io/badge/Download%20for%20Windows-Installer-7C3AED?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/dhawal-ss/puretv/releases/latest)
 [![Download for Android](https://img.shields.io/badge/Download%20for%20Android-APK-3DDC84?style=for-the-badge&logo=android&logoColor=white)](https://github.com/dhawal-ss/puretv/releases/download/android-v1.0.0/PureTV-for-Twitch-1.0.0.apk)
+[![Download for Android TV / Fire TV](https://img.shields.io/badge/Download%20for%20Android%20TV%20%2F%20Fire%20TV-APK-6441A5?style=for-the-badge&logo=androidtv&logoColor=white)](https://github.com/dhawal-ss/puretv/releases/download/tv-v1.0.0/PureTV-for-Twitch-TV-1.0.0.apk)
 
-**Windows: [download the latest installer](https://github.com/dhawal-ss/puretv/releases/latest). Android: [download the APK](https://github.com/dhawal-ss/puretv/releases/download/android-v1.0.0/PureTV-for-Twitch-1.0.0.apk).**
+**Windows: [download the latest installer](https://github.com/dhawal-ss/puretv/releases/latest). Android: [download the APK](https://github.com/dhawal-ss/puretv/releases/download/android-v1.0.0/PureTV-for-Twitch-1.0.0.apk). Android TV / Fire TV: [download the TV APK](https://github.com/dhawal-ss/puretv/releases/download/tv-v1.0.0/PureTV-for-Twitch-TV-1.0.0.apk).**
 
 </div>
 
@@ -38,6 +39,28 @@ A few notes:
 - To update later, download the newest APK from the releases page and install it over the existing app.
 
 On Android you get the same ad-free playback, plus Picture-in-Picture, a fill-to-edge fullscreen that uses the whole display including the camera cutout (double-tap the video to toggle it), and chat beside the stream.
+
+## Install on Android TV & Fire TV (Downloader app, a couple of minutes)
+
+PureTV has a separate build made for the TV, with a 10-foot layout you drive entirely with the remote. It installs by sideloading with the free **Downloader** app (by AFTVnews), which works on Fire TV, Fire TV Stick, and Google TV / Android TV.
+
+1. On your TV, install **Downloader** from the Amazon Appstore (Fire TV) or the Google Play Store (Google TV), and open it.
+2. First time only: your TV has to allow installs from Downloader. Fire TV walks you through this the first time; on Google TV go to *Settings, then Apps, then Security & restrictions, then Unknown sources*, and turn Downloader on.
+3. In Downloader's URL box, type this address and press Go:
+
+   ```
+   https://github.com/dhawal-ss/puretv/releases/download/tv-v1.0.0/PureTV-for-Twitch-TV-1.0.0.apk
+   ```
+
+4. It downloads the APK, then asks to install it. Choose Install, and when it finishes you can delete the downloaded file to save space.
+5. Open PureTV from your app list. To sign in (optional, only needed to see the channels you follow), the app shows a short code, then go to **twitch.tv/activate** on your phone or computer and enter it. You can also just start watching top and category streams without signing in.
+
+A few notes:
+
+- Using the remote: D-pad to move, Select to open, Back to go back. On a stream, press Left/Right or Menu to show chat, and the Play/Pause button to pause. Ad blocking runs automatically, shown by the small pill on the player.
+- This build is signed with a development key, so the TV labels it an app from an "unknown source". That is normal for sideloaded apps and safe to allow.
+- It needs Android TV / Fire OS based on Android 8.0 or newer (every current Fire TV Stick and Google TV qualifies).
+- To update later, sideload the newest TV APK the same way and install it over the existing app.
 
 ## What you get
 
@@ -72,6 +95,14 @@ Build the Android app (needs the Android SDK; point `local.properties` at it wit
 ```
 ./gradlew :app-android:assembleDebug
 ```
+
+Build the Android TV / Fire TV app (same SDK; it shares the `core` module but has its own 10-foot Leanback/D-pad UI):
+
+```
+./gradlew :app-tv:assembleDebug
+```
+
+A signed release TV APK (`./gradlew :app-tv:assembleRelease`) needs a keystore. Create one and put its details in a gitignored `keystore.properties` at the repo root (`storeFile`, `storePassword`, `keyAlias`, `keyPassword`); without it the release build is left unsigned.
 
 Sign-in needs a client secret, kept in a gitignored `secrets.properties` (copy `secrets.properties.example` and fill in your own).
 
