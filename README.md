@@ -2,11 +2,12 @@
 
 # PureTV
 
-A clean, ad-free way to watch live streams on Windows.
+A clean, ad-free way to watch live streams on Windows and Android.
 
-[![Download PureTV](https://img.shields.io/badge/Download%20PureTV-Windows%20Installer-7C3AED?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/dhawal-ss/puretv/releases/latest)
+[![Download for Windows](https://img.shields.io/badge/Download%20for%20Windows-Installer-7C3AED?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/dhawal-ss/puretv/releases/latest)
+[![Download for Android](https://img.shields.io/badge/Download%20for%20Android-APK-3DDC84?style=for-the-badge&logo=android&logoColor=white)](https://github.com/dhawal-ss/puretv/releases/download/android-v1.0.0/PureTV-for-Twitch-1.0.0.apk)
 
-**[Click here to download the latest version](https://github.com/dhawal-ss/puretv/releases/latest)**
+**Windows: [download the latest installer](https://github.com/dhawal-ss/puretv/releases/latest). Android: [download the APK](https://github.com/dhawal-ss/puretv/releases/download/android-v1.0.0/PureTV-for-Twitch-1.0.0.apk).**
 
 </div>
 
@@ -21,6 +22,22 @@ A clean, ad-free way to watch live streams on Windows.
 5. Open PureTV from your Start menu and sign in.
 
 Everything the app needs is included in the installer, so there is nothing else to set up.
+
+## Install on Android (sideload, about a minute)
+
+PureTV for Android is a sideloaded APK, not on the Play Store.
+
+1. On your phone, tap the "Download for Android" button above to get the `.apk` file.
+2. Open the downloaded file. The first time, Android asks to allow installs from your browser or Files app, turn that on, then tap Install.
+3. Open PureTV, then sign in by entering the on-screen code at twitch.tv/activate.
+
+A few notes:
+
+- This build is signed with a development key, so Android labels it an app from an "unknown source". That is normal for sideloaded apps and is safe to allow.
+- It needs Android 8.0 or newer.
+- To update later, download the newest APK from the releases page and install it over the existing app.
+
+On Android you get the same ad-free playback, plus Picture-in-Picture, a fill-to-edge fullscreen that uses the whole display including the camera cutout (double-tap the video to toggle it), and chat beside the stream.
 
 ## What you get
 
@@ -42,12 +59,18 @@ Your sign-in goes straight to the streaming service using standard OAuth. PureTV
 
 ## For developers
 
-PureTV is a Kotlin Multiplatform project. A shared `core` module holds the API client, sign-in, ad-block engine, chat, and data models, and each platform app builds its own UI on top. The Windows app uses Compose Multiplatform with VLC for playback.
+PureTV is a Kotlin Multiplatform project. A shared `core` module holds the API client, sign-in, ad-block engine, chat, and data models, and each platform app builds its own UI on top. The Windows app uses Compose Multiplatform with VLC for playback; the Android app uses Jetpack Compose with ExoPlayer (Media3).
 
 Run the desktop app (needs JDK 17 and VLC installed):
 
 ```
 ./gradlew :app-windows:run
+```
+
+Build the Android app (needs the Android SDK; point `local.properties` at it with `sdk.dir=...`):
+
+```
+./gradlew :app-android:assembleDebug
 ```
 
 Sign-in needs a client secret, kept in a gitignored `secrets.properties` (copy `secrets.properties.example` and fill in your own).
