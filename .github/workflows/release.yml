@@ -128,6 +128,47 @@ jobs:
           path: app-windows/build/installer/*.exe
           if-no-files-found: error
 
+  android:
+    name: Android phone app (APK)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@be666c2fcd27ec809703dec50e508c2fdc7f6654 # v5.2.0
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Cache Gradle
+        uses: gradle/actions/setup-gradle@3f131e8634966bd73d06cc69884922b02e6faf92 # v6.2.0
+
+      # No release keystore is wired yet (app-android/build.gradle.kts leaves the
+      # release signingConfig commented out), so we publish the DEBUG-signed APK:
+      # it sideloads like any app from outside the Play Store. For a production,
+      # Play-updatable build, add a stable keystore (ANDROID_KEYSTORE_BASE64 +
+      # ANDROID_KEYSTORE_PASSWORD / KEY_ALIAS / KEY_PASSWORD), wire signingConfigs
+      # in app-android/build.gradle.kts, and switch this to :app-android:assembleRelease.
+      # (See this file's header checklist.)
+      - name: Build Android APK (debug-signed, sideloadable)
+        run: ./gradlew :app-android:assembleDebug
+
+      - name: Stage APK under a release-friendly name
+        run: |
+          set -euo pipefail
+          ver="${GITHUB_REF_NAME#v}"; [ -n "$ver" ] || ver="0.0.0"
+          apk="$(find app-android/build/outputs/apk -name '*.apk' | head -n1)"
+          if [ -z "$apk" ]; then echo "::error::assembleDebug produced no APK."; exit 1; fi
+          mkdir -p artifacts/android
+          cp "$apk" "artifacts/android/PureTV-${ver}.apk"
+
+      - name: Upload Android artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: android-release
+          path: artifacts/android/*.apk
+          if-no-files-found: error
+
   proxy-image:
     name: Go proxy (Docker image -> GHCR)
     runs-on: ubuntu-latest
@@ -162,20 +203,25 @@ jobs:
 
   draft-release:
     name: Create draft GitHub Release
-    # Only the Windows installer gates the release; Android is non-blocking and
-    # the proxy image publishes itself to GHCR independently.
-    needs: [windows]
+    # The Windows installer and Android APK both gate the release so every draft
+    # carries both downloads; the proxy image publishes to GHCR independently.
+    needs: [windows, android]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
-      # Only the Windows installer artifact — downloading all artifacts also
-      # pulls a stray Docker buildx metadata file that intermittently fails.
+      # Named artifacts only — downloading ALL artifacts also pulls a stray Docker
+      # buildx metadata file that intermittently fails.
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: windows-release
           path: artifacts/windows-release
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: android-release
+          path: artifacts/android
 
       - name: Resolve version (strip leading v from the tag)
         id: vars
@@ -237,7 +283,9 @@ jobs:
           cat >> notes.md <<'DL'
 
           ---
-          **Download** the installer below and run it. Everything's included, no separate VLC needed. If Windows shows a SmartScreen warning, click **More info, then Run anyway**. Already have PureTV? Just install over it.
+          **Windows:** download the `.exe` below and run it. Everything's included, no separate VLC needed. If Windows shows a SmartScreen warning, click **More info, then Run anyway**. Already have PureTV? Just install over it.
+
+          **Android:** download the `.apk` below, then open it on your phone (you may need to allow installs from your browser/files app). This is a sideloaded build, not from the Play Store.
           DL
           echo "----- release notes -----"; cat notes.md
 
@@ -250,3 +298,4 @@ jobs:
           files: |
             artifacts/windows-release/**/*.exe
             artifacts/windows-release/**/*.exe.sig
+            artifacts/android/**/*.apk
