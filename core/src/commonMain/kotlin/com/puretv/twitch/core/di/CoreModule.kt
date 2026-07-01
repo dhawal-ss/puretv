@@ -53,10 +53,13 @@ val coreModule = module {
 
     // Chat
     factory { TwitchChatClient(get()) }
+    single { com.puretv.twitch.core.chat.BadgeRepository(get()) }
 
     // Emotes
     single<com.puretv.twitch.core.emotes.EmoteCache> { InMemoryEmoteCache() }
     single { EmoteRepository(get(), get()) }
+    // 7TV live emote updates (EventAPI websocket) — one per stream session, like the chat client.
+    factory { com.puretv.twitch.core.emotes.SevenTvEventClient(get()) }
 
     // Repositories
     single { StreamRepository(get(), get()) }

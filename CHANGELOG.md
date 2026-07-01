@@ -11,6 +11,23 @@ release notes automatically.
 
 ---
 
+## 1.10.0 - 2026-06-30
+
+Brings the chat experience closer to 7TV and Chatterino, with live emotes, real badge icons, and proper moderation and event messages.
+
+### New
+- **Emotes update live, no restart needed.** When a channel adds, removes, or renames a 7TV emote, it now appears in chat right away, the same way Chatterino and the 7TV extension work.
+- **Real badge icons in chat.** Subscriber, moderator, VIP, and other badges now show their actual Twitch icons instead of plain text labels.
+- **Sub, resub, and raid announcements show up.** Chat now displays the same celebratory lines you see on Twitch when someone subscribes, gifts subs, or raids the channel.
+- **Messages that mention you stand out.** Any message that tags your username is highlighted so you do not miss replies.
+
+### Improved
+- **Deleted and timed-out messages are handled properly.** When a moderator removes a message or times someone out, those messages now show as removed instead of staying on screen, and a note appears when a moderator clears the chat.
+- **Your emote on/off switches actually work.** The 7TV, BTTV, and FrankerFaceZ toggles in Settings now take effect immediately while you watch, and when two providers share an emote name, the 7TV version wins.
+
+### Fixed
+- **Installing an update no longer breaks the app.** After a one-click update, opening PureTV from the Start menu, a shortcut, or Windows search could fail with a "cannot open ...cfg" error, and the only fix was reinstalling from GitHub by hand. The updater now waits for the app to fully close before applying the update, so its files are never replaced while they are still in use.
+
 ## 1.9.5 - 2026-06-30
 
 Fixes staying signed in between launches, and makes your followed list react the moment you sign in or out.
