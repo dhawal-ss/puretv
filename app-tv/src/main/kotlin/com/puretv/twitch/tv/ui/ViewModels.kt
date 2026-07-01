@@ -94,6 +94,37 @@ class BrowseViewModel(private val channelRepository: ChannelRepository) : ViewMo
     }
 }
 
+data class CategoryUiState(
+    val gameName: String = "",
+    val streams: List<StreamInfo> = emptyList(),
+    val isLoading: Boolean = true,
+    val error: String? = null,
+)
+
+/** Streams currently live in a single category (game), reached by tapping a game tile. */
+class CategoryViewModel(
+    private val gameId: String,
+    private val streamRepository: StreamRepository,
+) : ViewModel() {
+    private val _state = MutableStateFlow(CategoryUiState())
+    val state: StateFlow<CategoryUiState> = _state.asStateFlow()
+
+    init { load() }
+
+    fun retry() = load()
+
+    private fun load() = viewModelScope.launch {
+        _state.update { it.copy(isLoading = true, error = null) }
+        runCatching { streamRepository.streamsForGame(gameId) }
+            .onSuccess { streams ->
+                _state.update {
+                    it.copy(streams = streams, gameName = streams.firstOrNull()?.gameName ?: it.gameName, isLoading = false)
+                }
+            }
+            .onFailure { e -> _state.update { it.copy(isLoading = false, error = e.message ?: "Couldn't load this category.") } }
+    }
+}
+
 data class SearchUiState(
     val query: String = "",
     val results: List<com.puretv.twitch.core.api.ChannelSearchResult> = emptyList(),
@@ -189,6 +220,7 @@ class StreamViewModel(
 data class ChannelUiState(
     val channel: com.puretv.twitch.core.model.ChannelInfo? = null,
     val isLive: Boolean = false,
+    val viewerCount: Long = 0L,
 )
 
 class ChannelViewModel(
@@ -202,11 +234,12 @@ class ChannelViewModel(
     init {
         viewModelScope.launch {
             val channel = runCatching { channelRepository.getChannel(channelLogin) }.getOrNull()
-            val live = channel?.id?.let {
-                runCatching { streamRepository.streamsForChannels(listOf(channelLogin)).isNotEmpty() }
-                    .getOrDefault(false)
-            } ?: false
-            _state.update { it.copy(channel = channel, isLive = live) }
+            val stream = runCatching {
+                streamRepository.streamsForChannels(listOf(channelLogin)).firstOrNull()
+            }.getOrNull()
+            _state.update {
+                it.copy(channel = channel, isLive = stream != null, viewerCount = stream?.viewerCount?.toLong() ?: 0L)
+            }
         }
     }
 }

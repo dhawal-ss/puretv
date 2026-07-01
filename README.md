@@ -6,9 +6,9 @@ A clean, ad-free way to watch live streams on Windows, Android, and Android TV /
 
 [![Download for Windows](https://img.shields.io/badge/Download%20for%20Windows-Installer-7C3AED?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/dhawal-ss/puretv/releases/latest)
 [![Download for Android](https://img.shields.io/badge/Download%20for%20Android-APK-3DDC84?style=for-the-badge&logo=android&logoColor=white)](https://github.com/dhawal-ss/puretv/releases/download/android-v1.0.0/PureTV-for-Twitch-1.0.0.apk)
-[![Download for Android TV / Fire TV](https://img.shields.io/badge/Download%20for%20Android%20TV%20%2F%20Fire%20TV-APK-6441A5?style=for-the-badge&logo=androidtv&logoColor=white)](https://github.com/dhawal-ss/puretv/releases/download/tv-v1.0.0/PureTV-for-Twitch-TV-1.0.0.apk)
+[![Download for Android TV / Fire TV](https://img.shields.io/badge/Download%20for%20Android%20TV%20%2F%20Fire%20TV-APK-6441A5?style=for-the-badge&logo=androidtv&logoColor=white)](https://github.com/dhawal-ss/puretv/releases/download/tv-v1.0.0/PureTV-FireTV-AndroidTV-1.0.0.apk)
 
-**Windows: [download the latest installer](https://github.com/dhawal-ss/puretv/releases/latest). Android: [download the APK](https://github.com/dhawal-ss/puretv/releases/download/android-v1.0.0/PureTV-for-Twitch-1.0.0.apk). Android TV / Fire TV: [download the TV APK](https://github.com/dhawal-ss/puretv/releases/download/tv-v1.0.0/PureTV-for-Twitch-TV-1.0.0.apk).**
+**Windows: [download the latest installer](https://github.com/dhawal-ss/puretv/releases/latest). Android: [download the APK](https://github.com/dhawal-ss/puretv/releases/download/android-v1.0.0/PureTV-for-Twitch-1.0.0.apk). Android TV / Fire TV: [download the TV APK](https://github.com/dhawal-ss/puretv/releases/download/tv-v1.0.0/PureTV-FireTV-AndroidTV-1.0.0.apk).**
 
 </div>
 
@@ -49,15 +49,15 @@ PureTV has a separate build made for the TV, with a 10-foot layout you drive ent
 3. In Downloader's URL box, type this address and press Go:
 
    ```
-   https://github.com/dhawal-ss/puretv/releases/download/tv-v1.0.0/PureTV-for-Twitch-TV-1.0.0.apk
+   https://github.com/dhawal-ss/puretv/releases/download/tv-v1.0.0/PureTV-FireTV-AndroidTV-1.0.0.apk
    ```
 
 4. It downloads the APK, then asks to install it. Choose Install, and when it finishes you can delete the downloaded file to save space.
-5. Open PureTV from your app list. To sign in (optional, only needed to see the channels you follow), the app shows a short code, then go to **twitch.tv/activate** on your phone or computer and enter it. You can also just start watching top and category streams without signing in.
+5. Open PureTV from your app list. To sign in (optional, only needed to see the channels you follow), scan the on-screen QR code with your phone, or go to **twitch.tv/activate** and enter the short code shown. You can also just start watching top and category streams without signing in.
 
 A few notes:
 
-- Using the remote: D-pad to move, Select to open, Back to go back. On a stream, press Left/Right or Menu to show chat, and the Play/Pause button to pause. Ad blocking runs automatically, shown by the small pill on the player.
+- Using the remote: D-pad to move, Select to open, Back to go back. On a stream, press Left/Right or Menu to show chat, the Play/Pause button to pause, and Fast-Forward/Rewind to change video quality. Search brings up an on-screen keyboard, and browsing a category shows every channel live in it. Ad blocking runs automatically, shown by the small pill on the player.
 - This build is signed with a development key, so the TV labels it an app from an "unknown source". That is normal for sideloaded apps and safe to allow.
 - It needs Android TV / Fire OS based on Android 8.0 or newer (every current Fire TV Stick and Google TV qualifies).
 - To update later, sideload the newest TV APK the same way and install it over the existing app.

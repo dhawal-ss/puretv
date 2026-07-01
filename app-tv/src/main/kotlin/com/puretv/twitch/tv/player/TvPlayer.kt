@@ -18,6 +18,7 @@ import com.puretv.twitch.core.adblock.AdSimulator
 import com.puretv.twitch.core.adblock.BackupStreamResolver
 import com.puretv.twitch.core.adblock.PlaylistAction
 import com.puretv.twitch.core.adblock.PlaylistDetect
+import com.puretv.twitch.core.model.StreamQuality
 import com.puretv.twitch.core.stream.HlsMasterParser
 import kotlinx.coroutines.runBlocking
 import okhttp3.HttpUrl
@@ -147,6 +148,26 @@ class TvPlayer(
 
     fun togglePlayPause() {
         if (exoPlayer.isPlaying) exoPlayer.pause() else exoPlayer.play()
+    }
+
+    /**
+     * SECTION 7.4: force a max quality on the live HLS ladder via ExoPlayer
+     * track selection (FAST_FORWARD/REWIND and the quality chips drive this).
+     * SOURCE/AUTO clear the cap so ABR picks the best the link sustains; a
+     * specific resolution caps the video size; AUDIO_ONLY disables video entirely.
+     */
+    fun setQuality(quality: StreamQuality) {
+        val builder = exoPlayer.trackSelectionParameters.buildUpon()
+            .setTrackTypeDisabled(C.TRACK_TYPE_VIDEO, false)
+        when (quality) {
+            StreamQuality.AUDIO_ONLY -> builder.setTrackTypeDisabled(C.TRACK_TYPE_VIDEO, true)
+            StreamQuality.SOURCE, StreamQuality.AUTO -> builder.clearVideoSizeConstraints()
+            StreamQuality.P1080P60 -> builder.setMaxVideoSize(1920, 1080)
+            StreamQuality.P720P60 -> builder.setMaxVideoSize(1280, 720)
+            StreamQuality.P480P -> builder.setMaxVideoSize(854, 480)
+            StreamQuality.P360P -> builder.setMaxVideoSize(640, 360)
+        }
+        exoPlayer.trackSelectionParameters = builder.build()
     }
 
     /**

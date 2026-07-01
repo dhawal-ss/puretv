@@ -88,6 +88,14 @@ fun TvStreamScreen(
         isPlaying = true
     }
 
+    // Apply the selected quality to the player whenever it changes (the quality
+    // chips and FAST_FORWARD/REWIND both update `quality`). Runs on first
+    // composition too, so the initial SOURCE selection clears any stale cap the
+    // shared singleton player carried over from a previous stream.
+    LaunchedEffect(quality) {
+        runCatching { tvPlayer.setQuality(quality) }
+    }
+
     // Auto-hide: any input bumps `lastInputAt`; this effect restarts its 3s
     // countdown each time that happens and hides the chrome once it elapses
     // with no further input (Section 7.4: "auto-hide after 3 seconds").
