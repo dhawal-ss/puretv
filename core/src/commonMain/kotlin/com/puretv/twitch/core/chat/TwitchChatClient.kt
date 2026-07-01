@@ -252,6 +252,11 @@ class ChatRateLimiter(
  */
 object TwitchIrcParser {
 
+    // Monotonic counter for the message-id fallback in [buildMessageEvent].
+    // Lines are parsed sequentially on a connection's single read loop, so a
+    // plain var suffices to keep the synthesized id unique.
+    private var fallbackIdSeq = 0L
+
     fun parse(line: String, joinedChannel: String): ChatEvent? {
         var rest = line
         val tags = if (rest.startsWith("@")) {
@@ -307,7 +312,11 @@ object TwitchIrcParser {
         if (username.isBlank()) return null
         val badges = parseBadges(tags["badges"])
         return ChatMessage(
-            id = tags["id"] ?: "${tags["tmi-sent-ts"]}-$username",
+            // Twitch sends a unique `id` on every PRIVMSG; the fallback only fires
+            // on a malformed/tagless line. Append a monotonic seq so two messages
+            // from the same user in the same millisecond can't collide into one
+            // LazyColumn key (a duplicate-key crash).
+            id = tags["id"] ?: "${tags["tmi-sent-ts"]}-$username-${fallbackIdSeq++}",
             channel = channel,
             username = username,
             displayName = tags["display-name"]?.ifBlank { username } ?: username,

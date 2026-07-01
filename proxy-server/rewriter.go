@@ -52,7 +52,10 @@ func FilterPlaylist(raw string) FilteredPlaylist {
 
 	for _, line := range lines {
 		switch {
-		case strings.HasPrefix(line, "#EXT-X-DATERANGE") && strings.Contains(line, "stitched-ad"):
+		// Match the canonical `stitched` signifier (parity with AdMarkers.SIGNIFIER
+		// in core) rather than the narrower `stitched-ad` literal, so a Twitch CLASS
+		// reformat does not slip a pod past the rewriter.
+		case strings.HasPrefix(line, "#EXT-X-DATERANGE") && strings.Contains(line, "stitched"):
 			inAdBreak = true
 			adSegmentsThisPod = 0
 			sawAdMarkers = true

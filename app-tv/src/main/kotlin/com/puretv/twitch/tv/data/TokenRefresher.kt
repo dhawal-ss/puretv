@@ -1,4 +1,4 @@
-package com.puretv.twitch.android.data
+package com.puretv.twitch.tv.data
 
 import com.puretv.twitch.core.api.DeviceAuth
 import com.puretv.twitch.core.repository.UserRepository
@@ -6,18 +6,15 @@ import io.ktor.client.HttpClient
 import kotlinx.coroutines.flow.first
 
 /**
- * SECTION 03.2 — best-effort access-token refresh on app launch.
+ * SECTION 03.2, best-effort access-token refresh on app launch (TV counterpart
+ * of the phone app's `TokenRefresher`).
  *
  * Twitch device-flow access tokens expire; the stored refresh token (rotated on
- * each use) buys a fresh one. Before this, the refresh token was persisted but
- * never consumed, so a returning user whose access token had expired was
- * silently logged out with no recovery. We refresh proactively at startup.
- *
- * This is intentionally fail-soft: on a [com.puretv.twitch.core.api.TokenRefreshException]
- * (revoked/expired refresh token) or any network error we KEEP the existing
- * session rather than logging the user out. The existing access token may still
- * be valid, and if it is not, the next authenticated call surfaces the error to
- * the UI. We never sign the user out from here.
+ * each use) buys a fresh one. Fail-soft: on a
+ * [com.puretv.twitch.core.api.TokenRefreshException] (revoked/expired refresh
+ * token) or any network error we KEEP the existing session rather than logging
+ * the user out. Kept as its own class (not shared with app-android) because it
+ * depends on this app's own [AppSettingsStore] (Section 12.2).
  */
 class TokenRefresher(
     private val httpClient: HttpClient,
@@ -45,11 +42,9 @@ class TokenRefresher(
     }
 
     /**
-     * If the user is signed in but the username/userId are blank, the post-login
-     * identity lookup must have failed on a network blip (the session was saved
-     * token-first, so the token still landed). Nothing else ever backfills it, so
-     * chat would send under no name and Settings would show none. Retry the
-     * lookup here on launch, best-effort: a failure leaves the session untouched.
+     * If the user is signed in but username/userId are blank, the post-login
+     * identity lookup failed on a network blip (session was saved token-first).
+     * Retry the lookup here on launch, best-effort.
      */
     private suspend fun backfillIdentityIfMissing() {
         val settings = settingsStore.flow.first()

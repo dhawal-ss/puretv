@@ -13,9 +13,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.focusable
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.focus.focusable
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -84,10 +84,16 @@ fun TvStreamScreen(
 
     LaunchedEffect(state.playableUrl) {
         val url = state.playableUrl ?: return@LaunchedEffect
-        tvPlayer.exoPlayer.setMediaItem(MediaItem.fromUri(url))
-        tvPlayer.exoPlayer.prepare()
-        tvPlayer.exoPlayer.play()
+        tvPlayer.playUrl(url)
         isPlaying = true
+    }
+
+    // Apply the selected quality to the player whenever it changes (the quality
+    // chips and FAST_FORWARD/REWIND both update `quality`). Runs on first
+    // composition too, so the initial SOURCE selection clears any stale cap the
+    // shared singleton player carried over from a previous stream.
+    LaunchedEffect(quality) {
+        runCatching { tvPlayer.setQuality(quality) }
     }
 
     // Auto-hide: any input bumps `lastInputAt`; this effect restarts its 3s
@@ -101,7 +107,11 @@ fun TvStreamScreen(
     }
 
     DisposableEffect(Unit) {
-        onDispose { /* TvPlayer is a Koin singleton — survives navigation; nothing to release here. */ }
+        // TvPlayer is an app-wide Koin singleton with playWhenReady=true, so
+        // leaving this screen must STOP it, otherwise audio keeps playing after
+        // the viewer navigates back. We stop (not release): the singleton is reused
+        // for the next stream and rebuilds itself if it was ever released.
+        onDispose { tvPlayer.stop() }
     }
 
     Box(

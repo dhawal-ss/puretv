@@ -16,7 +16,6 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
@@ -136,35 +135,16 @@ fun SettingsScreen(onBack: () -> Unit) {
                 }
             }
             item {
-                var proxyDraft by remember(state.settings.customProxyUrl) { mutableStateOf(state.settings.customProxyUrl) }
-                var proxyError by remember { mutableStateOf<String?>(null) }
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Custom proxy URL (TTV LOL PRO compatible)", style = MaterialTheme.typography.bodyMedium, color = PureTvColors.TextSecondary)
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        OutlinedTextField(
-                            value = proxyDraft,
-                            onValueChange = { proxyDraft = it; proxyError = null },
-                            placeholder = { Text("https://api.ttv.lol", color = PureTvColors.TextMuted) },
-                            singleLine = true,
-                            isError = proxyError != null,
-                            modifier = Modifier.weight(1f),
-                        )
-                        Button(onClick = {
-                            // Validate before persisting: a malformed proxy silently breaks
-                            // ad-block resolution later with no feedback. Empty clears it.
-                            val trimmed = proxyDraft.trim()
-                            if (trimmed.isNotEmpty() && !trimmed.startsWith("https://")) {
-                                proxyError = "Proxy URL must start with https://"
-                            } else {
-                                proxyError = null
-                                viewModel.setProxyUrl(trimmed)
-                            }
-                        }) { Text("Save") }
-                    }
-                    proxyError?.let { err ->
-                        Text(err, style = MaterialTheme.typography.bodySmall, color = PureTvColors.Live)
-                    }
-                }
+                // NB: the custom-proxy / strategy controls were removed here. On
+                // Android, ad blocking runs entirely in-process (the OkHttp
+                // playlist interceptor strips pods locally); there is no proxy
+                // round-trip to configure, so those settings had no effect. The
+                // "Enable ad block" switch above is the one live control.
+                Text(
+                    "Ads are filtered on-device. No proxy setup required.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = PureTvColors.TextSecondary,
+                )
             }
             if (com.puretv.twitch.android.BuildConfig.DEBUG) {
                 item {

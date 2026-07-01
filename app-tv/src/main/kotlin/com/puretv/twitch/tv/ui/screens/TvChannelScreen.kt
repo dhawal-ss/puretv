@@ -72,7 +72,7 @@ fun TvChannelScreen(
                     style = MaterialTheme.typography.headlineLarge,
                     color = PureTvTvColors.TextPrimary,
                 )
-                if (state.isLive) TvLiveBadge(viewerCount = 0L)
+                if (state.isLive) TvLiveBadge(viewerCount = state.viewerCount)
             }
 
             if (!channel?.description.isNullOrBlank()) {

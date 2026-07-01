@@ -7,6 +7,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.togetherWith
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import com.puretv.twitch.android.data.SessionManager
 import com.puretv.twitch.android.ui.screens.WelcomeScreen
@@ -126,6 +127,14 @@ fun RootScreen(navController: NavHostController = rememberNavController()) {
  */
 @Composable
 fun MainScaffold(navController: NavHostController = rememberNavController()) {
+    // The NavController is retained across a logout -> Welcome -> re-login swap, so
+    // a previous session's back stack would otherwise survive into the new session
+    // (landing re-login deep in the old stack). Entering the shell, reset to the
+    // start tab. This runs only when MainScaffold (re)enters composition, i.e. at
+    // login; it is a no-op on a fresh stack and does not interfere mid-session.
+    LaunchedEffect(Unit) {
+        runCatching { navController.popBackStack(Routes.HOME, inclusive = false) }
+    }
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
     val showBar = currentRoute in TOP_TAB_ROUTES

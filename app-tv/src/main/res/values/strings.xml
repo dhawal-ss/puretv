@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">PureTV for Twitch</string>
+    <!-- Label deliberately carries "(TV)" so this build is never confused with
+         the phone/tablet app in a device's app list or when sideloading. -->
+    <string name="app_name">PureTV for Twitch (TV)</string>
     <string name="tagline">Twitch. No ads. No nonsense.</string>
     <string name="ad_blocked">AD BLOCKED</string>
     <string name="ad_filtered">AD FILTERED</string>

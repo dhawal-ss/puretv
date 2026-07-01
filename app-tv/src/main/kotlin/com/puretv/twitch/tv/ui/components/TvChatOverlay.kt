@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -44,35 +45,39 @@ fun TvChatOverlay(visible: Boolean, messages: List<ChatMessage>, modifier: Modif
         exit = slideOutHorizontally(targetOffsetX = { it }),
         modifier = modifier,
     ) {
-        Box(
-            modifier = Modifier
-                .fillMaxHeight()
-                .width(360.dp)
-                .background(Color.Black.copy(alpha = 0.65f))
-                .align(Alignment.CenterEnd)
-                .padding(20.dp),
-        ) {
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(
-                    text = "Chat",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = Color.White,
-                    modifier = Modifier.padding(bottom = 8.dp),
-                )
-                LazyColumn(state = listState, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    items(messages, key = { it.id }) { message ->
-                        Column {
-                            Text(
-                                text = message.displayName,
-                                style = MaterialTheme.typography.labelMedium,
-                                color = runCatching { Color(android.graphics.Color.parseColor(message.color)) }
-                                    .getOrDefault(Color(0xFF9B5DE5)),
-                            )
-                            Text(
-                                text = message.message,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = Color.White.copy(alpha = 0.9f),
-                            )
+        // AnimatedVisibility's content scope is not a BoxScope, so alignment can't
+        // be applied to the rail directly. Fill the transition area and align the
+        // fixed-width rail to the right edge from here.
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.CenterEnd) {
+            Box(
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .width(360.dp)
+                    .background(Color.Black.copy(alpha = 0.65f))
+                    .padding(20.dp),
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        text = "Chat",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = Color.White,
+                        modifier = Modifier.padding(bottom = 8.dp),
+                    )
+                    LazyColumn(state = listState, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        items(messages, key = { it.id }) { message ->
+                            Column {
+                                Text(
+                                    text = message.displayName,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = runCatching { Color(android.graphics.Color.parseColor(message.color)) }
+                                        .getOrDefault(Color(0xFF9B5DE5)),
+                                )
+                                Text(
+                                    text = message.message,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = Color.White.copy(alpha = 0.9f),
+                                )
+                            }
                         }
                     }
                 }

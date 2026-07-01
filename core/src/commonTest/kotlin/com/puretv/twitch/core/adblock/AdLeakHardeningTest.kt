@@ -1,5 +1,9 @@
 package com.puretv.twitch.core.adblock
 
+import io.ktor.client.HttpClient
+import io.ktor.client.engine.mock.MockEngine
+import io.ktor.client.engine.mock.respond
+import io.ktor.http.HttpStatusCode
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -158,5 +162,93 @@ class AdLeakHardeningTest {
         val result = rewriter.filter(clean)
         assertEquals(0, result.adSegmentsRemoved)
         assertFalse(result.containedAds)
+    }
+
+    @Test
+    fun normalPassStripsDaterangeWhenClassOmitsTheAdSuffix() {
+        // SIGNIFIER PARITY: the detector flags any `stitched` DATERANGE, but the
+        // rewriter used to open a pod only on the narrower `stitched-ad` literal.
+        // If Twitch reformats CLASS (e.g. "twitch-stitched" with no "-ad"), the
+        // normal pass must STILL strip the pod on its own, not lean on the
+        // mid-break fail-safe. DURATION=4.0 -> the two 2.0s ad segments.
+        val playlist = buildString {
+            appendLine("#EXTM3U")
+            appendLine("#EXTINF:2.000,live")
+            appendLine("content-1.ts")
+            appendLine("#EXT-X-DATERANGE:ID=\"ad\",CLASS=\"twitch-stitched\",DURATION=4.0")
+            appendLine("#EXT-X-DISCONTINUITY")
+            appendLine("#EXTINF:2.000,Amazon")
+            appendLine("ad-0.ts")
+            appendLine("#EXTINF:2.000,Amazon")
+            appendLine("ad-1.ts")
+            appendLine("#EXT-X-DISCONTINUITY")
+            appendLine("#EXTINF:2.000,live")
+            append("content-2.ts")
+        }
+
+        val result = rewriter.filter(playlist)
+
+        assertEquals(2, result.adSegmentsRemoved, "the stitched (no -ad suffix) pod must be stripped by the normal pass:\n${result.content}")
+        listOf("ad-0.ts", "ad-1.ts").forEach { assertFalse(result.content.contains(it), "ad \"$it\" leaked:\n${result.content}") }
+        listOf("content-1.ts", "content-2.ts").forEach { assertTrue(result.content.contains(it), "content \"$it\" wrongly dropped:\n${result.content}") }
+    }
+
+    @Test
+    fun filterPlaylistStripsLeadingAdTailEvenWhenALaterPodIsAlsoStripped() {
+        // AD-6 (the `adSegmentsRemoved == 0` blind spot): the window opens with an
+        // unmarked ad tail (opener scrolled out) closed by a bare discontinuity,
+        // AND contains a later fully-marked pod. The later pod makes the normal
+        // pass remove > 0 segments, so the simple fail-safe never fires and the
+        // leading tail leaks. filterPlaylist's structural check must catch it.
+        val engine = AdBlockEngine(AdBlockConfig(), HttpClient(MockEngine { respond("", HttpStatusCode.OK) }))
+        val window = buildString {
+            appendLine("#EXTM3U")
+            appendLine("#EXT-X-MEDIA-SEQUENCE:500")
+            appendLine("#EXTINF:2.000,Amazon")
+            appendLine("ad-tail-0.ts")          // leading mid-pod ad (no marker)
+            appendLine("#EXTINF:2.000,Amazon")
+            appendLine("ad-tail-1.ts")
+            appendLine("#EXT-X-DISCONTINUITY")   // bare return-to-content boundary
+            appendLine("#EXTINF:2.000,live")
+            appendLine("content-1.ts")
+            appendLine("#EXT-X-DATERANGE:ID=\"ad\",CLASS=\"twitch-stitched-ad\",DURATION=4.0")
+            appendLine("#EXT-X-DISCONTINUITY")
+            appendLine("#EXTINF:2.000,Amazon")
+            appendLine("ad-2.ts")               // later, fully-marked pod
+            appendLine("#EXTINF:2.000,Amazon")
+            appendLine("ad-3.ts")
+            appendLine("#EXT-X-DISCONTINUITY")
+            appendLine("#EXTINF:2.000,live")
+            append("content-2.ts")
+        }
+
+        val result = engine.filterPlaylist(window)
+
+        listOf("ad-tail-0.ts", "ad-tail-1.ts", "ad-2.ts", "ad-3.ts").forEach {
+            assertFalse(result.content.contains(it), "ad segment \"$it\" leaked:\n${result.content}")
+        }
+        assertTrue(result.content.contains("content-2.ts"), "post-pod content must survive:\n${result.content}")
+    }
+
+    @Test
+    fun filterPlaylistLeavesACleanContentWindowUntouched() {
+        // Guard against over-stripping: a window with a benign leading discontinuity
+        // and NO ads must pass through whole (the leading-tail check is gated on
+        // containsAds, so it can never fire here).
+        val engine = AdBlockEngine(AdBlockConfig(), HttpClient(MockEngine { respond("", HttpStatusCode.OK) }))
+        val window = buildString {
+            appendLine("#EXTM3U")
+            appendLine("#EXT-X-MEDIA-SEQUENCE:600")
+            appendLine("#EXTINF:2.000,live")
+            appendLine("content-1.ts")
+            appendLine("#EXT-X-DISCONTINUITY")
+            appendLine("#EXTINF:2.000,live")
+            append("content-2.ts")
+        }
+
+        val result = engine.filterPlaylist(window)
+
+        assertEquals(0, result.adSegmentsRemoved, "a clean window must not be stripped:\n${result.content}")
+        listOf("content-1.ts", "content-2.ts").forEach { assertTrue(result.content.contains(it), "content \"$it\" wrongly dropped:\n${result.content}") }
     }
 }
