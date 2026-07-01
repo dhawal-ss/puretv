@@ -10,6 +10,8 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.puretv.twitch.core.di.TokenHolder
 import com.puretv.twitch.core.model.AppSettings
+import com.puretv.twitch.core.session.SessionState
+import com.puretv.twitch.core.session.deriveSessionState
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
@@ -75,6 +77,18 @@ class AppSettingsStore(
         username = secureTokenStore.username().orEmpty(),
         userId = secureTokenStore.userId().orEmpty(),
     )
+
+    /**
+     * The session derivable SYNCHRONOUSLY at construction, from the token side
+     * only. [deriveSessionState] reads only the access token / identity, all of
+     * which [tokenState] already holds, so the auth gate can start from the REAL
+     * session instead of flashing the logged-out Welcome screen while the async
+     * DataStore performs its first disk read. (The non-token prefs that DataStore
+     * supplies do not influence the session.)
+     */
+    val initialSession: SessionState = with(tokenState.value) {
+        deriveSessionState(AppSettings(accessToken = accessToken, username = username, userId = userId))
+    }
 
     val flow: Flow<AppSettings> = combine(context.dataStore.data, tokenState) { prefs, token ->
         AppSettings(

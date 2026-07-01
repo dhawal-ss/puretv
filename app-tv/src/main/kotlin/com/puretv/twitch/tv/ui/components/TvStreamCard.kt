@@ -2,39 +2,47 @@ package com.puretv.twitch.tv.ui.components
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Border
 import androidx.tv.material3.Card
 import androidx.tv.material3.CardDefaults
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import coil3.compose.AsyncImage
 import com.puretv.twitch.core.model.GameInfo
 import com.puretv.twitch.core.model.StreamInfo
 import com.puretv.twitch.tv.ui.theme.PureTvTvColors
 
+/** Twitch thumbnail/box-art URLs are templates carrying `{width}`/`{height}`. */
+private fun templated(url: String, width: Int, height: Int): String =
+    url.replace("{width}", width.toString()).replace("{height}", height.toString())
+
 /**
  * SECTION 7.3 [CRITICAL] — canonical TV card pattern from the spec: scale up
  * 8% on focus, draw a 2dp purple focus ring, and require an explicit
- * `onFocusChanged` so the row/grid can track which card the D-pad landed on
- * (used by [TvHomeScreen]/[TvBrowseScreen] for `focusRestorer` bookkeeping).
+ * `onFocusChanged` so the row/grid can track which card the D-pad landed on.
  *
- * `Card`'s own `onClick` already wires DPAD_CENTER/ENTER as "confirm" — rule
- * #6 from Section 7.3 ("never use onClick alone without a key handler") is
- * satisfied because `androidx.tv.material3.Card` maps both pointer clicks
- * *and* the D-pad confirm key to the same `onClick` lambda.
+ * `Card`'s own `onClick` already wires DPAD_CENTER/ENTER as "confirm" (rule #6
+ * from Section 7.3): `androidx.tv.material3.Card` maps both pointer clicks and
+ * the D-pad confirm key to the same `onClick` lambda.
  */
 @Composable
 fun TvStreamCard(stream: StreamInfo, onClick: () -> Unit, modifier: Modifier = Modifier) {
@@ -51,11 +59,25 @@ fun TvStreamCard(stream: StreamInfo, onClick: () -> Unit, modifier: Modifier = M
         ),
     ) {
         Column(modifier = Modifier.background(PureTvTvColors.Surface).padding(12.dp)) {
-            // Thumbnail placeholder — wire Coil's AsyncImage to stream.thumbnailUrl once
-            // a real Twitch CLIENT_ID is configured (thumbnails require template URL substitution).
-            androidx.compose.foundation.layout.Box(
-                modifier = Modifier.fillMaxWidth().height(120.dp).background(PureTvTvColors.SurfaceVariant),
-            )
+            // Live preview thumbnail. Twitch serves a {width}x{height} template we
+            // substitute; a coloured plate shows through until the image loads.
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(120.dp)
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(PureTvTvColors.SurfaceVariant),
+            ) {
+                val thumb = templated(stream.thumbnailUrl, 440, 248)
+                if (thumb.isNotBlank()) {
+                    AsyncImage(
+                        model = thumb,
+                        contentDescription = null,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop,
+                    )
+                }
+            }
             TvLiveBadge(viewerCount = stream.viewerCount.toLong(), modifier = Modifier.padding(top = 8.dp))
             Text(
                 text = stream.userName,
@@ -64,7 +86,7 @@ fun TvStreamCard(stream: StreamInfo, onClick: () -> Unit, modifier: Modifier = M
                 maxLines = 1,
             )
             Text(
-                text = stream.gameName.ifBlank { "—" },
+                text = stream.gameName.ifBlank { "Live" },
                 style = MaterialTheme.typography.bodyMedium,
                 color = PureTvTvColors.TextSecondary,
                 maxLines = 1,
@@ -89,9 +111,23 @@ fun TvGameCard(game: GameInfo, onClick: () -> Unit, modifier: Modifier = Modifie
         ),
     ) {
         Column(modifier = Modifier.background(PureTvTvColors.Surface).padding(10.dp)) {
-            androidx.compose.foundation.layout.Box(
-                modifier = Modifier.fillMaxWidth().height(220.dp).background(PureTvTvColors.SurfaceVariant),
-            )
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(220.dp)
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(PureTvTvColors.SurfaceVariant),
+            ) {
+                val art = templated(game.boxArtUrl, 285, 380)
+                if (art.isNotBlank()) {
+                    AsyncImage(
+                        model = art,
+                        contentDescription = null,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop,
+                    )
+                }
+            }
             Text(
                 text = game.name,
                 style = MaterialTheme.typography.bodyLarge,

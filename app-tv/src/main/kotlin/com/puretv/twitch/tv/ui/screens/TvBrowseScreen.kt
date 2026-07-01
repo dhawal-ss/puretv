@@ -34,7 +34,7 @@ import org.koin.androidx.compose.koinViewModel
  */
 @Composable
 fun TvBrowseScreen(
-    onOpenChannel: (String) -> Unit,
+    onOpenCategory: (String) -> Unit,
     onBack: () -> Unit,
     viewModel: BrowseViewModel = koinViewModel(),
 ) {
@@ -61,12 +61,9 @@ fun TvBrowseScreen(
             contentPadding = PaddingValues(bottom = 32.dp),
         ) {
             items(state.games, key = { it.id }) { game ->
-                // Browsing a category currently routes to channel search results
-                // scoped by game name — `onOpenChannel` here is a placeholder hook
-                // until a dedicated "streams for game" list view is wired (the
-                // `core` `ChannelRepository`/`StreamRepository` already expose the
-                // Helix `game_id` filter needed for that follow-up screen).
-                TvGameCard(game = game, onClick = { onOpenChannel(game.name) })
+                // Clicking a category opens its live-streams grid (TvCategoryScreen),
+                // keyed by the Helix game_id.
+                TvGameCard(game = game, onClick = { onOpenCategory(game.id) })
             }
         }
     }
