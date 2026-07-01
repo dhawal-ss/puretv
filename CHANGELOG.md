@@ -11,6 +11,18 @@ release notes automatically.
 
 ---
 
+## 1.10.1 - 2026-07-01
+
+The first published build of the 1.10 line. It brings the new 7TV / Chatterino-style chat and makes updating reliable.
+
+### New
+- **A much better chat experience.** Live 7TV emote updates (new emotes appear the moment a channel adds them, no restart), real Twitch, subscriber, and moderator badge icons instead of plain text, sub and raid announcements, a highlight when someone mentions you, and a Mentions tab next to chat.
+
+### Fixed
+- **Updates install cleanly now.** Before, installing an update could leave PureTV unable to open (a "cannot open ...cfg" error) until you reinstalled it by hand, because the new files were written while the app was still closing. PureTV now shuts down fully before an update, and the installer force-closes any leftover PureTV first, so updates just work, including the update onto this version from an older one.
+
+Updating from an older version and PureTV will not open afterward? Download the installer above and run it once. That fixes the install, and updates from then on are seamless.
+
 ## 1.10.0 - 2026-06-30
 
 Brings the chat experience closer to 7TV and Chatterino, with live emotes, real badge icons, and proper moderation and event messages.

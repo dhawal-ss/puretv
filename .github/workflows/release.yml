@@ -162,8 +162,8 @@ jobs:
 
   draft-release:
     name: Create draft GitHub Release
-    # Only the Windows installer gates the release; Android is non-blocking and
-    # the proxy image publishes itself to GHCR independently.
+    # Only the Windows installer gates the release; the Android app is released on
+    # its own `android-v*` channel, and the proxy image publishes to GHCR independently.
     needs: [windows]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
