@@ -52,3 +52,26 @@ Name: "{autodesktop}\PureTV"; Filename: "{app}\{#MyAppExe}"
 ; skipifsilent -> do NOT auto-launch during a silent in-app update; the updater
 ;                 handles its own relaunch
 Filename: "{app}\{#MyAppExe}"; Description: "Launch PureTV now"; Flags: nowait postinstall skipifsilent
+
+[Code]
+// PrepareToInstall runs BEFORE the file phase (before the InstallDelete and Files
+// sections), so this is where we make sure no PureTV process is holding app files.
+// Older in-app updaters do not reliably wait for the app to exit: its process can
+// linger on background threads (the local stream proxy / VLC) and keep the app
+// folder locked, so the in-place upgrade wipes that folder but fails to re-copy it,
+// leaving the launcher without its .cfg so the app will not start. Force-closing the
+// process here makes the upgrade succeed even when the OLD updater did not wait,
+// which is what lets users on a pre-fix build update cleanly.
+//
+// taskkill by IMAGE NAME with NO /T on purpose: during an in-app update the script
+// that launched this installer is a descendant of the very app we are killing, so a
+// tree-kill would terminate the installer itself. Best-effort: if PureTV is not
+// running, taskkill simply no-ops.
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+var
+  ResultCode: Integer;
+begin
+  Exec('taskkill.exe', '/F /IM "PureTV for Twitch.exe"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Sleep(1500);
+  Result := '';
+end;
