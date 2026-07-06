@@ -123,6 +123,12 @@ git push origin v1.0.1
 
 CI builds the installers and opens a draft release. Publish it, and the in-app updater picks it up on everyone's next launch.
 
+### Release channels (important)
+
+Windows (`v*`), Android (`android-v*`), and Android TV / Fire TV (`tv-v*`, plus the moving `tv-latest`) all publish from this one repo, so they share GitHub's single "Latest" pointer. The **Download for Windows** button above and the Windows in-app updater both resolve `/releases/latest`, which GitHub points at the newest release that is **not** a draft or pre-release. So any Android or TV release that isn't marked pre-release steals "Latest" from Windows, and because those releases carry only an APK (no `.exe`), the Windows button lands users on the APK and the desktop updater finds no installer and silently offers nothing.
+
+Rule: **every Android and TV release must be created as a pre-release** (`gh release create <tag> --prerelease ...`, or `gh release edit <tag> --prerelease` after the fact). Only Windows `v*` releases stay non-pre-release. This is safe because the Android/TV download links here use pinned tag URLs and the TV updater reads a pinned `tv-latest/tv-version.json` manifest, none of which depend on the "Latest" pointer. The desktop updater additionally skips any release without a Windows installer as a backstop, but keep the pre-release flag correct so the download button stays right.
+
 ## License
 
 PureTV is open source under the MIT License (see [LICENSE](LICENSE)). Contributions are very welcome, so feel free to open an issue or a pull request.

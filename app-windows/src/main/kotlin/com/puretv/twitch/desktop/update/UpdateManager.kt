@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
 import java.io.File
 import java.net.URI
@@ -79,7 +80,15 @@ class UpdateManager {
     }
 
     private suspend fun fetchLatest(): UpdateInfo? = withContext(Dispatchers.IO) {
-        val url = "https://api.github.com/repos/${AppBuildConfig.GITHUB_OWNER}/${AppBuildConfig.GITHUB_REPO}/releases/latest"
+        // LIST releases (newest page) rather than /releases/latest. Windows, Android,
+        // and TV publish from the same repo and share GitHub's single "Latest"
+        // pointer: a newer APK-only TV/Android release makes /releases/latest resolve
+        // to a release with no Windows installer, silently killing desktop
+        // auto-update. We instead pick the newest PUBLISHED release that actually
+        // carries an installer (see latestInstallerRelease), so a mis-flagged sibling
+        // release on another channel can't hijack the updater. per_page=100 (one page,
+        // no pagination) keeps it robust against a burst of non-Windows releases.
+        val url = "https://api.github.com/repos/${AppBuildConfig.GITHUB_OWNER}/${AppBuildConfig.GITHUB_REPO}/releases?per_page=100"
         val request = HttpRequest.newBuilder(URI.create(url))
             .header("Accept", "application/vnd.github+json")
             .header("User-Agent", "PureTV-Updater")
@@ -94,8 +103,10 @@ class UpdateManager {
             r
         }
         if (response.statusCode() != 200) return@withContext null
-        val release = json.decodeFromString(GithubRelease.serializer(), response.body())
-        if (release.draft || release.prerelease) return@withContext null
+        // Unauthenticated list-releases never returns drafts; latestInstallerRelease
+        // still filters draft/prerelease defensively and requires an installer asset.
+        val releases = json.decodeFromString(ListSerializer(GithubRelease.serializer()), response.body())
+        val release = latestInstallerRelease(releases) ?: return@withContext null
         val asset = release.installerAsset() ?: return@withContext null
         UpdateInfo(
             version = release.tag_name,

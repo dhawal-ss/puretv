@@ -57,3 +57,32 @@ fun GithubRelease.installerAsset(): GithubAsset? =
  */
 fun GithubRelease.signatureAsset(installer: GithubAsset): GithubAsset? =
     assets.firstOrNull { it.name.equals("${installer.name}.sig", ignoreCase = true) }
+
+/**
+ * From a `/releases` list (any order), the release the desktop updater should
+ * offer: the highest-version PUBLISHED (non-draft, non-prerelease) release that
+ * actually carries a Windows installer asset ([installerAsset]).
+ *
+ * Deliberately NOT "whatever `/releases/latest` returns". Windows, Android, and TV
+ * all publish from one repo and share GitHub's single "Latest" pointer, so a newer
+ * APK-only TV/Android release makes `/releases/latest` resolve to a release with no
+ * `.msi`/`.exe` — which silently killed desktop auto-update (installerAsset() → null
+ * → no update ever offered). Filtering for an installer asset makes the updater
+ * immune to that, no matter how the other channels' releases are flagged.
+ *
+ * Picks by semantic version (not list order) so it's correct even if the API ever
+ * returns releases out of created-at order; the caller's [Semver.isNewer] gate still
+ * decides whether the result is actually newer than the running build.
+ */
+fun latestInstallerRelease(releases: List<GithubRelease>): GithubRelease? =
+    releases
+        .filter { !it.draft && !it.prerelease && it.installerAsset() != null }
+        .maxWithOrNull { a, b ->
+            // isNewer(current, candidate) is true when candidate > current, so
+            // isNewer(b, a) means a is the newer of the two → a sorts greater.
+            when {
+                Semver.isNewer(b.tag_name, a.tag_name) -> 1
+                Semver.isNewer(a.tag_name, b.tag_name) -> -1
+                else -> 0
+            }
+        }
