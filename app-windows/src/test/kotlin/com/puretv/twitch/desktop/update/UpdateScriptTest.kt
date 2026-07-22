@@ -24,6 +24,7 @@ class UpdateScriptTest {
         assertTrue(s.bat.contains("ping 127.0.0.1 -n 3 >nul"), s.bat)
         assertFalse(s.bat.contains("timeout"), s.bat)
         assertTrue(s.bat.contains("\"C:\\tmp\\PureTV-Setup-1.4.0.exe\" /VERYSILENT /SUPPRESSMSGBOXES /NORESTART"), s.bat)
+        assertTrue(s.bat.contains("/LOG=\"C:\\tmp\\PureTV-Setup-1.4.0.exe.install.log\""), s.bat)
         assertTrue(s.bat.contains("\"C:\\app\\PureTV for Twitch.exe\""), s.bat)
         assertTrue(s.bat.trimEnd().endsWith("exit /b 0"), s.bat)
     }
@@ -40,10 +41,29 @@ class UpdateScriptTest {
         assertTrue(s.bat.contains("set \"APPPID=4242\""), s.bat)
         assertTrue(s.bat.contains("tasklist /fi \"PID eq %APPPID%\""), s.bat)
         assertTrue(s.bat.contains("taskkill /f /pid %APPPID%"), s.bat)
+        assertTrue(s.bat.contains("taskkill /f /im \"PureTV for Twitch.exe\""), s.bat)
+        assertTrue(s.bat.contains("IMAGENAME eq PureTV for Twitch.exe"), s.bat)
         // No tree-kill: /T would kill this very script (a descendant of the app).
         assertFalse(s.bat.contains("/t "), s.bat.lowercase())
         // The wait/kill block precedes the installer invocation.
         assertTrue(s.bat.indexOf("APPPID") < s.bat.indexOf("VERYSILENT"), s.bat)
+    }
+
+    @Test fun relaunchRequiresSuccessfulInstallAndLauncherConfig() {
+        val s = buildUpdateScripts(
+            installerPath = "C:\\tmp\\x.exe",
+            isMsi = false,
+            appExePath = "C:\\app\\PureTV for Twitch.exe",
+            batPath = "C:\\tmp\\b.bat",
+            appPid = 4242L,
+        )
+        val installer = s.bat.indexOf("/VERYSILENT")
+        val exitCheck = s.bat.indexOf("INSTALL_EXIT")
+        val configCheck = s.bat.indexOf("if not exist \"C:\\app\\app\\PureTV for Twitch.cfg\"")
+        val relaunch = s.bat.indexOf("start \"\" \"C:\\app\\PureTV for Twitch.exe\"")
+        assertTrue(installer in 0..<exitCheck, s.bat)
+        assertTrue(exitCheck < configCheck, s.bat)
+        assertTrue(configCheck < relaunch, s.bat)
     }
 
     @Test fun vbsRunsBatHiddenAndDetached() {
@@ -68,7 +88,7 @@ class UpdateScriptTest {
             batPath = "C:\\tmp\\b.bat",
             appPid = 1L,
         )
-        assertTrue(s.bat.contains("msiexec /i \"C:\\tmp\\x.msi\" /passive /norestart"), s.bat)
+        assertTrue(s.bat.contains("msiexec /i \"C:\\tmp\\x.msi\" /passive /norestart /l*v \"C:\\tmp\\x.msi.install.log\""), s.bat)
     }
 
     @Test fun noRelaunchLineWhenExeNull() {

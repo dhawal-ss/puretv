@@ -408,8 +408,9 @@ internal data class UpdateScripts(val bat: String, val vbs: String)
 /**
  * Builds the detached self-update scripts.
  *
- * The .bat first WAITS FOR THE APP TO FULLY EXIT, then runs the installer
- * silently, relaunches the app, then exits. The .vbs runs that .bat through a
+ * The .bat first WAITS FOR EVERY APP PROCESS TO FULLY EXIT, then runs the
+ * installer silently, validates its exit code and launcher config, relaunches
+ * the app only after those gates pass, then exits. The .vbs runs that .bat through a
  * HIDDEN window (style 0) via WScript.Shell, so the update never shows — or
  * leaves open — a console window. (The old `cmd /c start "" /min <bat>` left a
  * prompt window sitting open.)
@@ -448,14 +449,31 @@ internal fun buildUpdateScripts(
     lines += "taskkill /f /pid %APPPID% >nul 2>&1"
     lines += "ping 127.0.0.1 -n 3 >nul"
     lines += ":puretv_app_closed"
-    // ~2s settle so the OS fully releases the file handles after the process dies.
+    // jpackage uses a launcher plus a JVM-host process with the same image name.
+    // ProcessHandle.current() identifies only one of them. Kill every remaining
+    // sibling and poll until all handles are gone before touching the install.
+    lines += "taskkill /f /im \"PureTV for Twitch.exe\" >nul 2>&1"
+    lines += "for /l %%i in (1,1,10) do ("
+    lines += "  tasklist /fi \"IMAGENAME eq PureTV for Twitch.exe\" 2>nul | find /i \"PureTV for Twitch.exe\" >nul || goto puretv_all_closed"
+    lines += "  ping 127.0.0.1 -n 2 >nul"
+    lines += "  taskkill /f /im \"PureTV for Twitch.exe\" >nul 2>&1"
+    lines += ")"
+    lines += ":puretv_all_closed"
+    // ~2s settle so the OS fully releases file handles after the processes die.
     lines += "ping 127.0.0.1 -n 3 >nul"
+    val installerLog = "$installerPath.install.log"
     lines += if (isMsi) {
-        "msiexec /i \"" + installerPath + "\" /passive /norestart"
+        "msiexec /i \"" + installerPath + "\" /passive /norestart /l*v \"" + installerLog + "\""
     } else {
-        "\"" + installerPath + "\" /VERYSILENT /SUPPRESSMSGBOXES /NORESTART"
+        "\"" + installerPath + "\" /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /LOG=\"" + installerLog + "\""
     }
+    lines += "set \"INSTALL_EXIT=%ERRORLEVEL%\""
+    lines += "if not \"%INSTALL_EXIT%\"==\"0\" exit /b %INSTALL_EXIT%"
     if (appExePath != null) {
+        val separator = maxOf(appExePath.lastIndexOf('\\'), appExePath.lastIndexOf('/'))
+        val installDir = if (separator >= 0) appExePath.substring(0, separator) else "."
+        val launcherConfig = "$installDir\\app\\PureTV for Twitch.cfg"
+        lines += "if not exist \"" + launcherConfig + "\" exit /b 2"
         lines += "start \"\" \"" + appExePath + "\""
     }
     lines += "exit /b 0"

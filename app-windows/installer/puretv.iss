@@ -30,17 +30,18 @@ Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
 ArchitecturesInstallIn64BitMode=x64
-
-[InstallDelete]
-; Wipe the previous app jars BEFORE copying the new ones. jpackage names every
-; jar with a content hash (app-windows-<hash>.jar), so an in-place upgrade would
-; otherwise LEAVE every old version's jars behind — they pile up over upgrades
-; and can confuse the classpath. The dir is repopulated by [Files] below; the
-; runtime/ and launcher have stable names and are overwritten, so only app\ needs this.
-Type: filesandordirs; Name: "{app}\app"
+CloseApplications=force
+CloseApplicationsFilter=PureTV for Twitch.exe
+RestartApplications=no
 
 [Files]
-Source: "..\build\compose\binaries\main-release\app\PureTV for Twitch\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs ignoreversion
+; Never delete the currently runnable app before its replacement is complete.
+; Copy the full payload first while preserving the old launcher config, then
+; replace the config LAST as the commit marker. If setup is interrupted, the old
+; config and its referenced jars remain runnable; a completed install points the
+; launcher at the newly copied content-hashed jar set.
+Source: "..\build\compose\binaries\main-release\app\PureTV for Twitch\*"; DestDir: "{app}"; Excludes: "app\PureTV for Twitch.cfg"; Flags: recursesubdirs createallsubdirs ignoreversion
+Source: "..\build\compose\binaries\main-release\app\PureTV for Twitch\app\PureTV for Twitch.cfg"; DestDir: "{app}\app"; Flags: ignoreversion
 
 [Icons]
 Name: "{group}\PureTV"; Filename: "{app}\{#MyAppExe}"
@@ -54,7 +55,7 @@ Name: "{autodesktop}\PureTV"; Filename: "{app}\{#MyAppExe}"
 Filename: "{app}\{#MyAppExe}"; Description: "Launch PureTV now"; Flags: nowait postinstall skipifsilent
 
 [Code]
-// PrepareToInstall runs BEFORE the file phase (before the InstallDelete and Files
+// PrepareToInstall runs BEFORE the file phase (before the Files
 // sections), so this is where we make sure no PureTV process is holding app files.
 // Older in-app updaters do not reliably wait for the app to exit: its process can
 // linger on background threads (the local stream proxy / VLC) and keep the app
@@ -74,4 +75,19 @@ begin
   Exec('taskkill.exe', '/F /IM "PureTV for Twitch.exe"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
   Sleep(1500);
   Result := '';
+end;
+
+// A successful installer must never leave a launcher without its config. Raise
+// an installer failure before the updater can relaunch if that invariant is not
+// satisfied. The detached updater also checks this file as a second barrier.
+procedure CurStepChanged(CurStep: TSetupStep);
+var
+  LauncherConfig: String;
+begin
+  if CurStep = ssPostInstall then
+  begin
+    LauncherConfig := ExpandConstant('{app}\app\PureTV for Twitch.cfg');
+    if not FileExists(LauncherConfig) then
+      RaiseException('Installation validation failed: launcher configuration is missing.');
+  end;
 end;

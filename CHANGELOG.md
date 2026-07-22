@@ -11,6 +11,13 @@ release notes automatically.
 
 ---
 
+## 1.10.3 - 2026-07-22
+
+Makes the Windows update installation itself interruption-safe.
+
+### Fixed
+- **Updating can no longer leave PureTV unable to open.** The installer now preserves the working app until every replacement file is ready, switches the launcher configuration last, waits for every PureTV process to close, and verifies the finished installation before reopening. This prevents the missing `PureTV for Twitch.cfg` error seen during the 1.10.2 update.
+
 ## 1.10.2 - 2026-07-22
 
 Keeps live streams playing through ad transitions and makes Windows updates dependable across every PureTV release channel.
