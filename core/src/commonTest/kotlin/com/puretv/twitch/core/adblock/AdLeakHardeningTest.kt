@@ -111,7 +111,7 @@ class AdLeakHardeningTest {
         val result = rewriter.filter(tailWindow, assumeStartInAdBreak = true)
 
         assertEquals("#EXTM3U", result.content.lineSequence().first(), "playlist must still begin with #EXTM3U:\n${result.content}")
-        listOf("#EXT-X-VERSION:3", "#EXT-X-TARGETDURATION:2", "#EXT-X-MEDIA-SEQUENCE:204", "#EXT-X-DISCONTINUITY-SEQUENCE:5").forEach {
+        listOf("#EXT-X-VERSION:3", "#EXT-X-TARGETDURATION:2", "#EXT-X-MEDIA-SEQUENCE:205", "#EXT-X-DISCONTINUITY-SEQUENCE:6").forEach {
             assertTrue(result.content.contains(it), "header \"$it\" must be preserved through the fail-safe:\n${result.content}")
         }
         assertFalse(result.content.contains("ad-7.ts"), "leading mid-pod ad segment must still be stripped")

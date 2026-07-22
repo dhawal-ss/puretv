@@ -42,6 +42,7 @@ import com.puretv.twitch.desktop.data.DesktopSettingsStore
 import com.puretv.twitch.desktop.data.FollowStore
 import com.puretv.twitch.desktop.data.FollowedChannel
 import com.puretv.twitch.desktop.player.LocalStreamProxy
+import com.puretv.twitch.desktop.player.PlaybackStallWatchdog
 import com.puretv.twitch.desktop.player.ProxyUnavailableException
 import com.puretv.twitch.desktop.player.DesktopPlayer
 import com.puretv.twitch.desktop.ui.chat.ChatModeration
@@ -333,6 +334,7 @@ class StreamViewModel(
     private var selfBadges: List<Badge> = emptyList()
     private var echoCounter = 0
     private var systemCounter = 0
+    private val playbackStallWatchdog = PlaybackStallWatchdog()
 
     // Written on the emote-load coroutine, read on the chat-collect + send paths.
     // Safe as a @Volatile reference because the map is immutable after publish:
@@ -441,6 +443,23 @@ class StreamViewModel(
             adBlockEngine.status.collect { status -> _state.update { it.copy(adBlockStatus = status) } }
         }
         scope.launch {
+            // libVLC can remain in PLAYING after its HLS demuxer has stopped
+            // advancing, so no error callback reaches the UI. Detect that exact
+            // state and perform the same fresh local-URL load that previously
+            // required leaving and re-entering the stream manually.
+            while (true) {
+                delay(2_000)
+                val url = _state.value.playableUrl
+                if (url == null) {
+                    playbackStallWatchdog.reset()
+                    continue
+                }
+                if (playbackStallWatchdog.sample(vlcPlayer.status.value, System.currentTimeMillis())) {
+                    vlcPlayer.play(url)
+                }
+            }
+        }
+        scope.launch {
             // Anonymous (read-only) IRC identity unless we have BOTH a token
             // and the resolved login of the token's owner — Twitch IRC will
             // drop the connection if PASS/NICK don't match. Guard the decrypt so
@@ -502,6 +521,7 @@ class StreamViewModel(
 
     private fun playAt(quality: StreamQuality) {
         val url = LocalStreamProxy.streamUrl(channelLogin, quality)
+        playbackStallWatchdog.reset()
         _state.update { it.copy(playableUrl = url, currentQuality = quality) }
         vlcPlayer.play(url)
     }

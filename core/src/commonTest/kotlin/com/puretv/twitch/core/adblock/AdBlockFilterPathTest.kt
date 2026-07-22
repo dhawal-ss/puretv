@@ -34,6 +34,8 @@ class AdBlockFilterPathTest {
         assertEquals(false, AdMarkers.containsAds(filtered.content), "no ad markers may remain")
         assertEquals(true, filtered.content.contains("content-100.ts"), "content segment must survive")
         assertEquals(false, filtered.content.contains("ad-0.ts"), "ad segment must be gone")
+        assertEquals(1, filtered.content.lineSequence().count { it == "#EXTM3U" }, "sequence repair must not duplicate headers")
+        assertEquals(1, filtered.content.lineSequence().count { it.startsWith("#EXT-X-MEDIA-SEQUENCE:") })
     }
 
     @Test fun stripsScte35CueOutCueInPod() {

@@ -42,7 +42,7 @@ class ManifestRewriterTest {
     }
 
     @Test
-    fun removesDaterangeOnlyAdBreakAndKeepsTrailingContent() {
+    fun removesDaterangeOnlyAdBreakAndKeepsSequenceSafeTrailingContent() {
         // REAL-WORLD FORMAT: modern Twitch midrolls are bracketed by a
         // #EXT-X-DATERANGE CLASS="twitch-stitched-ad" and a pair of
         // #EXT-X-DISCONTINUITY tags — with NO #EXT-X-CUE-IN. The rewriter must
@@ -57,12 +57,17 @@ class ManifestRewriterTest {
         listOf("ad-0.ts", "ad-1.ts", "ad-2.ts", "twitch-stitched-ad").forEach { forbidden ->
             assertFalse(result.content.contains(forbidden), "ad artifact \"$forbidden\" survived:\n${result.content}")
         }
-        listOf("content-1.ts", "content-2.ts", "content-3.ts", "content-4.ts").forEach { expected ->
+        listOf("content-3.ts", "content-4.ts").forEach { expected ->
             assertTrue(
                 result.content.contains(expected),
                 "content segment \"$expected\" was wrongly dropped — the ad break never ended:\n${result.content}",
             )
         }
+        listOf("content-1.ts", "content-2.ts").forEach { consumed ->
+            assertFalse(result.content.contains(consumed), "pre-ad segment must be trimmed: $consumed\n${result.content}")
+        }
+        assertTrue(result.content.contains("#EXT-X-MEDIA-SEQUENCE:105"), result.content)
+        assertTrue(result.content.contains("#EXT-X-DISCONTINUITY-SEQUENCE:2"), result.content)
     }
 
     @Test

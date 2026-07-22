@@ -11,6 +11,14 @@ release notes automatically.
 
 ---
 
+## 1.10.2 - 2026-07-22
+
+Keeps live streams playing through ad transitions and makes Windows updates dependable across every PureTV release channel.
+
+### Fixed
+- **Streams no longer freeze a few minutes after opening.** Twitch can number the same live broadcast differently when PureTV switches between clean backup playlists. PureTV now keeps one continuous playback timeline through those switches, repairs playlist numbering when ad segments are removed, and automatically reconnects if the video clock genuinely stops advancing.
+- **The Windows updater always finds the newest Windows installer.** Android and TV releases can no longer hide a newer Windows update, even though every PureTV app shares the same GitHub releases page.
+
 ## 1.10.1 - 2026-07-01
 
 The first published build of the 1.10 line. It brings the new 7TV / Chatterino-style chat and makes updating reliable.

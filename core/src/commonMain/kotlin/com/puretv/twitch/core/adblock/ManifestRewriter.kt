@@ -50,6 +50,10 @@ class ManifestRewriter {
     fun filter(rawPlaylist: String, assumeStartInAdBreak: Boolean = false): FilteredPlaylist {
         val lines = rawPlaylist.lines()
         val cleaned = ArrayList<String>(lines.size)
+        data class RetainedSegment(val rawIndex: Int, val rawLineIndex: Int, val cleanedLineIndex: Int)
+        val retainedSegments = ArrayList<RetainedSegment>()
+        var rawSegmentIndex = -1
+        var lastRemovedSegmentIndex = -1
         var inAdBreak = assumeStartInAdBreak
         var adSegmentsThisPod = 0
         var removedSegments = 0
@@ -75,7 +79,9 @@ class ManifestRewriter {
         fun podDurationConsumed(): Boolean =
             podDurationTarget <= 0.0 || consumedAdSeconds + DURATION_EPSILON >= podDurationTarget
 
-        for (line in lines) {
+        for ((rawLineIndex, line) in lines.withIndex()) {
+            val isSegmentUri = line.isNotBlank() && !line.startsWith("#")
+            if (isSegmentUri) rawSegmentIndex++
             when {
                 isStructuralHeaderTag(line) -> {
                     // Playlist-level header tags (#EXTM3U, #EXT-X-VERSION,
@@ -155,18 +161,33 @@ class ManifestRewriter {
                     // Ad segment URI.
                     adSegmentsThisPod++
                     removedSegments++
+                    lastRemovedSegmentIndex = rawSegmentIndex
                     consumedAdSeconds += pendingSegmentSeconds
                     pendingSegmentSeconds = DEFAULT_AD_SEGMENT_SECONDS
                 }
                 inAdBreak -> {
                     // Blank line inside the pod — swallow it.
                 }
-                else -> cleaned += line
+                else -> {
+                    cleaned += line
+                    if (isSegmentUri) {
+                        retainedSegments += RetainedSegment(rawSegmentIndex, rawLineIndex, cleaned.lastIndex)
+                    }
+                }
             }
         }
 
+        val sequenceSafeContent = repairLiveSequenceAfterRemoval(
+            rawLines = lines,
+            cleaned = cleaned,
+            lastRemovedSegmentIndex = lastRemovedSegmentIndex,
+            retainedSegments = retainedSegments.map {
+                SegmentLocation(it.rawIndex, it.rawLineIndex, it.cleanedLineIndex)
+            },
+        )
+
         return FilteredPlaylist(
-            content = cleaned.joinToString("\n"),
+            content = sequenceSafeContent.joinToString("\n"),
             adSegmentsRemoved = removedSegments,
             containedAds = sawAdMarkers || removedSegments > 0,
         )
@@ -177,6 +198,85 @@ class ManifestRewriter {
         // when an #EXTINF duration can't be parsed.
         const val DEFAULT_AD_SEGMENT_SECONDS = 2.0
         const val DURATION_EPSILON = 0.001
+
+        data class SegmentLocation(val rawIndex: Int, val rawLineIndex: Int, val cleanedLineIndex: Int)
+
+        /**
+         * Removing a segment from a live HLS playlist without changing
+         * `#EXT-X-MEDIA-SEQUENCE` renumbers every later segment. A player that
+         * already consumed the pre-ad window then sees the first post-ad content
+         * under an old sequence number and can wait forever. Once post-ad content
+         * exists, trim the already-consumed prefix and advance both sequence
+         * headers to the original segment's identity.
+         *
+         * While the playlist still contains only pre-ad content plus the active
+         * pod, leave that prefix in place. It gives the player a valid window to
+         * keep polling; the sequence repair engages on the first refresh that has
+         * real content after the removed pod.
+         */
+        fun repairLiveSequenceAfterRemoval(
+            rawLines: List<String>,
+            cleaned: List<String>,
+            lastRemovedSegmentIndex: Int,
+            retainedSegments: List<SegmentLocation>,
+        ): List<String> {
+            if (lastRemovedSegmentIndex < 0) return cleaned
+
+            val mediaSequenceLine = rawLines.firstOrNull { it.startsWith("#EXT-X-MEDIA-SEQUENCE:") }
+                ?: return cleaned // VOD/event fixtures do not need sliding-window repair.
+            val mediaSequence = mediaSequenceLine.substringAfter(':').trim().toLongOrNull() ?: return cleaned
+            val firstPostAd = retainedSegments.firstOrNull { it.rawIndex > lastRemovedSegmentIndex }
+                ?: return cleaned
+
+            val previousUriLine = retainedSegments
+                .lastOrNull { it.cleanedLineIndex < firstPostAd.cleanedLineIndex }
+                ?.cleanedLineIndex
+                ?: -1
+            val suffix = cleaned.subList(previousUriLine + 1, cleaned.size).toMutableList()
+            // If the ad pod began at the first segment there is no previous URI,
+            // so the slice also contains the playlist headers. They are rebuilt
+            // below with corrected sequence values and must not be duplicated.
+            suffix.removeAll(::isStructuralHeaderTag)
+            val firstSuffixUri = suffix.indexOfFirst { it.isNotBlank() && !it.startsWith("#") }
+            if (firstSuffixUri < 0) return cleaned
+
+            // Discontinuities before the new first segment are represented by
+            // EXT-X-DISCONTINUITY-SEQUENCE, not by a leading discontinuity tag.
+            for (i in firstSuffixUri - 1 downTo 0) {
+                if (suffix[i].trim() == "#EXT-X-DISCONTINUITY") suffix.removeAt(i)
+            }
+
+            val discontinuitiesBefore = rawLines
+                .take(firstPostAd.rawLineIndex)
+                .count { it.trim() == "#EXT-X-DISCONTINUITY" }
+            val originalDiscontinuitySequence = rawLines
+                .firstOrNull { it.startsWith("#EXT-X-DISCONTINUITY-SEQUENCE:") }
+                ?.substringAfter(':')
+                ?.trim()
+                ?.toLongOrNull()
+                ?: 0L
+
+            val headers = cleaned.filter(::isStructuralHeaderTag).toMutableList()
+            replaceNumericHeader(headers, "#EXT-X-MEDIA-SEQUENCE:", mediaSequence + firstPostAd.rawIndex)
+            if (discontinuitiesBefore > 0 || headers.any { it.startsWith("#EXT-X-DISCONTINUITY-SEQUENCE:") }) {
+                replaceNumericHeader(
+                    headers,
+                    "#EXT-X-DISCONTINUITY-SEQUENCE:",
+                    originalDiscontinuitySequence + discontinuitiesBefore,
+                )
+            }
+            return headers + suffix
+        }
+
+        fun replaceNumericHeader(lines: MutableList<String>, prefix: String, value: Long) {
+            val index = lines.indexOfFirst { it.startsWith(prefix) }
+            if (index >= 0) {
+                lines[index] = "$prefix$value"
+            } else {
+                val mediaSequenceIndex = lines.indexOfFirst { it.startsWith("#EXT-X-MEDIA-SEQUENCE:") }
+                lines.add(if (mediaSequenceIndex >= 0) mediaSequenceIndex + 1 else lines.size, "$prefix$value")
+            }
+        }
 
         /**
          * Playlist-level (not per-segment, not ad-related) tags that must never

@@ -115,6 +115,8 @@ class LocalStreamProxy(
     private val variantFetches = AtomicInteger(0)
     private val variantBackupSwaps = AtomicInteger(0)
     private val variantAdSegmentsStripped = AtomicInteger(0)
+    private val variantSequenceNormalizations = AtomicInteger(0)
+    private val variantTimelineSegmentsTrimmed = AtomicInteger(0)
     private val variantFailures = AtomicInteger(0)
     private val lastSuccess = AtomicReference<FetchSnapshot?>(null)
     private val lastFailure = AtomicReference<FetchSnapshot?>(null)
@@ -126,6 +128,7 @@ class LocalStreamProxy(
     // check → serve) can be exercised live without waiting for a real midroll.
     // Mirrors vaft's window.simulateAds().
     private val simulateAds = AtomicBoolean(false)
+    private val timelineNormalizer = HlsTimelineNormalizer()
 
     /**
      * Snapshot of one /stream resolution, captured so the user can inspect
@@ -264,19 +267,30 @@ class LocalStreamProxy(
                         httpClient.get(originalUrl).bodyAsText()
                     }.onSuccess { raw ->
                         val (servedText, strategy) = resolveCleanVariant(raw, channel, resolution, frameRate)
+                        // Backup player types are separate Twitch HLS sessions. Their
+                        // session-local MEDIA-SEQUENCE values can differ by thousands
+                        // from the primary even though both playlists cover the same
+                        // broadcast instant. Normalize and monotonically align every
+                        // response before VLC sees it at this stable localhost URL.
+                        val timeline = timelineNormalizer.normalize(originalUrl, servedText)
+                        if (timeline.sequenceNormalized) variantSequenceNormalizations.incrementAndGet()
+                        if (timeline.segmentsTrimmed > 0) {
+                            variantTimelineSegmentsTrimmed.addAndGet(timeline.segmentsTrimmed)
+                        }
+                        val deliveredText = timeline.content
                         lastVariant.set(
                             FetchSnapshot(
                                 channel = channel.ifBlank { "(variant)" },
                                 strategy = strategy,
-                                contentLength = servedText.length,
-                                containsStitchedAdMarker = AdMarkers.containsAds(servedText),
-                                sample = servedText.take(800),
+                                contentLength = deliveredText.length,
+                                containsStitchedAdMarker = AdMarkers.containsAds(deliveredText),
+                                sample = deliveredText.take(800),
                                 timestampMs = System.currentTimeMillis(),
                                 errorMessage = null,
                             ),
                         )
                         call.respondText(
-                            text = servedText,
+                            text = deliveredText,
                             contentType = ContentType.parse("application/vnd.apple.mpegurl"),
                         )
                     }.onFailure { e ->
@@ -550,14 +564,18 @@ class LocalStreamProxy(
                 "variant_fetches": ${variantFetches.get()},
                 "variant_backup_swaps": ${variantBackupSwaps.get()},
                 "variant_ad_segments_stripped": ${variantAdSegmentsStripped.get()},
+                "variant_sequence_normalizations": ${variantSequenceNormalizations.get()},
+                "variant_timeline_segments_trimmed": ${variantTimelineSegmentsTrimmed.get()},
                 "variant_failures": ${variantFailures.get()}
             },
             "last_master_success": ${snap(success)},
             "last_master_failure": ${snap(failure)},
             "last_variant": ${snap(lastVariant.get())},
             "notes": [
-                "variant_backup_swaps > 0 is the GOOD outcome: a stitched ad was detected and we served a clean same-quality playlist from a backup player type (embed/popout) instead — seamless, no stall. This is the primary ad remover.",
-                "variant_ad_segments_stripped > 0 means every backup player type was ALSO showing the ad, so we fell back to stripping (the player freezes through the ad). Frequent stripping suggests the backup swap isn't finding clean streams.",
+                "variant_backup_swaps > 0 means a stitched ad was detected and a clean same-quality backup playlist was served.",
+                "variant_sequence_normalizations > 0 means backup/primary HLS session timelines were mapped onto one continuous VLC timeline; this prevents ad-transition freezes.",
+                "variant_timeline_segments_trimmed > 0 means overlapping backup segments were removed to keep the served timeline monotonic.",
+                "variant_ad_segments_stripped > 0 means every backup player type was also showing the ad, so ad segments were removed and HLS sequence metadata was repaired.",
                 "variant_fetches grows at roughly 1/sec per active stream once VLC settles, since live variants refresh every 2s.",
                 "the primary stream is resolved with playerType='popout', which is targeted with far fewer ads than the default 'site' web player — many streams never trigger a swap at all."
             ]
