@@ -16,7 +16,7 @@ release notes automatically.
 Improves how chat emotes look and how quickly badges show up.
 
 ### Fixed
-- **7TV and BTTV emotes no longer look squished.** Wide or tall third-party emotes were being squashed into a square box. They now render at their real proportions, the same way Chatterino and Twitch's own chat show them. Twitch's own emotes are unaffected since they are always square.
+- **7TV and BTTV emotes no longer look squished.** Wide third-party emotes (like widepeepoHappy) were being squashed into a square box. They now render at their real width, the same way Chatterino and Twitch's own chat show them. Twitch's own emotes are unaffected since they are always square.
 - **Subscriber, moderator, and other badges show up faster.** Badge art used to load after several other chat setup steps finished, so early messages in a channel could briefly show plain text labels ("MOD", "SUB") instead of the real badge icons. Badge art now loads at the same time as everything else, so it appears sooner.
 
 ## 1.10.3 - 2026-07-22
