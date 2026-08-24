@@ -27,7 +27,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -102,22 +101,24 @@ class HomeViewModel(
                 }
             }
         }
-        // Login flag + "Following — Live now" (followed channels present in the
-        // top-streams set), recomputed whenever the follow set / session changes.
+        // Login flag, recomputed whenever the session changes.
         viewModelScope.launch {
-            combine(
-                streamRepository.topStreams,
-                userRepository.followedLogins,
-                settings.flow,
-            ) { top, follows, prefs ->
-                Triple(top, follows, prefs)
-            }.collect { (top, follows, prefs) ->
-                _state.update {
-                    it.copy(
-                        isLoggedIn = prefs.accessToken.isNotBlank(),
-                        followedLive = top.filter { s -> s.userLogin in follows },
-                    )
-                }
+            settings.flow.collect { prefs ->
+                _state.update { it.copy(isLoggedIn = prefs.accessToken.isNotBlank()) }
+            }
+        }
+        // "Following — Live now": query live status directly for the followed
+        // channels, recomputed whenever the follow set changes. Previously this
+        // filtered the global top-streams set for followed logins, so a followed
+        // channel that wasn't one of the biggest streams on all of Twitch never
+        // showed up here even while live, matching the "followed channels aren't
+        // showing" report. streamsForChannels handles Helix's 100-login/20-result
+        // caps internally.
+        viewModelScope.launch {
+            userRepository.followedLogins.collect { follows ->
+                val live = if (follows.isEmpty()) emptyList()
+                    else runCatching { streamRepository.streamsForChannels(follows) }.getOrDefault(emptyList())
+                _state.update { it.copy(followedLive = live) }
             }
         }
         refresh()

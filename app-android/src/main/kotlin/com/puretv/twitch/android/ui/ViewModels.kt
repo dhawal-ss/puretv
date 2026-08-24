@@ -130,7 +130,7 @@ class HomeViewModel(
         viewModelScope.launch {
             userRepository.followedLogins.collect { follows ->
                 val live = if (follows.isEmpty()) emptyList()
-                else runCatching { streamRepository.streamsForChannels(follows.take(100)) }.getOrDefault(emptyList())
+                else runCatching { streamRepository.streamsForChannels(follows) }.getOrDefault(emptyList())
                 _state.update { it.copy(followedLive = live) }
             }
         }
@@ -609,7 +609,7 @@ class FollowingViewModel(
         viewModelScope.launch {
             userRepository.followedLogins.collect { follows ->
                 val live = if (follows.isEmpty()) emptyList()
-                else runCatching { streamRepository.streamsForChannels(follows.take(100)) }.getOrDefault(emptyList())
+                else runCatching { streamRepository.streamsForChannels(follows) }.getOrDefault(emptyList())
                 _state.update { it.copy(liveFollows = live, isLoading = false) }
             }
         }

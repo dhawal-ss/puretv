@@ -5,6 +5,9 @@ import com.puretv.twitch.core.model.ChannelInfo
 import com.puretv.twitch.core.model.GameInfo
 import com.puretv.twitch.core.model.StreamInfo
 import com.puretv.twitch.core.stream.StreamResolver
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -29,8 +32,24 @@ class StreamRepository(
         return streams
     }
 
-    suspend fun streamsForChannels(logins: List<String>): List<StreamInfo> =
-        if (logins.isEmpty()) emptyList() else apiClient.getStreams(userLogins = logins)
+    /**
+     * Live status for exactly these [logins]. Helix caps `user_login` at 100 per
+     * call and defaults `first` to 20 (a page-size limit that also caps how many
+     * of the matched channels come back), so a caller with more than 20 logins
+     * live at once — or more than 100 logins total — would silently lose results
+     * from a single unchunked call. Fans out chunks of 100 in parallel, each
+     * requesting `first = 100`, and unions the results; a single-login call
+     * (the common "is this one channel live" case) is just a one-chunk fan-out.
+     */
+    suspend fun streamsForChannels(logins: List<String>): List<StreamInfo> {
+        if (logins.isEmpty()) return emptyList()
+        return coroutineScope {
+            logins.chunked(100)
+                .map { chunk -> async { apiClient.getStreams(userLogins = chunk, first = 100) } }
+                .awaitAll()
+                .flatten()
+        }
+    }
 
     /**
      * Live streams in a single category (game), ordered by viewer count — backs
