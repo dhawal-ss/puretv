@@ -4,6 +4,7 @@ import android.app.Application
 import com.puretv.twitch.android.data.AppSettingsStore
 import com.puretv.twitch.android.data.TokenRefresher
 import com.puretv.twitch.android.di.androidModule
+import com.puretv.twitch.android.update.AndroidUpdateManager
 import com.puretv.twitch.core.adblock.AdBlockEngine
 import com.puretv.twitch.core.di.coreModule
 import kotlinx.coroutines.CoroutineScope
@@ -50,6 +51,11 @@ class PureTvApp : Application() {
             // on the same rotating refresh token. Once per process, off-main, is both
             // correct and cheaper. It is fail-soft: a failure keeps the session.
             koinApp.koin.get<TokenRefresher>().refreshIfPossible()
+
+            // Silent launch update check: surfaces an "Update available" banner on
+            // Home / a prompt in Settings when a newer Android APK is published.
+            // Fully fail-soft (no manifest / offline -> stays idle, no nagging).
+            koinApp.koin.get<AndroidUpdateManager>().checkForUpdates()
         }
 
         // Keep the in-process ad-block interceptor in sync with the user's

@@ -36,7 +36,7 @@ A few notes:
 
 - This build is signed with a development key, so Android labels it an app from an "unknown source". That is normal for sideloaded apps and is safe to allow.
 - It needs Android 8.0 or newer.
-- To update later, download the newest APK from the releases page and install it over the existing app.
+- Automatic updates. PureTV checks for a new version when it starts, and you can install it in one tap from Settings, the same as Windows.
 
 On Android you get the same ad-free playback, plus Picture-in-Picture, a fill-to-edge fullscreen that uses the whole display including the camera cutout (double-tap the video to toggle it), and chat beside the stream.
 
@@ -114,7 +114,7 @@ Package the installer (this bundles VLC, so the installed app needs nothing extr
 ./gradlew :app-windows:bundleVlc :app-windows:packageReleaseMsi
 ```
 
-To cut a release, bump `appVersion` in `app-windows/build.gradle.kts`, commit, then tag and push, for example:
+To cut a Windows release, bump `appVersion` in `app-windows/build.gradle.kts`, commit, then tag and push, for example:
 
 ```
 git tag v1.0.1
@@ -123,11 +123,17 @@ git push origin v1.0.1
 
 CI builds the installers and opens a draft release. Publish it, and the in-app updater picks it up on everyone's next launch.
 
+Android and TV releases are NOT built by CI, there is no workflow watching `android-v*` or `tv-v*` tags. Cut one by hand:
+
+1. Bump `versionCode`/`versionName` in `app-android/build.gradle.kts` or `app-tv/build.gradle.kts`, and the matching `versionCode`/`versionName`/`notes` in `docs/android-version.json` or `docs/tv-version.json`.
+2. Build the signed release APK: `./gradlew :app-tv:assembleRelease` is fully wired to `keystore.properties` and produces a signed APK directly. `./gradlew :app-android:assembleRelease` currently does NOT (`app-android/build.gradle.kts`'s `signingConfig` line is commented out), so it produces an unsigned APK you have to sign by hand. The Android releases published so far were all signed with this machine's local `~/.android/debug.keystore` (alias `androiddebugkey`, password `android`), not a dedicated release key. Whatever you sign a new build with MUST match that same key, or Android will refuse to install it as an update over an existing install (users would need to uninstall first). Verify before uploading anything: `apksigner verify --print-certs <new.apk>` must match `apksigner verify --print-certs` on the currently-published APK.
+3. Upload the versioned tag as a **pre-release** (`gh release create android-v1.0.2 --prerelease ...`), then update the moving `android-latest`/`tv-latest` release: upload the new APK first (`gh release upload android-latest new.apk --clobber`), verify it downloads and its signature checks out, THEN upload the updated `android-version.json`/`tv-version.json` last (`--clobber`). Uploading the manifest before the APK would advertise a version that isn't downloadable yet.
+
 ### Release channels (important)
 
-Windows (`v*`), Android (`android-v*`), and Android TV / Fire TV (`tv-v*`, plus the moving `tv-latest`) all publish from this one repo, so they share GitHub's single "Latest" pointer. The **Download for Windows** button above and the Windows in-app updater both resolve `/releases/latest`, which GitHub points at the newest release that is **not** a draft or pre-release. So any Android or TV release that isn't marked pre-release steals "Latest" from Windows, and because those releases carry only an APK (no `.exe`), the Windows button lands users on the APK and the desktop updater finds no installer and silently offers nothing.
+Windows (`v*`), Android (`android-v*`, plus the moving `android-latest`), and Android TV / Fire TV (`tv-v*`, plus the moving `tv-latest`) all publish from this one repo, so they share GitHub's single "Latest" pointer. The **Download for Windows** button above and the Windows in-app updater both resolve `/releases/latest`, which GitHub points at the newest release that is **not** a draft or pre-release. So any Android or TV release that isn't marked pre-release steals "Latest" from Windows, and because those releases carry only an APK (no `.exe`), the Windows button lands users on the APK and the desktop updater finds no installer and silently offers nothing.
 
-Rule: **every Android and TV release must be created as a pre-release** (`gh release create <tag> --prerelease ...`, or `gh release edit <tag> --prerelease` after the fact). Only Windows `v*` releases stay non-pre-release. This is safe because the Android/TV download links here use pinned tag URLs and the TV updater reads a pinned `tv-latest/tv-version.json` manifest, none of which depend on the "Latest" pointer. The desktop updater additionally skips any release without a Windows installer as a backstop, but keep the pre-release flag correct so the download button stays right.
+Rule: **every Android and TV release must be created as a pre-release** (`gh release create <tag> --prerelease ...`, or `gh release edit <tag> --prerelease` after the fact). Only Windows `v*` releases stay non-pre-release. This is safe because the Android/TV download links here use pinned tag URLs and the Android/TV in-app updaters each read their own pinned `*-latest/*-version.json` manifest, none of which depend on the "Latest" pointer. The desktop updater additionally skips any release without a Windows installer as a backstop, but keep the pre-release flag correct so the download button stays right.
 
 ## License
 

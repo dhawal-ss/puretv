@@ -8,6 +8,7 @@ import com.puretv.twitch.android.data.SessionManager
 import com.puretv.twitch.android.data.TokenRefresher
 import com.puretv.twitch.android.data.db.PureTvDatabase
 import com.puretv.twitch.android.player.TwitchPlayer
+import com.puretv.twitch.android.update.AndroidUpdateManager
 import com.puretv.twitch.android.ui.BrowseViewModel
 import com.puretv.twitch.android.ui.CategoryViewModel
 import com.puretv.twitch.android.ui.ChannelViewModel
@@ -64,6 +65,7 @@ val androidModule = module {
     // TwitchPlayer(context, adBlockEngine, backupStreamResolver) — the last one
     // powers the seamless ad-free backup player-type swap in the interceptor.
     single { TwitchPlayer(get(), get(), get()) }
+    single { AndroidUpdateManager(get()) }
 
     // --- ViewModels --------------------------------------------------------
     // get() resolves each constructor argument by type, so argument order does

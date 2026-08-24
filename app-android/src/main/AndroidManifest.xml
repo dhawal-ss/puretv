@@ -7,6 +7,10 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- In-app updates: download the new APK and hand it to the system installer
+         (Section 09). The user still grants a one-time "install unknown apps"
+         consent the first time; this permission is what lets us ask. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
     <application
         android:name=".PureTvApp"
@@ -31,6 +35,13 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- PackageInstaller session callbacks for the in-app updater. Not
+             exported: it's targeted by an explicit PendingIntent from our own
+             process, and it launches the system's install-confirm screen. -->
+        <receiver
+            android:name=".update.AndroidUpdateInstallReceiver"
+            android:exported="false" />
 
     </application>
 </manifest>

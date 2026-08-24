@@ -1,0 +1,6 @@
+{
+  "versionCode": 3,
+  "versionName": "1.0.2",
+  "apkUrl": "https://github.com/dhawal-ss/puretv/releases/download/android-latest/PureTV-for-Twitch-Android.apk",
+  "notes": "Adds automatic updates: PureTV now checks for a new version on launch and can install it in one tap from Settings, no more manually downloading the APK. Also fixes followed channels not showing up past the first 100."
+}

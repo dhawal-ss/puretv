@@ -43,7 +43,10 @@ import com.puretv.twitch.android.ui.components.GameTile
 import com.puretv.twitch.android.ui.components.StreamCard
 import com.puretv.twitch.android.ui.components.StreamCardSkeleton
 import com.puretv.twitch.android.ui.theme.PureTvColors
+import com.puretv.twitch.android.update.AndroidUpdateManager
+import com.puretv.twitch.android.update.AndroidUpdateState
 import org.koin.androidx.compose.koinViewModel
+import org.koin.compose.koinInject
 
 /**
  * SECTION 06.4: Home. A single adaptive grid (no overlapping scrollables): the
@@ -62,6 +65,8 @@ fun HomeScreen(
     viewModel: HomeViewModel = koinViewModel(),
 ) {
     val state by viewModel.state.collectAsState()
+    val updateManager = koinInject<AndroidUpdateManager>()
+    val updateState by updateManager.state.collectAsState()
 
     Scaffold(
         topBar = {
@@ -117,6 +122,12 @@ fun HomeScreen(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
+                (updateState as? AndroidUpdateState.Available)?.let { available ->
+                    item(span = { GridItemSpan(maxLineSpan) }) {
+                        UpdateAvailableBanner(versionName = available.info.versionName, onClick = onOpenSettings)
+                    }
+                }
+
                 if (state.continueWatching.isNotEmpty()) {
                     item(span = { GridItemSpan(maxLineSpan) }) { SectionHeader("Continue watching") }
                     item(span = { GridItemSpan(maxLineSpan) }) {
@@ -164,6 +175,26 @@ fun HomeScreen(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun UpdateAvailableBanner(versionName: String, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
+            .background(PureTvColors.Surface)
+            .clickable(onClick = onClick)
+            .padding(14.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            "Update available: $versionName. Open Settings to install.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = PureTvColors.TextPrimary,
+        )
     }
 }
 

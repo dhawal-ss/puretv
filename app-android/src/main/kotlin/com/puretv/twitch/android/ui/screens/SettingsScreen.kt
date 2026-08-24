@@ -34,8 +34,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.puretv.twitch.android.ui.SettingsViewModel
 import com.puretv.twitch.android.ui.theme.PureTvColors
+import com.puretv.twitch.android.update.AndroidUpdateInfo
+import com.puretv.twitch.android.update.AndroidUpdateManager
+import com.puretv.twitch.android.update.AndroidUpdateState
 import com.puretv.twitch.core.model.StreamQuality
 import org.koin.androidx.compose.koinViewModel
+import org.koin.compose.koinInject
 
 /**
  * SECTION 06.4 / 09.2 — quality, ad-block mode, proxy URL, and account.
@@ -45,6 +49,8 @@ import org.koin.androidx.compose.koinViewModel
 fun SettingsScreen(onBack: () -> Unit) {
     val viewModel: SettingsViewModel = koinViewModel()
     val state by viewModel.state.collectAsState()
+    val updateManager = koinInject<AndroidUpdateManager>()
+    val updateState by updateManager.state.collectAsState()
 
     Scaffold(
         topBar = {
@@ -167,6 +173,17 @@ fun SettingsScreen(onBack: () -> Unit) {
             }
 
             item { HorizontalDivider(color = PureTvColors.SurfaceVariant) }
+            item { SectionHeader("Software update") }
+            item {
+                UpdateSettingsContent(
+                    currentVersion = updateManager.currentVersionName,
+                    state = updateState,
+                    onCheck = { updateManager.checkForUpdates(force = true) },
+                    onInstall = { info -> updateManager.downloadAndInstall(info) },
+                )
+            }
+
+            item { HorizontalDivider(color = PureTvColors.SurfaceVariant) }
             item {
                 Text(
                     "PureTV for Twitch — sideloaded build. Not affiliated with Twitch Interactive, Inc.",
@@ -174,6 +191,59 @@ fun SettingsScreen(onBack: () -> Unit) {
                     color = PureTvColors.TextMuted,
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun UpdateSettingsContent(
+    currentVersion: String,
+    state: AndroidUpdateState,
+    onCheck: () -> Unit,
+    onInstall: (AndroidUpdateInfo) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            "Installed version $currentVersion",
+            style = MaterialTheme.typography.bodyMedium,
+            color = PureTvColors.TextSecondary,
+        )
+        when (state) {
+            is AndroidUpdateState.Available -> {
+                Text(
+                    "Update available: ${state.info.versionName}",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = PureTvColors.TwitchPurpleLight,
+                )
+                if (state.info.notes.isNotBlank()) {
+                    Text(
+                        state.info.notes.lineSequence().firstOrNull().orEmpty(),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = PureTvColors.TextSecondary,
+                    )
+                }
+                Button(onClick = { onInstall(state.info) }) { Text("Download & install") }
+            }
+            is AndroidUpdateState.Downloading ->
+                Text(
+                    "Downloading... ${(state.progress * 100).toInt()}%",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = PureTvColors.TextPrimary,
+                )
+            AndroidUpdateState.Installing ->
+                Text("Starting installer...", style = MaterialTheme.typography.bodyLarge, color = PureTvColors.TextPrimary)
+            AndroidUpdateState.Checking ->
+                Text("Checking for updates...", style = MaterialTheme.typography.bodyMedium, color = PureTvColors.TextSecondary)
+            AndroidUpdateState.UpToDate -> {
+                Text("You're on the latest version.", style = MaterialTheme.typography.bodyMedium, color = PureTvColors.TextSecondary)
+                Button(onClick = onCheck) { Text("Check again") }
+            }
+            is AndroidUpdateState.Error -> {
+                Text(state.message, style = MaterialTheme.typography.bodyMedium, color = PureTvColors.Live)
+                Button(onClick = onCheck) { Text("Try again") }
+            }
+            AndroidUpdateState.Idle ->
+                Button(onClick = onCheck) { Text("Check for updates") }
         }
     }
 }
