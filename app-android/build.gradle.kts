@@ -15,8 +15,8 @@ android {
         applicationId = "com.puretv.twitch.android"
         minSdk = 26       // Android 8.0 — required for ExoPlayer low-latency live mode
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 2
+        versionName = "1.0.1"
         ndk { abiFilters += listOf("armeabi-v7a", "arm64-v8a") } // skip x86 to cut APK size
     }
 

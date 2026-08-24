@@ -1,6 +1,6 @@
 {
-  "versionCode": 2,
-  "versionName": "1.1.0",
+  "versionCode": 3,
+  "versionName": "1.1.1",
   "apkUrl": "https://github.com/dhawal-ss/puretv/releases/download/tv-latest/PureTV-FireTV-AndroidTV.apk",
-  "notes": "Back button now exits streams; Live Now and Categories refresh reliably; in-app updates."
+  "notes": "Fixes followed channels not showing up: the followed list no longer stops at 100 channels, and Following - Live now checks your followed channels directly instead of only the biggest streams on Twitch."
 }
