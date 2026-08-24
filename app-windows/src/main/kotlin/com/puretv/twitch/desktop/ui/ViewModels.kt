@@ -397,6 +397,17 @@ class StreamViewModel(
                 it.copy(channel = channel, streamInfo = liveInfo, currentQuality = preferredQuality, isLoading = false)
             }
 
+            // Badge art only needs the channel id, not the emote lists below, so fetch it
+            // on its own coroutine instead of waiting behind the sequential emote-loading
+            // chain. That way early chat messages don't render the "MOD"/"SUB" text-chip
+            // fallback for longer than necessary. Best-effort: failure keeps the chips.
+            channel?.let { ch ->
+                scope.launch {
+                    val badgeIndex = runCatching { badgeRepository.loadForChannel(ch.id) }.getOrDefault(BadgeIndex.EMPTY)
+                    _state.update { it.copy(badges = badgeIndex) }
+                }
+            }
+
             playAt(preferredQuality)
 
             // Assemble the unified pickable-emote list: third-party (BTTV/FFZ/7TV)
@@ -420,9 +431,6 @@ class StreamViewModel(
                 rebuildEmoteIndicesAndPublish()
                 // Subscribe to live 7TV emote add/remove for this channel (EventAPI).
                 sevenTvEventClient.connect(ch.id)
-                // Real badge art (global ∪ channel). Best-effort: failure leaves text-free rows.
-                val badgeIndex = runCatching { badgeRepository.loadForChannel(ch.id) }.getOrDefault(BadgeIndex.EMPTY)
-                _state.update { it.copy(badges = badgeIndex) }
             }
         }
         // Live 7TV emote updates: fold each delta into the channel set and rebuild.

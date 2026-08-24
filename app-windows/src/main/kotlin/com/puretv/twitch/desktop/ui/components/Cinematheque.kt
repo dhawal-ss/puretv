@@ -434,6 +434,8 @@ fun ChatMessageRow(
         val resolvedBadges = if (badgeIndex === BadgeIndex.EMPTY) emptyList()
             else message.badges.mapNotNull { badgeIndex.resolve(it.setId, it.version) }
         if (resolvedBadges.isNotEmpty()) {
+            // Badge art is already square (BadgeIndex resolves the 2x CDN image),
+            // so a fixed square box is correct here, no aspect-ratio bug to fix.
             resolvedBadges.forEach { EmoteImage(it.url, it.title, Modifier.size(18.dp)) }
         } else {
             // Badge art not loaded yet (or this channel returned none) — fall back to
@@ -469,6 +471,10 @@ fun ChatMessageRow(
                         part.name,
                         animated = false,
                         part.overlays,
+                        // Twitch enforces a square emote canvas, so the fixed square
+                        // box is already correct. Skip the height-only path (and its
+                        // load-time reflow) for the majority of emotes in most chats.
+                        naturalAspect = false,
                     )
                     is MessagePart.ThirdPartyEmote -> StackedEmote(part.url, part.name, part.animated, part.overlays)
                 }
@@ -513,12 +519,20 @@ internal fun EmoteImage(url: String, name: String, modifier: Modifier = Modifier
     )
 }
 
+/**
+ * [naturalAspect] pins only the row height and lets width follow the emote's own
+ * aspect ratio, the same fixed-line-height layout Twitch web and Chatterino use,
+ * so wide/tall 7TV and BTTV emotes render at their real proportions instead of
+ * being squashed into a square box. Zero-width overlay stacks pass `false`
+ * because the overlay must share the base emote's exact square canvas to align.
+ */
 @Composable
-private fun EmoteGlyph(url: String, name: String, animated: Boolean, size: Dp) {
+private fun EmoteGlyph(url: String, name: String, animated: Boolean, size: Dp, naturalAspect: Boolean = true) {
+    val sizing = if (naturalAspect) Modifier.height(size) else Modifier.size(size)
     if (animated && LocalEmoteAnimation.current) {
-        AnimatedEmote(url, name, Modifier.size(size)) { u, n, m -> EmoteImage(u, n, m) }
+        AnimatedEmote(url, name, sizing) { u, n, m -> EmoteImage(u, n, m) }
     } else {
-        EmoteImage(url, name, Modifier.size(size))
+        EmoteImage(url, name, sizing)
     }
 }
 
@@ -529,14 +543,15 @@ private fun StackedEmote(
     animated: Boolean,
     overlays: List<EmoteLayer>,
     size: Dp = 28.dp,
+    naturalAspect: Boolean = true,
 ) {
     if (overlays.isEmpty()) {
-        EmoteGlyph(baseUrl, name, animated, size)
+        EmoteGlyph(baseUrl, name, animated, size, naturalAspect)
         return
     }
     Box(contentAlignment = Alignment.Center) {
-        EmoteGlyph(baseUrl, name, animated, size)
-        overlays.forEach { layer -> EmoteGlyph(layer.url, layer.name, layer.animated, size) }
+        EmoteGlyph(baseUrl, name, animated, size, naturalAspect = false)
+        overlays.forEach { layer -> EmoteGlyph(layer.url, layer.name, layer.animated, size, naturalAspect = false) }
     }
 }
 

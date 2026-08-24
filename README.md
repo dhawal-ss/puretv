@@ -55,7 +55,7 @@ PureTV has a separate build made for the TV, with a 10-foot layout you drive ent
    > **Easier: use a short Downloader code instead of typing that whole link.** Downloader (AFTVnews) has a companion URL shortener at **[aftv.news](https://aftv.news)**. The link above is permanent (it always points to the latest TV build), so a code made for it keeps working for every future release. On your phone or computer, open aftv.news, paste the link above, pass the quick "I'm not a robot" check, and it gives you a short numeric code (usually 6 to 7 digits). Then in Downloader on your TV, just type that code and press Go, and it jumps straight to this download, no long link to peck out with the remote.
 
 4. It downloads the APK, then asks to install it. Choose Install, and when it finishes you can delete the downloaded file to save space.
-5. Open PureTV from your app list. To sign in (optional, only needed to see the channels you follow), scan the on-screen QR code with your phone, or go to **twitch.tv/activate** and enter the short code shown. You can also just start watching top and category streams without signing in.
+5. Open PureTV from your app list and sign in: scan the on-screen QR code with your phone, or go to **twitch.tv/activate** and enter the short code shown. Sign-in goes straight through Twitch's own secure login page, so PureTV never sees your password.
 
 A few notes:
 
