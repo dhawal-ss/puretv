@@ -5,10 +5,10 @@
 A clean, ad-free way to watch live streams on Windows, Android, and Android TV / Fire TV.
 
 [![Download for Windows](https://img.shields.io/badge/Download%20for%20Windows-Installer-7C3AED?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/dhawal-ss/puretv/releases/latest)
-[![Download for Android](https://img.shields.io/badge/Download%20for%20Android-APK-3DDC84?style=for-the-badge&logo=android&logoColor=white)](https://github.com/dhawal-ss/puretv/releases/download/android-v1.0.0/PureTV-for-Twitch-1.0.0.apk)
+[![Download for Android](https://img.shields.io/badge/Download%20for%20Android-APK-3DDC84?style=for-the-badge&logo=android&logoColor=white)](https://github.com/dhawal-ss/puretv/releases/download/android-latest/PureTV-for-Twitch-Android.apk)
 [![Download for Android TV / Fire TV](https://img.shields.io/badge/Download%20for%20Android%20TV%20%2F%20Fire%20TV-APK-6441A5?style=for-the-badge&logo=androidtv&logoColor=white)](https://github.com/dhawal-ss/puretv/releases/download/tv-latest/PureTV-FireTV-AndroidTV.apk)
 
-**Windows: [download the latest installer](https://github.com/dhawal-ss/puretv/releases/latest). Android: [download the APK](https://github.com/dhawal-ss/puretv/releases/download/android-v1.0.0/PureTV-for-Twitch-1.0.0.apk). Android TV / Fire TV: [download the TV APK](https://github.com/dhawal-ss/puretv/releases/download/tv-latest/PureTV-FireTV-AndroidTV.apk).**
+**Windows: [download the latest installer](https://github.com/dhawal-ss/puretv/releases/latest). Android: [download the APK](https://github.com/dhawal-ss/puretv/releases/download/android-latest/PureTV-for-Twitch-Android.apk). Android TV / Fire TV: [download the TV APK](https://github.com/dhawal-ss/puretv/releases/download/tv-latest/PureTV-FireTV-AndroidTV.apk).**
 
 </div>
 
@@ -62,7 +62,7 @@ A few notes:
 - Using the remote: D-pad to move, Select to open, Back to go back. On a stream, press Left/Right or Menu to show chat, the Play/Pause button to pause, and Fast-Forward/Rewind to change video quality. Search brings up an on-screen keyboard, and browsing a category shows every channel live in it. Ad blocking runs automatically, shown by the small pill on the player.
 - This build is signed with a development key, so the TV labels it an app from an "unknown source". That is normal for sideloaded apps and safe to allow.
 - It needs Android TV / Fire OS based on Android 8.0 or newer (every current Fire TV Stick and Google TV qualifies).
-- To update later, sideload the newest TV APK the same way and install it over the existing app.
+- Automatic updates. PureTV checks for a new version when it starts, and you can install it from Settings with the remote, no re-sideloading needed.
 
 ## What you get
 
