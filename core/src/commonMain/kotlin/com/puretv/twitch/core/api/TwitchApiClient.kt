@@ -130,16 +130,9 @@ class TwitchApiClient(
         resp.data
     }.getOrDefault(emptyList())
 
-    /** GET /users/follows — channels followed by [userId]. Requires user:read:follows scope. */
-    suspend fun getFollowedChannels(userId: String, first: Int = 100): List<FollowedChannel> {
-        val resp: HelixEnvelope<FollowedChannel> = get("/channels/followed", mapOf("user_id" to userId, "first" to first.toString()))
-        return resp.data
-    }
-
     /**
      * GET /channels/followed — ALL channels followed by [userId], following the
      * Helix pagination cursor until exhausted. Requires user:read:follows scope.
-     * Unlike [getFollowedChannels] (single page), this is for "show me everyone I follow".
      */
     suspend fun getAllFollowedChannels(userId: String): List<FollowedChannel> {
         val all = mutableListOf<FollowedChannel>()

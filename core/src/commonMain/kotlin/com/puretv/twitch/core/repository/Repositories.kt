@@ -75,7 +75,7 @@ class UserRepository(private val apiClient: TwitchApiClient) {
     val followedLogins: StateFlow<List<String>> = _followedLogins.asStateFlow()
 
     suspend fun loadFollows(userId: String) {
-        val follows = apiClient.getFollowedChannels(userId)
+        val follows = apiClient.getAllFollowedChannels(userId)
         _followedLogins.value = follows.map { it.broadcaster_login }
     }
 
