@@ -40,7 +40,9 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.puretv.twitch.desktop.ui.theme.PureTvMotion
 import com.puretv.twitch.desktop.ui.theme.PureTvTheme
 import com.puretv.twitch.desktop.ui.theme.PureTvType
@@ -190,12 +192,16 @@ fun Modifier.expressiveClickable(
  */
 enum class ExpressiveButtonStyle { Filled, Tonal, Outlined, Text, FilledTertiary }
 
-/** Heights follow the M3 Expressive button sizes, which run taller than baseline. */
-enum class ExpressiveButtonSize(val height: Dp, val hPad: Dp, val iconSize: Dp) {
-    Small(40.dp, 18.dp, 18.dp),
-    Medium(48.dp, 22.dp, 20.dp),
-    Large(56.dp, 26.dp, 24.dp),
-    XLarge(64.dp, 34.dp, 26.dp),
+/**
+ * The M3 Expressive button sizes, which run taller than baseline M3. Label size
+ * scales with the button: a 14sp label in a 64dp pill reads as a small button
+ * someone padded out, rather than as a large one.
+ */
+enum class ExpressiveButtonSize(val height: Dp, val hPad: Dp, val iconSize: Dp, val fontSize: TextUnit) {
+    Small(40.dp, 20.dp, 18.dp, 14.sp),
+    Medium(48.dp, 24.dp, 20.dp, 15.sp),
+    Large(56.dp, 30.dp, 24.dp, 17.sp),
+    XLarge(64.dp, 36.dp, 28.dp, 19.sp),
 }
 
 @Composable
@@ -266,6 +272,8 @@ fun ExpressiveButton(
             text,
             color = ink,
             style = MaterialTheme.typography.labelLarge,
+            fontSize = size.fontSize,
+            lineHeight = size.fontSize * 1.3f,
             fontWeight = if (style == ExpressiveButtonStyle.Filled) FontWeight.Bold else FontWeight.SemiBold,
             maxLines = 1,
         )
@@ -355,7 +363,7 @@ fun SplitButton(
     trailingIcon: ImageVector,
     onTrailingClick: () -> Unit,
     modifier: Modifier = Modifier,
-    height: Dp = 56.dp,
+    height: Dp = 64.dp,
 ) {
     val c = PureTvTheme.colors
     val shapes = PureTvTheme.shapes
@@ -392,16 +400,23 @@ fun SplitButton(
                 .hoverable(leadInteraction)
                 .handCursor()
                 .clickable(interactionSource = leadInteraction, indication = null, onClick = onClick)
-                .padding(horizontal = 28.dp),
+                .padding(horizontal = 34.dp),
         ) {
-            icon?.let { Icon(it, contentDescription = null, tint = c.onPrimary, modifier = Modifier.size(24.dp)) }
-            Text(text, color = c.onPrimary, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, maxLines = 1)
+            icon?.let { Icon(it, contentDescription = null, tint = c.onPrimary, modifier = Modifier.size(28.dp)) }
+            Text(
+                text,
+                color = c.onPrimary,
+                style = MaterialTheme.typography.titleMedium,
+                fontSize = 19.sp,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+            )
         }
         Box(
             contentAlignment = Alignment.Center,
             modifier = Modifier
                 .fillMaxHeight()
-                .width(52.dp)
+                .width(60.dp)
                 .clip(
                     RoundedCornerShape(
                         topStart = inner, bottomStart = inner,
@@ -413,7 +428,7 @@ fun SplitButton(
                 .handCursor()
                 .clickable(interactionSource = trailInteraction, indication = null, onClick = onTrailingClick),
         ) {
-            Icon(trailingIcon, contentDescription = null, tint = c.onPrimary, modifier = Modifier.size(22.dp))
+            Icon(trailingIcon, contentDescription = null, tint = c.onPrimary, modifier = Modifier.size(26.dp))
         }
     }
 }

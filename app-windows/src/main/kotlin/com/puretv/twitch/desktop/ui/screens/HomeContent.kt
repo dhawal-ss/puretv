@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -289,14 +290,17 @@ private fun HomeHero(
 ) {
     val c = PureTvTheme.colors
     val shapes = PureTvTheme.shapes
+    // The height follows the copy rather than being pinned. A long stream title
+    // wraps to a second line at narrower window widths, and against a fixed height
+    // that pushed the buttons out through the bottom edge of the card.
     Box(
         modifier
             .fillMaxWidth()
-            .height(340.dp)
+            .heightIn(min = 340.dp)
             .clip(shapes.heroShape),
     ) {
-        CoverImage(hero.imageUrl, hero.userName, hero.title, Modifier.fillMaxSize())
-        Box(Modifier.fillMaxSize().background(c.heroScrim))
+        CoverImage(hero.imageUrl, hero.userName, hero.title, Modifier.matchParentSize())
+        Box(Modifier.matchParentSize().background(c.heroScrim))
         Column(
             modifier = Modifier
                 .align(Alignment.BottomStart)
@@ -360,7 +364,7 @@ private fun HomeHero(
                     text = if (isFollowed) "Following" else "Follow",
                     onClick = onToggleFollow,
                     style = ExpressiveButtonStyle.Outlined,
-                    size = ExpressiveButtonSize.Large,
+                    size = ExpressiveButtonSize.XLarge,
                     icon = if (isFollowed) ExpressiveIcons.Check else ExpressiveIcons.Add,
                 )
             }
