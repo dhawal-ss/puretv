@@ -1,140 +1,130 @@
 <div align="center">
 
-# PureTV
+<h1>PureTV</h1>
 
-A clean, ad-free way to watch live streams on Windows, Android, and Android TV / Fire TV.
+**Twitch without the ads. On your PC, your phone, and your TV.**
 
-[![Download for Windows](https://img.shields.io/badge/Download%20for%20Windows-Installer-7C3AED?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/dhawal-ss/puretv/releases/latest)
-[![Download for Android](https://img.shields.io/badge/Download%20for%20Android-APK-3DDC84?style=for-the-badge&logo=android&logoColor=white)](https://github.com/dhawal-ss/puretv/releases/download/android-latest/PureTV-for-Twitch-Android.apk)
-[![Download for Android TV / Fire TV](https://img.shields.io/badge/Download%20for%20Android%20TV%20%2F%20Fire%20TV-APK-6441A5?style=for-the-badge&logo=androidtv&logoColor=white)](https://github.com/dhawal-ss/puretv/releases/download/tv-latest/PureTV-FireTV-AndroidTV.apk)
+Ads get filtered out on your own device before the player ever sees them.
+No relay server, no account with us, no logging of what you watch.
 
-**Windows: [download the latest installer](https://github.com/dhawal-ss/puretv/releases/latest). Android: [download the APK](https://github.com/dhawal-ss/puretv/releases/download/android-latest/PureTV-for-Twitch-Android.apk). Android TV / Fire TV: [download the TV APK](https://github.com/dhawal-ss/puretv/releases/download/tv-latest/PureTV-FireTV-AndroidTV.apk).**
+<br>
+
+[![Windows](https://img.shields.io/badge/Windows-Download-0078D4?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/dhawal-ss/puretv/releases/latest)
+[![Android](https://img.shields.io/badge/Android-Download-3DDC84?style=for-the-badge&logo=android&logoColor=white)](https://github.com/dhawal-ss/puretv/releases/download/android-latest/PureTV-for-Twitch-Android.apk)
+[![Android TV](https://img.shields.io/badge/Android_TV_&_Fire_TV-Download-6441A5?style=for-the-badge&logo=androidtv&logoColor=white)](https://github.com/dhawal-ss/puretv/releases/download/tv-latest/PureTV-FireTV-AndroidTV.apk)
+
+<br>
+
+<img src="docs/images/desktop-home.png" alt="PureTV on Windows" width="860">
 
 </div>
 
----
+<br>
 
-## Install (about a minute)
+## What you get
 
-1. Click the Download PureTV button above.
-2. On the page that opens, under "Assets", click the file that ends in `.exe`.
-3. Open the downloaded file and follow the prompts.
-4. If Windows shows a blue "Windows protected your PC" screen, click "More info", then "Run anyway". This only appears because the app is not code-signed yet, and it is safe to continue.
-5. Open PureTV from your Start menu and sign in.
+|  | |
+|---|---|
+| **No ads** | Mid-rolls are stripped from the stream on your device. A small pill on the player tells you it is working. |
+| **Five themes** | Violet Dusk, Ember, Teal Deep, Pure Black and Midnight Forest. Each one re-tones the whole app, not just an accent. |
+| **Your follows, front and centre** | Live channels first, offline below, on every platform. |
+| **Chat beside the stream** | With emotes, on all three apps. |
+| **Updates itself** | It checks on launch and installs in one tap. No re-downloading. |
+| **Nothing phones home** | Sign-in goes straight to Twitch. Your session stays encrypted on your device. |
 
-Everything the app needs is included in the installer, so there is nothing else to set up.
+<br>
 
-## Install on Android (sideload, about a minute)
+<div align="center">
 
-PureTV for Android is a sideloaded APK, not on the Play Store.
+<img src="docs/images/desktop-channel.png" alt="Channel page on Windows" width="420">
+&nbsp;
+<img src="docs/images/tv-home.png" alt="PureTV on Android TV" width="420">
 
-1. On your phone, tap the "Download for Android" button above to get the `.apk` file.
-2. Open the downloaded file. The first time, Android asks to allow installs from your browser or Files app, turn that on, then tap Install.
-3. Open PureTV, then sign in by entering the on-screen code at twitch.tv/activate.
+<sub>Windows channel page, and the 10-foot TV layout</sub>
 
-A few notes:
+<br><br>
 
-- This build is signed with a development key, so Android labels it an app from an "unknown source". That is normal for sideloaded apps and is safe to allow.
-- It needs Android 8.0 or newer.
-- Automatic updates. PureTV checks for a new version when it starts, and you can install it in one tap from Settings, the same as Windows.
+<img src="docs/images/android-home.png" alt="PureTV on Android" width="240">
 
-On Android you get the same ad-free playback, plus Picture-in-Picture, a fill-to-edge fullscreen that uses the whole display including the camera cutout (double-tap the video to toggle it), and chat beside the stream.
+<sub>Android</sub>
 
-## Install on Android TV & Fire TV (Downloader app, a couple of minutes)
+</div>
 
-PureTV has a separate build made for the TV, with a 10-foot layout you drive entirely with the remote. It installs by sideloading with the free **Downloader** app (by AFTVnews), which works on Fire TV, Fire TV Stick, and Google TV / Android TV.
+<br>
 
-1. On your TV, install **Downloader** from the Amazon Appstore (Fire TV) or the Google Play Store (Google TV), and open it.
-2. First time only: your TV has to allow installs from Downloader. Fire TV walks you through this the first time; on Google TV go to *Settings, then Apps, then Security & restrictions, then Unknown sources*, and turn Downloader on.
-3. In Downloader's URL box, enter the link to the TV APK and press Go:
+## Get it
+
+<details>
+<summary><b>Windows</b></summary>
+
+<br>
+
+1. [Download the installer](https://github.com/dhawal-ss/puretv/releases/latest) and open it.
+2. If Windows shows a blue "Windows protected your PC" screen, click **More info**, then **Run anyway**. That only appears because the app is not code-signed yet.
+3. Open PureTV and sign in.
+
+Everything it needs, including the video engine, is in the installer.
+
+</details>
+
+<details>
+<summary><b>Android</b></summary>
+
+<br>
+
+Sideloaded, not on the Play Store. Needs Android 8.0 or newer.
+
+1. [Download the APK](https://github.com/dhawal-ss/puretv/releases/download/android-latest/PureTV-for-Twitch-Android.apk) on your phone and open it.
+2. Android will ask to allow installs from your browser the first time. Turn it on, then tap **Install**.
+3. Open PureTV, tap **Copy code**, then go to **twitch.tv/activate** and paste it.
+
+You also get Picture-in-Picture and a fill-to-edge fullscreen that uses the whole display including the camera cutout. Double-tap the video to toggle it.
+
+</details>
+
+<details>
+<summary><b>Android TV and Fire TV</b></summary>
+
+<br>
+
+A separate build with a 10-foot layout you drive entirely with the remote. It installs through the free **Downloader** app by AFTVnews.
+
+1. Install **Downloader** on your TV, from the Amazon Appstore or Google Play, and open it.
+2. First time only, your TV has to allow installs from Downloader. Fire TV prompts you. On Google TV it is under *Settings, Apps, Security & restrictions, Unknown sources*.
+3. Rather than pecking out a long URL with the remote, get a short code: on your phone open **[aftv.news](https://aftv.news)**, paste the link below, and it gives you a 6 or 7 digit code. Type that into Downloader and press Go.
 
    ```
    https://github.com/dhawal-ss/puretv/releases/download/tv-latest/PureTV-FireTV-AndroidTV.apk
    ```
 
-   > **Easier: use a short Downloader code instead of typing that whole link.** Downloader (AFTVnews) has a companion URL shortener at **[aftv.news](https://aftv.news)**. The link above is permanent (it always points to the latest TV build), so a code made for it keeps working for every future release. On your phone or computer, open aftv.news, paste the link above, pass the quick "I'm not a robot" check, and it gives you a short numeric code (usually 6 to 7 digits). Then in Downloader on your TV, just type that code and press Go, and it jumps straight to this download, no long link to peck out with the remote.
+   The link is permanent, so one code keeps working for every future release.
+4. Choose **Install**, then open PureTV and sign in: scan the QR with your phone, or go to **twitch.tv/activate** and type the big code on screen.
 
-4. It downloads the APK, then asks to install it. Choose Install, and when it finishes you can delete the downloaded file to save space.
-5. Open PureTV from your app list and sign in: scan the on-screen QR code with your phone, or go to **twitch.tv/activate** and enter the short code shown. Sign-in goes straight through Twitch's own secure login page, so PureTV never sees your password.
+**Remote controls:** D-pad to move, Select to open, Back to go back. On a stream, Left or Right shows chat, Play/Pause pauses, and Fast-Forward or Rewind changes quality.
 
-A few notes:
+</details>
 
-- Using the remote: D-pad to move, Select to open, Back to go back. On a stream, press Left/Right or Menu to show chat, the Play/Pause button to pause, and Fast-Forward/Rewind to change video quality. Search brings up an on-screen keyboard, and browsing a category shows every channel live in it. Ad blocking runs automatically, shown by the small pill on the player.
-- This build is signed with a development key, so the TV labels it an app from an "unknown source". That is normal for sideloaded apps and safe to allow.
-- It needs Android TV / Fire OS based on Android 8.0 or newer (every current Fire TV Stick and Google TV qualifies).
-- Automatic updates. PureTV checks for a new version when it starts, and you can install it from Settings with the remote, no re-sideloading needed.
+<br>
 
-## What you get
+> [!NOTE]
+> The Android and TV builds are signed with a development key, so your device will call them apps from an "unknown source". That is just how sideloading works.
 
-- Ad-free playback. Mid-roll ads are filtered out before the player ever sees them, and a small status indicator on the player shows you it is working.
-- Follow your favorites. Add any channel and it shows up on your Home page, live or offline, so you never have to search for it again.
-- Automatic updates. PureTV checks for a new version when it starts and updates itself in one click.
-- Live chat right beside the stream.
-- Real window controls: theatre mode, borderless fullscreen, and snap-to-edge dragging that feels native.
+<br>
 
-## Updating
+## Build it yourself
 
-You do not have to do anything. When a new version is out, PureTV shows an "Update available" banner at the top of the window. Click Update and it installs the new version and reopens. You can also check any time under Settings, then About.
+Kotlin Multiplatform. A shared `core` module holds the API client, sign-in, ad-block engine and chat; each app builds its own UI on top. Windows uses Compose Multiplatform with VLC, Android and TV use Jetpack Compose with ExoPlayer.
 
-## Privacy
-
-Your sign-in goes straight to the streaming service using standard OAuth. PureTV runs no servers of its own and never sees your password. Your session is stored encrypted on your own computer.
-
----
-
-## For developers
-
-PureTV is a Kotlin Multiplatform project. A shared `core` module holds the API client, sign-in, ad-block engine, chat, and data models, and each platform app builds its own UI on top. The Windows app uses Compose Multiplatform with VLC for playback; the Android app uses Jetpack Compose with ExoPlayer (Media3).
-
-Run the desktop app (needs JDK 17 and VLC installed):
-
-```
-./gradlew :app-windows:run
-```
-
-Build the Android app (needs the Android SDK; point `local.properties` at it with `sdk.dir=...`):
-
-```
+```bash
+./gradlew :app-windows:run          # desktop, needs JDK 17 and VLC
 ./gradlew :app-android:assembleDebug
-```
-
-Build the Android TV / Fire TV app (same SDK; it shares the `core` module but has its own 10-foot Leanback/D-pad UI):
-
-```
 ./gradlew :app-tv:assembleDebug
 ```
 
-A signed release TV APK (`./gradlew :app-tv:assembleRelease`) needs a keystore. Create one and put its details in a gitignored `keystore.properties` at the repo root (`storeFile`, `storePassword`, `keyAlias`, `keyPassword`); without it the release build is left unsigned.
+Full setup, signing and release instructions live in **[docs/DEVELOPING.md](docs/DEVELOPING.md)**.
 
-Sign-in needs a client secret, kept in a gitignored `secrets.properties` (copy `secrets.properties.example` and fill in your own).
-
-Package the installer (this bundles VLC, so the installed app needs nothing extra):
-
-```
-./gradlew :app-windows:bundleVlc :app-windows:packageReleaseMsi
-```
-
-To cut a Windows release, bump `appVersion` in `app-windows/build.gradle.kts`, commit, then tag and push, for example:
-
-```
-git tag v1.0.1
-git push origin v1.0.1
-```
-
-CI builds the installers and opens a draft release. Publish it, and the in-app updater picks it up on everyone's next launch.
-
-Android and TV releases are NOT built by CI, there is no workflow watching `android-v*` or `tv-v*` tags. Cut one by hand:
-
-1. Bump `versionCode`/`versionName` in `app-android/build.gradle.kts` or `app-tv/build.gradle.kts`, and the matching `versionCode`/`versionName`/`notes` in `docs/android-version.json` or `docs/tv-version.json`.
-2. Build the signed release APK: `./gradlew :app-tv:assembleRelease` is fully wired to `keystore.properties` and produces a signed APK directly. `./gradlew :app-android:assembleRelease` currently does NOT (`app-android/build.gradle.kts`'s `signingConfig` line is commented out), so it produces an unsigned APK you have to sign by hand. The Android releases published so far were all signed with this machine's local `~/.android/debug.keystore` (alias `androiddebugkey`, password `android`), not a dedicated release key. Whatever you sign a new build with MUST match that same key, or Android will refuse to install it as an update over an existing install (users would need to uninstall first). Verify before uploading anything: `apksigner verify --print-certs <new.apk>` must match `apksigner verify --print-certs` on the currently-published APK.
-3. Upload the versioned tag as a **pre-release** (`gh release create android-v1.0.2 --prerelease ...`), then update the moving `android-latest`/`tv-latest` release: upload the new APK first (`gh release upload android-latest new.apk --clobber`), verify it downloads and its signature checks out, THEN upload the updated `android-version.json`/`tv-version.json` last (`--clobber`). Uploading the manifest before the APK would advertise a version that isn't downloadable yet.
-
-### Release channels (important)
-
-Windows (`v*`), Android (`android-v*`, plus the moving `android-latest`), and Android TV / Fire TV (`tv-v*`, plus the moving `tv-latest`) all publish from this one repo, so they share GitHub's single "Latest" pointer. The **Download for Windows** button above and the Windows in-app updater both resolve `/releases/latest`, which GitHub points at the newest release that is **not** a draft or pre-release. So any Android or TV release that isn't marked pre-release steals "Latest" from Windows, and because those releases carry only an APK (no `.exe`), the Windows button lands users on the APK and the desktop updater finds no installer and silently offers nothing.
-
-Rule: **every Android and TV release must be created as a pre-release** (`gh release create <tag> --prerelease ...`, or `gh release edit <tag> --prerelease` after the fact). Only Windows `v*` releases stay non-pre-release. This is safe because the Android/TV download links here use pinned tag URLs and the Android/TV in-app updaters each read their own pinned `*-latest/*-version.json` manifest, none of which depend on the "Latest" pointer. The desktop updater additionally skips any release without a Windows installer as a backstop, but keep the pre-release flag correct so the download button stays right.
+<br>
 
 ## License
 
-PureTV is open source under the MIT License (see [LICENSE](LICENSE)). Contributions are very welcome, so feel free to open an issue or a pull request.
+MIT, see [LICENSE](LICENSE). Issues and pull requests are very welcome.
