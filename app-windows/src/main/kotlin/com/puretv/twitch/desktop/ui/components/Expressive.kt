@@ -4,6 +4,10 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.drag
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -36,6 +40,7 @@ import androidx.compose.ui.composed
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -778,4 +783,92 @@ fun ExpressiveSwitch(
 @Composable
 fun ExpressiveDivider(modifier: Modifier = Modifier) {
     Box(modifier.fillMaxWidth().height(1.dp).background(PureTvTheme.colors.outlineVariant))
+}
+
+// ── Slider ─────────────────────────────────────────────────────────────────────
+
+/**
+ * The one slider shape in the app: a 16dp fully rounded track, a primary fill, and
+ * a tall narrow thumb that sits in a gap punched through the track.
+ *
+ * Hand drawn rather than built on Material 3's `Slider`, whose track/thumb slots
+ * are still experimental in material3 1.7 and whose default groove is far thinner
+ * than the Expressive geometry. One gesture covers both interactions: pressing
+ * sets the value immediately, dragging keeps adjusting, and releasing reports
+ * completion so a seek can commit once instead of on every frame.
+ *
+ * @param value normalised 0..1.
+ * @param containerColor the panel colour behind the slider, used for the gap
+ *   around the thumb. Defaults to the standard controls-bar container.
+ */
+@Composable
+fun ExpressiveSlider(
+    value: Float,
+    onValueChange: (Float) -> Unit,
+    modifier: Modifier = Modifier,
+    onValueChangeFinished: (() -> Unit)? = null,
+    enabled: Boolean = true,
+    containerColor: Color? = null,
+) {
+    val c = PureTvTheme.colors
+    val shape = PureTvTheme.shapes.pillShape
+    val gapColor = containerColor ?: c.surfaceContainer
+    val fraction = value.coerceIn(0f, 1f)
+    val thumbWidth = 6.dp
+    val gapWidth = 14.dp
+
+    BoxWithConstraints(
+        modifier = modifier
+            .height(28.dp)
+            .graphicsLayer { alpha = if (enabled) 1f else 0.38f }
+            .handCursor()
+            .pointerInput(enabled, onValueChange, onValueChangeFinished) {
+                if (!enabled) return@pointerInput
+                fun report(x: Float) = onValueChange((x / size.width.toFloat()).coerceIn(0f, 1f))
+                awaitEachGesture {
+                    val down = awaitFirstDown()
+                    report(down.position.x)
+                    drag(down.id) { change ->
+                        report(change.position.x)
+                        change.consume()
+                    }
+                    onValueChangeFinished?.invoke()
+                }
+            },
+        contentAlignment = Alignment.CenterStart,
+    ) {
+        val width = maxWidth
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .height(16.dp)
+                .clip(shape)
+                .background(c.surfaceHighest),
+        ) {
+            Box(
+                Modifier
+                    .fillMaxWidth(fraction)
+                    .fillMaxHeight()
+                    .clip(shape)
+                    .background(c.primary),
+            )
+        }
+        // The thumb reads as a separate object because the track is cut away
+        // around it. Drawing a border on a 6dp thumb instead would consume the
+        // whole thumb and leave nothing but the outline.
+        val thumbCentre = (width * fraction).coerceIn(thumbWidth / 2, width - thumbWidth / 2)
+        Box(
+            Modifier
+                .padding(start = (thumbCentre - gapWidth / 2).coerceAtLeast(0.dp))
+                .size(width = gapWidth, height = 28.dp)
+                .background(gapColor),
+        )
+        Box(
+            Modifier
+                .padding(start = (thumbCentre - thumbWidth / 2).coerceAtLeast(0.dp))
+                .size(width = thumbWidth, height = 28.dp)
+                .clip(shape)
+                .background(c.primary),
+        )
+    }
 }

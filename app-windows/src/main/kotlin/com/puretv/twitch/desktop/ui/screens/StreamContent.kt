@@ -107,6 +107,7 @@ import com.puretv.twitch.desktop.ui.components.ExpressiveButtonSize
 import com.puretv.twitch.desktop.ui.components.ExpressiveButtonStyle
 import com.puretv.twitch.desktop.ui.components.ExpressiveIconButton
 import com.puretv.twitch.desktop.ui.components.ExpressiveIcons
+import com.puretv.twitch.desktop.ui.components.ExpressiveSlider
 import com.puretv.twitch.desktop.ui.components.LivePill
 import com.puretv.twitch.desktop.ui.components.LocalBadgeIndex
 import com.puretv.twitch.desktop.ui.components.PlayerSettingsMenu
@@ -602,7 +603,11 @@ private fun PlaybackControls(
     ) {
         PlayPauseButton(isPlaying = isPlaying, onClick = onTogglePlayPause)
         VolumeButton(isMuted = isMuted || volume == 0, onClick = onToggleMute)
-        VolumeSlider(value = volume, onValueChange = onVolumeChange)
+        ExpressiveSlider(
+            value = volume / 100f,
+            onValueChange = { onVolumeChange((it * 100f).roundToInt()) },
+            modifier = Modifier.width(150.dp).padding(horizontal = 10.dp),
+        )
         Spacer(Modifier.weight(1f))
         LivePill()
         Spacer(Modifier.width(8.dp))
@@ -669,59 +674,6 @@ private fun VolumeButton(isMuted: Boolean, onClick: () -> Unit) {
             contentDescription = if (isMuted) "Unmute" else "Mute",
             tint = c.onSurface,
             modifier = Modifier.size(24.dp),
-        )
-    }
-}
-
-/**
- * A 150dp-wide chunky slider: a 16dp fully-rounded track and a 6x28dp thumb, drawn
- * by hand because Material3's [androidx.compose.material3.Slider] in this Compose
- * Multiplatform version has no track/thumb slot wide enough for the Expressive
- * shape. A single gesture (down sets the value immediately, drag keeps adjusting)
- * covers both click-to-set and drag-to-scrub.
- */
-@Composable
-private fun VolumeSlider(value: Int, onValueChange: (Int) -> Unit) {
-    val c = PureTvTheme.colors
-    val shape = PureTvTheme.shapes.pillShape
-    BoxWithConstraints(
-        modifier = Modifier
-            .width(150.dp)
-            .padding(horizontal = 10.dp)
-            .height(16.dp)
-            .clip(shape)
-            .background(c.surfaceHighest)
-            .pointerInput(onValueChange) {
-                fun update(x: Float) {
-                    val pct = (x / size.width.toFloat()).coerceIn(0f, 1f)
-                    onValueChange((pct * 100f).roundToInt())
-                }
-                awaitEachGesture {
-                    val down = awaitFirstDown()
-                    update(down.position.x)
-                    drag(down.id) { change ->
-                        update(change.position.x)
-                        change.consume()
-                    }
-                }
-            },
-    ) {
-        val fraction = (value / 100f).coerceIn(0f, 1f)
-        Box(
-            Modifier
-                .fillMaxHeight()
-                .fillMaxWidth(fraction)
-                .clip(shape)
-                .background(c.primary),
-        )
-        Box(
-            Modifier
-                .align(Alignment.CenterStart)
-                .padding(start = (maxWidth * fraction - 3.dp).coerceIn(0.dp, maxWidth - 6.dp))
-                .size(width = 6.dp, height = 28.dp)
-                .clip(shape)
-                .background(c.primary)
-                .border(3.dp, c.surfaceContainer, shape),
         )
     }
 }

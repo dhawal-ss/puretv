@@ -27,11 +27,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Slider
-import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -72,6 +69,7 @@ import com.puretv.twitch.desktop.ui.components.ExpressiveButtonSize
 import com.puretv.twitch.desktop.ui.components.ExpressiveButtonStyle
 import com.puretv.twitch.desktop.ui.components.ExpressiveIconButton
 import com.puretv.twitch.desktop.ui.components.ExpressiveIcons
+import com.puretv.twitch.desktop.ui.components.ExpressiveSlider
 import com.puretv.twitch.desktop.ui.components.PlayerSettingsMenu
 import com.puretv.twitch.desktop.ui.components.SeekPreview
 import com.puretv.twitch.desktop.ui.components.expressiveClickable
@@ -85,6 +83,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import org.koin.core.Koin
+import kotlin.math.roundToInt
 import org.koin.core.parameter.parametersOf
 import java.awt.KeyEventDispatcher
 import java.awt.KeyboardFocusManager
@@ -401,10 +400,6 @@ private fun VodTopBar(
     }
 }
 
-// The custom track/thumb Slider overload is still @ExperimentalMaterial3Api in
-// material3 1.7; it is the only way to draw the Expressive seek bar's own geometry
-// (16dp track, 6x28 thumb) instead of the stock Slider's fixed-height groove.
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun VodControls(
     koin: Koin,
@@ -486,30 +481,19 @@ private fun VodControls(
                 boxSize = 52.dp,
                 iconSize = 22.dp,
             )
-            Slider(
-                value = status.volume.toFloat(),
-                onValueChange = { viewModel.setVolume(it.toInt()) },
-                valueRange = 0f..100f,
-                modifier = Modifier.width(90.dp),
-                colors = SliderDefaults.colors(thumbColor = c.primary, activeTrackColor = c.primary, inactiveTrackColor = c.surfaceHighest),
+            ExpressiveSlider(
+                value = status.volume / 100f,
+                onValueChange = { viewModel.setVolume((it * 100f).roundToInt()) },
+                modifier = Modifier.width(110.dp),
             )
 
             Text(formatTimecode(shown), style = PureTvType.data, color = c.onSurfaceVariant)
-            Slider(
+            ExpressiveSlider(
                 value = (shown.toFloat() / duration.toFloat()).coerceIn(0f, 1f),
                 onValueChange = { f -> dragMs = (f * duration).toLong() },
                 onValueChangeFinished = { dragMs?.let { viewModel.seekTo(it) }; dragMs = null },
                 enabled = status.isSeekable,
                 modifier = Modifier.weight(1f),
-                track = { sliderState ->
-                    val trackFrac = ((sliderState.value - sliderState.valueRange.start) / (sliderState.valueRange.endInclusive - sliderState.valueRange.start)).coerceIn(0f, 1f)
-                    Box(Modifier.fillMaxWidth().height(16.dp).clip(shapes.pillShape).background(c.surfaceHighest)) {
-                        Box(Modifier.fillMaxWidth(trackFrac).fillMaxHeight().clip(shapes.pillShape).background(c.primary))
-                    }
-                },
-                thumb = {
-                    Box(Modifier.size(width = 6.dp, height = 28.dp).clip(RoundedCornerShape(3.dp)).background(c.primary))
-                },
             )
             Text(formatTimecode(status.durationMs), style = PureTvType.data, color = c.onSurfaceVariant)
 
