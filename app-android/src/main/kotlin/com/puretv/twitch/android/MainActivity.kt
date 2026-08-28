@@ -12,6 +12,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.core.view.WindowCompat
 import androidx.media3.common.util.UnstableApi
 import androidx.navigation.compose.rememberNavController
 import com.puretv.twitch.android.player.TwitchPlayer
@@ -55,6 +56,18 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Edge to edge, explicitly. Without this the decor view fits system windows
+        // itself, which means it, and not Compose, owns the inset arithmetic: every
+        // windowInsetsPadding() in the app reads whatever the decor left over, and
+        // the value only recomputes when the decor decides to. Since `configChanges`
+        // keeps this Activity alive across rotation and StreamScreen hides and shows
+        // the system bars on every fullscreen toggle, a stale decor inset had nothing
+        // to force it back, which is how a gap could survive on one edge after
+        // leaving fullscreen. Compose insets are live and recompute on every change,
+        // so each screen below now states its own inset intent and gets a fresh
+        // answer every time.
+        WindowCompat.setDecorFitsSystemWindows(window, false)
 
         // Allow the app to use the display cutout (camera punch-hole) once, up
         // front. Set at Activity creation and NEVER toggled at runtime: changing

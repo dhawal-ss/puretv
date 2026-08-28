@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -65,7 +66,9 @@ fun ChannelScreen(channelLogin: String, onWatch: () -> Unit, onBack: () -> Unit)
     val state by viewModel.state.collectAsState()
     val c = PureTvTheme.colors
 
-    Column(modifier = Modifier.fillMaxSize().background(c.surface)) {
+    // No tab bar under this route, so the screen owns the navigation-bar inset
+    // itself. Bottom only: the banner above stays flush against the top edge.
+    Column(modifier = Modifier.fillMaxSize().background(c.surface).navigationBarsPadding()) {
         when {
             state.isLoading -> {
                 BackHeader(onBack)

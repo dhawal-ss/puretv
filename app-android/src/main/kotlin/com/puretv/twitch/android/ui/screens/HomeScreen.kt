@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -117,6 +118,11 @@ fun HomeScreen(
             )
         },
         containerColor = c.surfaceLowest,
+        // Zeroed on purpose. The TopAppBar already carries the status-bar inset, and
+        // the tab bar below carries the navigation-bar one. Leaving the M3 default
+        // (systemBars) here would add the bottom inset a second time, opening a dead
+        // strip between the last card and the tab bar.
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
     ) { padding ->
         val isEmpty = state.followedLive.isEmpty() && state.games.isEmpty() &&
             state.topStreams.isEmpty() && state.continueWatching.isEmpty()

@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
@@ -136,7 +137,10 @@ fun StreamScreen(channelLogin: String, onBack: () -> Unit) {
     }
 
     if (sideBySide) {
-        BoxWithConstraints(modifier = Modifier.fillMaxSize().background(c.surfaceLowest)) {
+        // Hidden system bars report a zero inset, so this costs nothing in
+        // fullscreen and keeps the video and chat clear of the buttons in
+        // windowed landscape, where the navigation bar sits on one side.
+        BoxWithConstraints(modifier = Modifier.fillMaxSize().background(c.surfaceLowest).navigationBarsPadding()) {
             val widthPx = constraints.maxWidth.toFloat()
             Row(modifier = Modifier.fillMaxSize()) {
                 PlayerArea(
@@ -178,7 +182,7 @@ fun StreamScreen(channelLogin: String, onBack: () -> Unit) {
             }
         }
     } else {
-        Column(modifier = Modifier.fillMaxSize().background(c.surfaceLowest)) {
+        Column(modifier = Modifier.fillMaxSize().background(c.surfaceLowest).navigationBarsPadding()) {
             PlayerArea(
                 state = state,
                 fullscreen = false,

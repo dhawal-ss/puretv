@@ -6,6 +6,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
@@ -78,7 +80,13 @@ fun FollowingScreen(
     var layout by remember { mutableStateOf(FollowingLayout.GRID) }
     val noData = state.live.isEmpty() && state.offline.isEmpty()
 
-    Scaffold(containerColor = c.surfaceLowest) { padding ->
+    // Top inset only: this screen has no app bar, so it owns the status bar itself,
+    // while the tab bar below owns the navigation bar. The M3 default (systemBars)
+    // would pad the bottom a second time on top of the tab bar.
+    Scaffold(
+        containerColor = c.surfaceLowest,
+        contentWindowInsets = WindowInsets.statusBars,
+    ) { padding ->
         LazyColumn(
             modifier = Modifier.fillMaxSize().padding(padding),
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 20.dp),
