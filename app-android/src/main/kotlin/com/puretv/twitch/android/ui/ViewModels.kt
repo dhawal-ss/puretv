@@ -21,6 +21,8 @@ import com.puretv.twitch.core.api.DevicePollResult
 import com.puretv.twitch.core.api.TwitchConfig
 import com.puretv.twitch.core.chat.TwitchChatClient
 import com.puretv.twitch.core.emotes.EmoteRepository
+import com.puretv.twitch.core.follows.FollowRow
+import com.puretv.twitch.core.follows.FollowedChannelsSource
 import com.puretv.twitch.core.model.AppSettings
 import com.puretv.twitch.core.model.ChatEvent
 import com.puretv.twitch.core.model.ChatMessage
@@ -571,56 +573,72 @@ class LoginViewModel(
 
 data class FollowingUiState(
     val isLoggedIn: Boolean = false,
-    val liveFollows: List<StreamInfo> = emptyList(),
     val isLoading: Boolean = false,
-    val error: String? = null,
+    val live: List<FollowRow> = emptyList(),
+    val offline: List<FollowRow> = emptyList(),
+    val errored: Boolean = false,
 )
 
 /**
- * Backs the Following tab. Observes the session: when logged in it loads the
- * follow set and shows the channels that are live right now; when logged out it
- * shows a connect prompt. Reuses the shared UserRepository follow cache, so it
- * stays in sync with Home's "Live now" rail.
+ * Backs the Following tab. Drives [FollowedChannelsSource] directly, the same
+ * live-plus-offline merge desktop's [com.puretv.twitch.desktop.ui.FollowedRailViewModel]
+ * uses, rather than the old followedLogins + streamsForChannels path that could
+ * only ever show who is live. Android has no local-pin store like desktop's
+ * FollowStore, so [FollowedChannelsSource.load] always gets an empty pin list;
+ * only real Twitch follows show up here.
  */
 class FollowingViewModel(
-    private val userRepository: UserRepository,
-    private val streamRepository: StreamRepository,
+    private val source: FollowedChannelsSource,
     private val sessionManager: SessionManager,
 ) : ViewModel() {
-    private val _state = MutableStateFlow(FollowingUiState())
+    private val _state = MutableStateFlow(FollowingUiState(isLoggedIn = sessionManager.state.value is SessionState.LoggedIn))
     val state: StateFlow<FollowingUiState> = _state.asStateFlow()
 
-    // Cancel-and-replace so a double-tapped pull-to-refresh cannot run two
-    // overlapping follow loads.
-    private var refreshJob: Job? = null
+    // A single in-flight load. Cancel-and-replace on refresh() so a double-tapped
+    // pull-to-refresh and a sign-in landing mid-load can't both write the final
+    // state, the slower one winning with stale data. Mirrors desktop's loadJob.
+    private var loadJob: Job? = null
 
     init {
         viewModelScope.launch {
             sessionManager.state.collect { session ->
                 when (session) {
-                    is SessionState.LoggedOut -> _state.update { FollowingUiState(isLoggedIn = false) }
+                    is SessionState.LoggedOut -> {
+                        // Drop cached profiles so a different account signing in
+                        // later in this process never reuses them.
+                        loadJob?.cancel()
+                        source.clear()
+                        _state.update { FollowingUiState(isLoggedIn = false) }
+                    }
                     is SessionState.LoggedIn -> {
-                        _state.update { it.copy(isLoggedIn = true, isLoading = it.liveFollows.isEmpty(), error = null) }
-                        runCatching { userRepository.loadFollowsForCurrentUser() }
+                        _state.update { it.copy(isLoggedIn = true) }
+                        load(session.userId)
                     }
                 }
             }
         }
-        viewModelScope.launch {
-            userRepository.followedLogins.collect { follows ->
-                val live = if (follows.isEmpty()) emptyList()
-                else runCatching { streamRepository.streamsForChannels(follows) }.getOrDefault(emptyList())
-                _state.update { it.copy(liveFollows = live, isLoading = false) }
-            }
-        }
     }
 
+    /** Fire-and-forget reload (pull-to-refresh). No-op while signed out. */
     fun refresh() {
-        refreshJob?.cancel()
-        refreshJob = viewModelScope.launch {
-            _state.update { it.copy(isLoading = true, error = null) }
-            runCatching { userRepository.loadFollowsForCurrentUser() }
-            _state.update { it.copy(isLoading = false) }
+        val userId = (sessionManager.state.value as? SessionState.LoggedIn)?.userId ?: return
+        load(userId)
+    }
+
+    private fun load(userId: String) {
+        loadJob?.cancel()
+        loadJob = viewModelScope.launch {
+            _state.update { it.copy(isLoading = it.live.isEmpty() && it.offline.isEmpty(), errored = false) }
+            runCatching {
+                // Fast partial: live channels are in (avatars may still be
+                // loading). Drop the loading state now so the list appears
+                // without waiting on avatars.
+                source.load(userId, emptyList()) { partial ->
+                    _state.update { it.copy(isLoading = false, errored = false, live = partial.live, offline = partial.offline) }
+                }
+            }
+                .onSuccess { full -> _state.update { it.copy(isLoading = false, errored = false, live = full.live, offline = full.offline) } }
+                .onFailure { _state.update { it.copy(isLoading = false, errored = true) } }
         }
     }
 }

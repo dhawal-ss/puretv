@@ -9,6 +9,8 @@ import com.puretv.twitch.android.data.TokenRefresher
 import com.puretv.twitch.android.data.db.PureTvDatabase
 import com.puretv.twitch.android.player.TwitchPlayer
 import com.puretv.twitch.android.update.AndroidUpdateManager
+import com.puretv.twitch.core.follows.FollowedChannelsService
+import com.puretv.twitch.core.follows.FollowedChannelsSource
 import com.puretv.twitch.android.ui.BrowseViewModel
 import com.puretv.twitch.android.ui.CategoryViewModel
 import com.puretv.twitch.android.ui.ChannelViewModel
@@ -60,6 +62,10 @@ val androidModule = module {
     single { AppSettingsStore(get(), get(), get<TokenHolder>()) }
     single { SessionManager(get()) }
     single { TokenRefresher(get(), get(), get()) }
+    // Followed-rail data: real Twitch follows (paginated), live status and
+    // avatars. No local-pin store on Android, so FollowingViewModel always
+    // passes an empty pin list to `load`.
+    single<FollowedChannelsSource> { FollowedChannelsService(get()) }
 
     // --- Playback ---------------------------------------------------------
     // TwitchPlayer(context, adBlockEngine, backupStreamResolver) — the last one
@@ -71,7 +77,7 @@ val androidModule = module {
     // get() resolves each constructor argument by type, so argument order does
     // not matter as long as every type is bound above (the DAOs are).
     viewModel { HomeViewModel(get(), get(), get(), get(), get(), get()) }
-    viewModel { FollowingViewModel(get(), get(), get()) }
+    viewModel { FollowingViewModel(get(), get()) }
     viewModel { WelcomeViewModel(get()) }
     viewModel { BrowseViewModel(get()) }
     viewModel { SearchViewModel(get(), get()) }

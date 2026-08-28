@@ -8,6 +8,8 @@ import com.puretv.twitch.core.api.DeviceAuth
 import com.puretv.twitch.core.api.DevicePollResult
 import com.puretv.twitch.core.chat.TwitchChatClient
 import com.puretv.twitch.core.emotes.EmoteRepository
+import com.puretv.twitch.core.follows.FollowRow
+import com.puretv.twitch.core.follows.FollowedChannelsSource
 import com.puretv.twitch.core.model.AppSettings
 import com.puretv.twitch.core.model.ChatEvent
 import com.puretv.twitch.core.model.ChatMessage
