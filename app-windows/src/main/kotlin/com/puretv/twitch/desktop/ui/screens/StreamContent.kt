@@ -11,18 +11,25 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.drag
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.hoverable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -30,29 +37,10 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.Chat
-import androidx.compose.material.icons.automirrored.filled.Send
-import androidx.compose.material.icons.automirrored.filled.VolumeOff
-import androidx.compose.material.icons.automirrored.filled.VolumeUp
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.AspectRatio
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Fullscreen
-import androidx.compose.material.icons.filled.FullscreenExit
-import androidx.compose.material.icons.filled.Mood
-import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Slider
-import androidx.compose.material3.SliderDefaults
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -62,18 +50,20 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -84,24 +74,21 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.puretv.twitch.core.adblock.AdBlockStatus
 import com.puretv.twitch.core.model.ChatMessage
+import com.puretv.twitch.core.model.StreamInfo
 import com.puretv.twitch.core.model.StreamQuality
+import com.puretv.twitch.core.model.UpscalingMode
 import com.puretv.twitch.desktop.data.DesktopSettingsStore
 import com.puretv.twitch.desktop.player.DesktopPlayer
 import com.puretv.twitch.desktop.player.VlcPlayerView
-import com.puretv.twitch.desktop.ui.components.PlayerSettingsMenu
 import com.puretv.twitch.desktop.ui.LocalAppShell
 import com.puretv.twitch.desktop.ui.PlayerMode
 import com.puretv.twitch.desktop.ui.StreamViewModel
-import com.puretv.twitch.desktop.ui.rememberDesktopViewModel
-import com.puretv.twitch.desktop.ui.components.AdBlockPill
-import com.puretv.twitch.desktop.ui.components.ChatMessageRow
-import com.puretv.twitch.desktop.ui.components.LocalBadgeIndex
-import com.puretv.twitch.desktop.ui.components.LiveDot
-import com.puretv.twitch.desktop.ui.components.SegmentedControl
 import com.puretv.twitch.desktop.ui.chat.ComposerKeyAction
 import com.puretv.twitch.desktop.ui.chat.completeWord
 import com.puretv.twitch.desktop.ui.chat.composerKeyAction
@@ -110,10 +97,25 @@ import com.puretv.twitch.desktop.ui.chat.matchEmotes
 import com.puretv.twitch.desktop.ui.chat.nextFollowing
 import com.puretv.twitch.desktop.ui.chat.scrollAnchor
 import com.puretv.twitch.desktop.ui.chat.wordAtCursor
+import com.puretv.twitch.desktop.ui.components.AdBlockPill
+import com.puretv.twitch.desktop.ui.components.Avatar
+import com.puretv.twitch.desktop.ui.components.ChatMessageRow
+import com.puretv.twitch.desktop.ui.components.CountBadge
 import com.puretv.twitch.desktop.ui.components.EmoteImage
+import com.puretv.twitch.desktop.ui.components.ExpressiveButton
+import com.puretv.twitch.desktop.ui.components.ExpressiveButtonSize
+import com.puretv.twitch.desktop.ui.components.ExpressiveButtonStyle
+import com.puretv.twitch.desktop.ui.components.ExpressiveIconButton
+import com.puretv.twitch.desktop.ui.components.ExpressiveIcons
+import com.puretv.twitch.desktop.ui.components.LivePill
+import com.puretv.twitch.desktop.ui.components.LocalBadgeIndex
+import com.puretv.twitch.desktop.ui.components.PlayerSettingsMenu
+import com.puretv.twitch.desktop.ui.components.expressiveClickable
+import com.puretv.twitch.desktop.ui.components.expressiveSurface
+import com.puretv.twitch.desktop.ui.components.formatViewerCount
 import com.puretv.twitch.core.emotes.PickableEmote
+import com.puretv.twitch.desktop.ui.rememberDesktopViewModel
 import com.puretv.twitch.desktop.ui.theme.PureTvMotion
-import com.puretv.twitch.desktop.ui.theme.PureTvShape
 import com.puretv.twitch.desktop.ui.theme.PureTvTheme
 import com.puretv.twitch.desktop.ui.theme.PureTvType
 import kotlinx.coroutines.Job
@@ -121,14 +123,19 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 import org.koin.core.Koin
 import org.koin.core.parameter.parametersOf
 import java.awt.KeyEventDispatcher
 import java.awt.KeyboardFocusManager
-import com.puretv.twitch.core.model.UpscalingMode
 import java.awt.event.KeyEvent
 
-private val CHAT_WIDTH = 360.dp
+private val CHAT_WIDTH = 392.dp
+
+/** Chat's own three panels (header, message list, composer) stay rounded even
+ *  when the player chrome goes edge-to-edge in theater/fullscreen: chat reads
+ *  as a floating card regardless of how immersive the video gets. */
+private val CHAT_PANEL_RADIUS = 24.dp
 
 /**
  * Watch screen with stable VLC surface.
@@ -137,7 +144,7 @@ private val CHAT_WIDTH = 360.dp
  * Compose-drawn content, so controls CANNOT be overlaid on top of the player.
  * The layout uses a Column: top-bar → player Box → controls-bar, with
  * AnimatedVisibility sliding them in/out in THEATER/FULLSCREEN mode.
- * Chat lives in a Row column to the right — never overlapping the AWT surface.
+ * Chat lives in a Row column to the right, never overlapping the AWT surface.
  *
  *   F      toggle fullscreen      T  toggle theater
  *   C      toggle chat            Space  play/pause
@@ -169,10 +176,26 @@ fun StreamContent(koin: Koin, channelLogin: String, onBack: () -> Unit, onReques
     val isChatOpen = shell.isChatOpen
     val c = PureTvTheme.colors
 
+    // The App shell itself collapses its own outer inset and pane rounding to 0 in
+    // THEATER/FULLSCREEN (see App.kt's paneCorner). Mirror that here so the player
+    // chrome goes fully edge-to-edge when immersive, and springs back into the
+    // "separate rounded cards" look the moment the user returns to DEFAULT.
+    val immersive = mode != PlayerMode.DEFAULT
+    val groundPad by animateDpAsState(if (immersive) 0.dp else 8.dp, tween(PureTvMotion.Medium), label = "groundPad")
+    val panelRadius by animateDpAsState(if (immersive) 0.dp else 24.dp, tween(PureTvMotion.Medium), label = "panelRadius")
+
     val chatWidth by animateDpAsState(
         targetValue = if (isChatOpen) CHAT_WIDTH else 0.dp,
         animationSpec = tween(PureTvMotion.Medium),
         label = "chatWidth",
+    )
+    // The breathing room between the player column and the chat card. Tied to
+    // isChatOpen (not the immersive ground padding) so chat keeps its own gap even
+    // when the player chrome has gone edge-to-edge.
+    val chatGap by animateDpAsState(
+        targetValue = if (isChatOpen) 8.dp else 0.dp,
+        animationSpec = tween(PureTvMotion.Medium),
+        label = "chatGap",
     )
 
     // Controls visibility: always shown in DEFAULT, auto-hides in THEATER/FULLSCREEN
@@ -267,7 +290,8 @@ fun StreamContent(koin: Koin, channelLogin: String, onBack: () -> Unit, onReques
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black)
+            .background(c.surfaceLowest)
+            .padding(groundPad)
             .pointerInput(mode) {
                 // Only genuine cursor movement counts as "activity". When the
                 // controls auto-hide in THEATER/FULLSCREEN, the player Box grows
@@ -293,8 +317,10 @@ fun StreamContent(koin: Koin, channelLogin: String, onBack: () -> Unit, onReques
     ) {
         Row(Modifier.fillMaxSize()) {
             // ── Player + controls column ───────────────────────────────────────
-            Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
-
+            Column(
+                modifier = Modifier.weight(1f).fillMaxHeight(),
+                verticalArrangement = Arrangement.spacedBy(groundPad),
+            ) {
                 // Top bar — always in DEFAULT, slides up when idle in THEATER/FULLSCREEN
                 AnimatedVisibility(
                     visible = controlsVisible || mode == PlayerMode.DEFAULT,
@@ -304,77 +330,89 @@ fun StreamContent(koin: Koin, channelLogin: String, onBack: () -> Unit, onReques
                     TopBar(
                         mode = mode,
                         channelName = state.channel?.displayName ?: channelLogin,
-                        viewerInfo = state.streamInfo?.let { "${it.gameName.takeIf { g -> g.isNotBlank() } ?: "—"} · ${it.viewerCount} viewers" },
+                        avatarUrl = state.channel?.profileImageUrl,
+                        streamInfo = state.streamInfo,
                         adBlockStatus = state.adBlockStatus,
-                        isChatOpen = isChatOpen,
                         isFollowed = isFollowed,
                         canFollow = state.channel != null,
                         onToggleFollow = viewModel::toggleFollow,
                         onBack = onBack,
-                        onToggleChat = { shell.toggleChat() },
-                        onToggleTheater = { shell.setPlayerMode(if (mode == PlayerMode.THEATER) PlayerMode.DEFAULT else PlayerMode.THEATER) },
-                        onToggleFullscreen = { shell.setPlayerMode(if (mode == PlayerMode.FULLSCREEN) PlayerMode.DEFAULT else PlayerMode.FULLSCREEN) },
+                        radius = panelRadius,
                     )
                 }
 
-                // Player surface — never unmounted (see VlcPlayerView docs)
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f)
-                        .background(Color.Black),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    when {
-                        // A stream-level fatal error (e.g. the local proxy port is in use)
-                        // takes priority — the player never even got a URL, so show the
-                        // explanation instead of an endless "Loading…".
-                        state.fatalError != null -> Text(
-                            state.fatalError!!,
-                            color = c.textSecondary,
-                            modifier = Modifier.padding(24.dp),
-                        )
-                        // Surface a player error whenever nothing is actively playing —
-                        // covers an unavailable engine (e.g. "switch back to VLC"), an
-                        // mpv init failure, and a failed stream start (bad URL). The
-                        // error self-clears on recovery (playing/file-loaded sets error=null).
-                        playerStatus.error != null && !playerStatus.isPlaying && !playerStatus.isBuffering -> Text(
-                            playerStatus.error!!,
-                            color = c.textSecondary,
-                            modifier = Modifier.padding(24.dp),
-                        )
-                        state.playableUrl != null -> VlcPlayerView(
-                            vlcPlayer = vlcPlayer,
-                            modifier = Modifier.fillMaxSize(),
-                            // The heavyweight video surface eats mouse events; bridge
-                            // them back so moving the mouse reveals the controls —
-                            // including in fullscreen, where the surface covers all.
-                            onUserActivity = { resetControls() },
-                        )
-                        else -> Text(
-                            if (state.isLoading) "Loading stream…" else "This channel is offline.",
-                            color = c.textSecondary,
+                // Video panel + playback settings menu, grouped as ONE child of the
+                // outer spacedBy so the gap above/below this pair stays a single
+                // groundPad regardless of whether the settings menu is mounted —
+                // nesting it here (rather than as a sibling of top/controls bars)
+                // avoids a phantom extra gap around its zero-height collapsed state.
+                Column(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                    // Player surface — never unmounted (see VlcPlayerView docs). The
+                    // heavyweight AWT Canvas paints above Compose and ignores any
+                    // clip Compose applies, so this box stays square-cornered: a
+                    // rounded clip here would be cosmetic on the Compose layer only
+                    // and invisible once real video frames cover it.
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f)
+                            .background(Color.Black),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        when {
+                            // A stream-level fatal error (e.g. the local proxy port is in use)
+                            // takes priority — the player never even got a URL, so show the
+                            // explanation instead of an endless "Loading…".
+                            state.fatalError != null -> Text(
+                                state.fatalError!!,
+                                color = c.onSurfaceVariant,
+                                style = MaterialTheme.typography.bodyLarge,
+                                modifier = Modifier.padding(24.dp),
+                            )
+                            // Surface a player error whenever nothing is actively playing —
+                            // covers an unavailable engine (e.g. "switch back to VLC"), an
+                            // mpv init failure, and a failed stream start (bad URL). The
+                            // error self-clears on recovery (playing/file-loaded sets error=null).
+                            playerStatus.error != null && !playerStatus.isPlaying && !playerStatus.isBuffering -> Text(
+                                playerStatus.error!!,
+                                color = c.onSurfaceVariant,
+                                style = MaterialTheme.typography.bodyLarge,
+                                modifier = Modifier.padding(24.dp),
+                            )
+                            state.playableUrl != null -> VlcPlayerView(
+                                vlcPlayer = vlcPlayer,
+                                modifier = Modifier.fillMaxSize(),
+                                // The heavyweight video surface eats mouse events; bridge
+                                // them back so moving the mouse reveals the controls —
+                                // including in fullscreen, where the surface covers all.
+                                onUserActivity = { resetControls() },
+                            )
+                            else -> Text(
+                                if (state.isLoading) "Loading stream…" else "This channel is offline.",
+                                color = c.onSurfaceVariant,
+                                style = MaterialTheme.typography.bodyLarge,
+                            )
+                        }
+                    }
+
+                    // Playback menu — lives in the Column (NOT over the video; the
+                    // heavyweight Canvas paints above Compose), between video and controls.
+                    // Opening it pushes the video up, the same way the controls bar does.
+                    AnimatedVisibility(
+                        visible = settingsMenuOpen,
+                        enter = expandVertically() + fadeIn(),
+                        exit = shrinkVertically() + fadeOut(),
+                    ) {
+                        PlayerSettingsMenu(
+                            currentQuality = state.currentQuality,
+                            onQualitySelected = viewModel::setQuality,
+                            upscalingMode = appSettings.upscalingMode,
+                            onUpscalingSelected = viewModel::setUpscaling,
+                            scalingEnabled = vlcPlayer.supportsUpscaling,
+                            backend = appSettings.playbackBackend,
+                            onBackendSelected = viewModel::setPlaybackBackend,
                         )
                     }
-                }
-
-                // Playback menu — lives in the Column (NOT over the video; the
-                // heavyweight Canvas paints above Compose), between video and controls.
-                // Opening it pushes the video up, the same way the controls bar does.
-                AnimatedVisibility(
-                    visible = settingsMenuOpen,
-                    enter = expandVertically() + fadeIn(),
-                    exit = shrinkVertically() + fadeOut(),
-                ) {
-                    PlayerSettingsMenu(
-                        currentQuality = state.currentQuality,
-                        onQualitySelected = viewModel::setQuality,
-                        upscalingMode = appSettings.upscalingMode,
-                        onUpscalingSelected = viewModel::setUpscaling,
-                        scalingEnabled = vlcPlayer.supportsUpscaling,
-                        backend = appSettings.playbackBackend,
-                        onBackendSelected = viewModel::setPlaybackBackend,
-                    )
                 }
 
                 // Controls bar — always in DEFAULT, slides down when idle in THEATER/FULLSCREEN
@@ -388,86 +426,80 @@ fun StreamContent(koin: Koin, channelLogin: String, onBack: () -> Unit, onReques
                         volume = playerStatus.volume,
                         isMuted = playerStatus.isMuted,
                         settingsOpen = settingsMenuOpen,
+                        mode = mode,
+                        isChatOpen = isChatOpen,
                         onTogglePlayPause = viewModel::togglePlayPause,
                         onVolumeChange = viewModel::setVolume,
                         onToggleMute = viewModel::toggleMute,
                         onToggleSettings = { settingsMenuOpen = !settingsMenuOpen },
+                        onToggleChat = { shell.toggleChat() },
+                        onToggleTheater = { shell.setPlayerMode(if (mode == PlayerMode.THEATER) PlayerMode.DEFAULT else PlayerMode.THEATER) },
+                        onToggleFullscreen = { shell.setPlayerMode(if (mode == PlayerMode.FULLSCREEN) PlayerMode.DEFAULT else PlayerMode.FULLSCREEN) },
+                        radius = panelRadius,
                     )
                 }
             }
 
+            Spacer(Modifier.width(chatGap))
+
             // ── Chat panel ─────────────────────────────────────────────────────
-            // Width animates 0↔360dp. clipToBounds() ensures content clips clean.
+            // Width animates 0↔392dp. clipToBounds() ensures content clips clean.
             Box(
                 modifier = Modifier
                     .width(chatWidth)
                     .fillMaxHeight()
                     .clipToBounds(),
             ) {
-                Row(Modifier.fillMaxSize()) {
-                    // 1dp hairline left border
-                    Box(Modifier.width(1.dp).fillMaxHeight().background(c.hairline))
-                    // Chat content
-                    Column(
+                Column(
+                    modifier = Modifier.fillMaxSize(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    var chatTab by remember { mutableStateOf(ChatTab.Chat) }
+
+                    ChatHeader(
+                        selected = chatTab,
+                        mentionCount = state.mentionMessages.size,
+                        onSelectTab = { chatTab = it },
+                        onClose = { shell.toggleChat() },
+                    )
+
+                    Box(
                         modifier = Modifier
                             .weight(1f)
-                            .fillMaxHeight()
-                            .background(c.surface),
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(CHAT_PANEL_RADIUS))
+                            .background(c.surfaceContainer),
                     ) {
-                        var chatTab by remember { mutableStateOf(ChatTab.Chat) }
-                        // Header: Chat / Mentions tabs + close button
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 14.dp, vertical = 10.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            SegmentedControl(
-                                options = ChatTab.entries.toList(),
-                                selected = chatTab,
-                                label = { tab ->
-                                    // Surface the unread-mention count on the tab itself.
-                                    if (tab == ChatTab.Mentions && state.mentionMessages.isNotEmpty()) {
-                                        "Mentions (${state.mentionMessages.size})"
-                                    } else tab.label
-                                },
-                                onSelect = { chatTab = it },
-                            )
-                            Spacer(Modifier.weight(1f))
-                            IconButton(onClick = { shell.toggleChat() }) {
-                                Icon(Icons.Filled.Close, "Close chat", tint = c.textSecondary, modifier = Modifier.size(16.dp))
-                            }
-                        }
-                        Box(Modifier.fillMaxWidth().height(1.dp).background(c.hairline))
                         CompositionLocalProvider(LocalBadgeIndex provides state.badges) {
                             when (chatTab) {
                                 ChatTab.Chat -> ChatMessageList(
                                     messages = state.chatMessages,
                                     onReply = viewModel::startReply,
-                                    modifier = Modifier.weight(1f),
+                                    modifier = Modifier.fillMaxSize(),
                                 )
                                 ChatTab.Mentions ->
                                     if (state.mentionMessages.isEmpty()) {
-                                        MentionsEmptyState(Modifier.weight(1f))
+                                        MentionsEmptyState(Modifier.fillMaxSize())
                                     } else {
                                         ChatMessageList(
                                             messages = state.mentionMessages,
                                             onReply = viewModel::startReply,
-                                            modifier = Modifier.weight(1f),
+                                            modifier = Modifier.fillMaxSize(),
                                         )
                                     }
                             }
                         }
-                        ChatInputBar(
-                            canChat = state.canChat,
-                            emotes = state.emotes,
-                            replyingTo = state.replyingTo,
-                            onCancelReply = viewModel::cancelReply,
-                            onSend = viewModel::sendChatMessage,
-                            onFocusChanged = { chatInputFocused = it },
-                            onRequestSignIn = onRequestSignIn,
-                        )
                     }
+
+                    ChatInputBar(
+                        canChat = state.canChat,
+                        emotes = state.emotes,
+                        replyingTo = state.replyingTo,
+                        onCancelReply = viewModel::cancelReply,
+                        onSend = viewModel::sendChatMessage,
+                        onFocusChanged = { chatInputFocused = it },
+                        onRequestSignIn = onRequestSignIn,
+                    )
                 }
             }
         }
@@ -480,80 +512,62 @@ fun StreamContent(koin: Koin, channelLogin: String, onBack: () -> Unit, onReques
 private fun TopBar(
     mode: PlayerMode,
     channelName: String,
-    viewerInfo: String?,
+    avatarUrl: String?,
+    streamInfo: StreamInfo?,
     adBlockStatus: AdBlockStatus,
-    isChatOpen: Boolean,
     isFollowed: Boolean,
     canFollow: Boolean,
     onToggleFollow: () -> Unit,
     onBack: () -> Unit,
-    onToggleChat: () -> Unit,
-    onToggleTheater: () -> Unit,
-    onToggleFullscreen: () -> Unit,
+    radius: Dp,
 ) {
     val c = PureTvTheme.colors
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(c.surface)
-            .padding(horizontal = 8.dp, vertical = 6.dp),
+            .height(72.dp)
+            .clip(RoundedCornerShape(radius))
+            .background(c.surfaceContainer)
+            .padding(start = 8.dp, end = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         if (mode == PlayerMode.DEFAULT) {
-            IconButton(onClick = onBack) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = c.textPrimary)
-            }
+            ExpressiveIconButton(
+                icon = ExpressiveIcons.Back,
+                contentDescription = "Back",
+                onClick = onBack,
+                boxSize = 48.dp,
+                iconSize = 24.dp,
+            )
         }
-        Column(
-            modifier = Modifier
-                .weight(1f)
-                .padding(start = if (mode == PlayerMode.DEFAULT) 4.dp else 12.dp),
-        ) {
+        Avatar(displayName = channelName, imageUrl = avatarUrl, size = 44)
+        Column(modifier = Modifier.weight(1f)) {
             Text(
                 channelName,
                 style = MaterialTheme.typography.titleLarge,
-                color = c.textPrimary,
+                color = c.onSurface,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            if (viewerInfo != null) {
-                Text(viewerInfo, style = PureTvType.data, color = c.textSecondary)
+            if (streamInfo != null) {
+                Row {
+                    val game = streamInfo.gameName.takeIf { it.isNotBlank() } ?: "No category"
+                    Text("$game · ", style = MaterialTheme.typography.bodyMedium, color = c.onSurfaceVariant, maxLines = 1)
+                    Text("${formatViewerCount(streamInfo.viewerCount)} viewers", style = PureTvType.data, color = c.onSurfaceVariant, maxLines = 1)
+                }
             }
         }
-
         AdBlockPill(adBlockStatus)
-        Spacer(Modifier.width(4.dp))
-
-        IconButton(onClick = onToggleFollow, enabled = canFollow) {
-            Icon(
-                if (isFollowed) Icons.Filled.Check else Icons.Filled.Add,
-                contentDescription = if (isFollowed) "Following" else "Follow",
-                tint = if (isFollowed) c.twitchPurpleLight else c.textSecondary,
-            )
-        }
-        IconButton(onClick = onToggleChat) {
-            Icon(
-                Icons.AutoMirrored.Filled.Chat,
-                "Toggle chat",
-                tint = if (isChatOpen) c.twitchPurpleLight else c.textSecondary,
-            )
-        }
-        IconButton(onClick = onToggleTheater) {
-            Icon(
-                Icons.Filled.AspectRatio,
-                "Theater mode",
-                tint = if (mode == PlayerMode.THEATER) c.twitchPurpleLight else c.textSecondary,
-            )
-        }
-        IconButton(onClick = onToggleFullscreen) {
-            Icon(
-                if (mode == PlayerMode.FULLSCREEN) Icons.Filled.FullscreenExit else Icons.Filled.Fullscreen,
-                "Fullscreen",
-                tint = c.textSecondary,
-            )
-        }
+        ExpressiveButton(
+            text = if (isFollowed) "Following" else "Follow",
+            onClick = onToggleFollow,
+            style = ExpressiveButtonStyle.Tonal,
+            size = ExpressiveButtonSize.Medium,
+            icon = if (isFollowed) ExpressiveIcons.Check else ExpressiveIcons.Add,
+            enabled = canFollow,
+        )
     }
-    Box(Modifier.fillMaxWidth().height(1.dp).background(c.hairline))
 }
 
 // ── Playback controls ─────────────────────────────────────────────────────────
@@ -564,61 +578,221 @@ private fun PlaybackControls(
     volume: Int,
     isMuted: Boolean,
     settingsOpen: Boolean,
+    mode: PlayerMode,
+    isChatOpen: Boolean,
     onTogglePlayPause: () -> Unit,
     onVolumeChange: (Int) -> Unit,
     onToggleMute: () -> Unit,
     onToggleSettings: () -> Unit,
+    onToggleChat: () -> Unit,
+    onToggleTheater: () -> Unit,
+    onToggleFullscreen: () -> Unit,
+    radius: Dp,
 ) {
     val c = PureTvTheme.colors
-    Box(Modifier.fillMaxWidth().height(1.dp).background(c.hairline))
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(c.surface)
-            .padding(horizontal = 8.dp, vertical = 6.dp),
+            .height(80.dp)
+            .clip(RoundedCornerShape(radius))
+            .background(c.surfaceContainer)
+            .padding(horizontal = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        IconButton(onClick = onTogglePlayPause) {
-            Icon(
-                if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-                contentDescription = if (isPlaying) "Pause" else "Play",
-                tint = c.textPrimary,
-            )
-        }
-        IconButton(onClick = onToggleMute, modifier = Modifier.size(28.dp)) {
-            Icon(
-                if (isMuted || volume == 0) Icons.AutoMirrored.Filled.VolumeOff else Icons.AutoMirrored.Filled.VolumeUp,
-                if (isMuted) "Unmute" else "Mute",
-                tint = c.textSecondary,
-                modifier = Modifier.size(18.dp),
-            )
-        }
-        Slider(
-            value = volume.toFloat(),
-            onValueChange = { onVolumeChange(it.toInt()) },
-            valueRange = 0f..100f,
-            modifier = Modifier.width(110.dp).padding(horizontal = 6.dp),
-            colors = SliderDefaults.colors(
-                thumbColor = c.twitchPurple,
-                activeTrackColor = c.twitchPurple,
-                inactiveTrackColor = c.surfaceVariant,
-            ),
-        )
+        PlayPauseButton(isPlaying = isPlaying, onClick = onTogglePlayPause)
+        VolumeButton(isMuted = isMuted || volume == 0, onClick = onToggleMute)
+        VolumeSlider(value = volume, onValueChange = onVolumeChange)
         Spacer(Modifier.weight(1f))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            LiveDot(size = 6.dp)
-            Spacer(Modifier.width(6.dp))
-            Text("LIVE", style = PureTvType.data, color = c.textSecondary)
-        }
+        LivePill()
         Spacer(Modifier.width(8.dp))
-        IconButton(onClick = onToggleSettings, modifier = Modifier.size(28.dp)) {
-            Icon(
-                Icons.Filled.Settings,
-                contentDescription = "Playback settings",
-                tint = if (settingsOpen) c.twitchPurple else c.textSecondary,
-                modifier = Modifier.size(18.dp),
-            )
-        }
+        ConnectedControlsGroup(
+            settingsOpen = settingsOpen,
+            isChatOpen = isChatOpen,
+            mode = mode,
+            onToggleSettings = onToggleSettings,
+            onToggleChat = onToggleChat,
+            onToggleTheater = onToggleTheater,
+            onToggleFullscreen = onToggleFullscreen,
+        )
+    }
+}
+
+/** Filled primary pill; morphs 28→14dp radius on hover and narrows 64→56dp while pressed. */
+@Composable
+private fun PlayPauseButton(isPlaying: Boolean, onClick: () -> Unit) {
+    val c = PureTvTheme.colors
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val width by animateDpAsState(if (pressed) 56.dp else 64.dp, PureTvMotion.MorphSpring, label = "playPauseWidth")
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = Modifier
+            .width(width)
+            .height(56.dp)
+            .expressiveClickable(
+                interaction = interaction,
+                onClick = onClick,
+                restRadius = 28.dp,
+                hoverRadius = 14.dp,
+                color = c.primary,
+            ),
+    ) {
+        Icon(
+            if (isPlaying) ExpressiveIcons.Pause else ExpressiveIcons.Play,
+            contentDescription = if (isPlaying) "Pause" else "Play",
+            tint = c.onPrimary,
+            modifier = Modifier.size(26.dp),
+        )
+    }
+}
+
+@Composable
+private fun VolumeButton(isMuted: Boolean, onClick: () -> Unit) {
+    val c = PureTvTheme.colors
+    val interaction = remember { MutableInteractionSource() }
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = Modifier
+            .size(width = 52.dp, height = 56.dp)
+            .expressiveClickable(
+                interaction = interaction,
+                onClick = onClick,
+                restRadius = 28.dp,
+                hoverRadius = 14.dp,
+                color = c.surfaceHigh,
+                hoverColor = c.surfaceHighest,
+            ),
+    ) {
+        Icon(
+            if (isMuted) ExpressiveIcons.VolumeOff else ExpressiveIcons.VolumeUp,
+            contentDescription = if (isMuted) "Unmute" else "Mute",
+            tint = c.onSurface,
+            modifier = Modifier.size(24.dp),
+        )
+    }
+}
+
+/**
+ * A 150dp-wide chunky slider: a 16dp fully-rounded track and a 6x28dp thumb, drawn
+ * by hand because Material3's [androidx.compose.material3.Slider] in this Compose
+ * Multiplatform version has no track/thumb slot wide enough for the Expressive
+ * shape. A single gesture (down sets the value immediately, drag keeps adjusting)
+ * covers both click-to-set and drag-to-scrub.
+ */
+@Composable
+private fun VolumeSlider(value: Int, onValueChange: (Int) -> Unit) {
+    val c = PureTvTheme.colors
+    val shape = PureTvTheme.shapes.pillShape
+    BoxWithConstraints(
+        modifier = Modifier
+            .width(150.dp)
+            .padding(horizontal = 10.dp)
+            .height(16.dp)
+            .clip(shape)
+            .background(c.surfaceHighest)
+            .pointerInput(onValueChange) {
+                fun update(x: Float) {
+                    val pct = (x / size.width.toFloat()).coerceIn(0f, 1f)
+                    onValueChange((pct * 100f).roundToInt())
+                }
+                awaitEachGesture {
+                    val down = awaitFirstDown()
+                    update(down.position.x)
+                    drag(down.id) { change ->
+                        update(change.position.x)
+                        change.consume()
+                    }
+                }
+            },
+    ) {
+        val fraction = (value / 100f).coerceIn(0f, 1f)
+        Box(
+            Modifier
+                .fillMaxHeight()
+                .fillMaxWidth(fraction)
+                .clip(shape)
+                .background(c.primary),
+        )
+        Box(
+            Modifier
+                .align(Alignment.CenterStart)
+                .padding(start = (maxWidth * fraction - 3.dp).coerceIn(0.dp, maxWidth - 6.dp))
+                .size(width = 6.dp, height = 28.dp)
+                .clip(shape)
+                .background(c.primary)
+                .border(3.dp, c.surfaceContainer, shape),
+        )
+    }
+}
+
+/** The welded quality/settings/chat/theater/fullscreen cluster: one 28dp-radius bar,
+ *  1dp outlineVariant dividers between square segments. The segments themselves
+ *  never round; only the group's outer silhouette does. */
+@Composable
+private fun ConnectedControlsGroup(
+    settingsOpen: Boolean,
+    isChatOpen: Boolean,
+    mode: PlayerMode,
+    onToggleSettings: () -> Unit,
+    onToggleChat: () -> Unit,
+    onToggleTheater: () -> Unit,
+    onToggleFullscreen: () -> Unit,
+) {
+    val c = PureTvTheme.colors
+    Row(
+        modifier = Modifier
+            .height(56.dp)
+            .clip(RoundedCornerShape(28.dp))
+            .background(c.surfaceHigh),
+    ) {
+        // No dedicated quick-quality flow exists in the ViewModel — resolution lives
+        // inside the same combined playback menu the gear opens, so this is a second
+        // entry point into that one menu rather than a distinct feature.
+        ControlsGroupButton(ExpressiveIcons.Quality, "Quality", onToggleSettings)
+        GroupDivider()
+        ControlsGroupButton(ExpressiveIcons.Settings, "Playback settings", onToggleSettings, tint = if (settingsOpen) c.primary else null)
+        GroupDivider()
+        ControlsGroupButton(ExpressiveIcons.Chat, "Toggle chat", onToggleChat, tint = if (isChatOpen) c.primary else null)
+        GroupDivider()
+        ControlsGroupButton(ExpressiveIcons.AspectRatio, "Theater mode", onToggleTheater, tint = if (mode == PlayerMode.THEATER) c.primary else null)
+        GroupDivider()
+        ControlsGroupButton(
+            icon = if (mode == PlayerMode.FULLSCREEN) ExpressiveIcons.FullscreenExit else ExpressiveIcons.Fullscreen,
+            contentDescription = "Fullscreen",
+            onClick = onToggleFullscreen,
+        )
+    }
+}
+
+@Composable
+private fun GroupDivider() {
+    Box(Modifier.width(1.dp).fillMaxHeight().background(PureTvTheme.colors.outlineVariant))
+}
+
+@Composable
+private fun ControlsGroupButton(
+    icon: ImageVector,
+    contentDescription: String,
+    onClick: () -> Unit,
+    tint: Color? = null,
+) {
+    val c = PureTvTheme.colors
+    val interaction = remember { MutableInteractionSource() }
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = Modifier
+            .size(56.dp)
+            .expressiveClickable(
+                interaction = interaction,
+                onClick = onClick,
+                restRadius = 0.dp,
+                hoverRadius = 0.dp,
+                color = Color.Transparent,
+                hoverColor = c.surfaceHighest,
+            ),
+    ) {
+        Icon(icon, contentDescription = contentDescription, tint = tint ?: c.onSurface, modifier = Modifier.size(24.dp))
     }
 }
 
@@ -626,6 +800,89 @@ private fun PlaybackControls(
 
 /** The two views the chat panel can show: the live feed, or just messages that @-mention you. */
 private enum class ChatTab(val label: String) { Chat("Chat"), Mentions("Mentions") }
+
+/** 72dp header: the Chat/Mentions toggle plus a circular close button. */
+@Composable
+private fun ChatHeader(
+    selected: ChatTab,
+    mentionCount: Int,
+    onSelectTab: (ChatTab) -> Unit,
+    onClose: () -> Unit,
+) {
+    val c = PureTvTheme.colors
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(72.dp)
+            .clip(RoundedCornerShape(CHAT_PANEL_RADIUS))
+            .background(c.surfaceContainer)
+            .padding(horizontal = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        ChatTabToggle(selected = selected, mentionCount = mentionCount, onSelect = onSelectTab, modifier = Modifier.weight(1f))
+        ExpressiveIconButton(
+            icon = ExpressiveIcons.Close,
+            contentDescription = "Close chat",
+            onClick = onClose,
+            boxSize = 48.dp,
+            iconSize = 22.dp,
+        )
+    }
+}
+
+/**
+ * A pill-track segmented toggle, hand-built rather than the shared [com.puretv.twitch.desktop.ui.components.SegmentedToggle]
+ * because the Mentions segment needs a trailing [CountBadge] and that component's
+ * `label: (T) -> String` slot has no room for a second composable.
+ */
+@Composable
+private fun ChatTabToggle(
+    selected: ChatTab,
+    mentionCount: Int,
+    onSelect: (ChatTab) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val c = PureTvTheme.colors
+    val shapes = PureTvTheme.shapes
+    Row(
+        modifier
+            .height(48.dp)
+            .clip(shapes.pillShape)
+            .background(c.surfaceHigh)
+            .padding(4.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        ChatTab.entries.forEach { tab ->
+            val isSelected = tab == selected
+            val interaction = remember(tab) { MutableInteractionSource() }
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+                    .expressiveClickable(
+                        interaction = interaction,
+                        onClick = { onSelect(tab) },
+                        restRadius = shapes.pill,
+                        hoverRadius = shapes.pillMorph,
+                        color = if (isSelected) c.secondaryContainer else Color.Transparent,
+                        hoverColor = if (isSelected) c.secondaryContainer else c.surfaceHighest,
+                    ),
+            ) {
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        tab.label,
+                        color = if (isSelected) c.onSecondaryContainer else c.onSurfaceVariant,
+                        style = MaterialTheme.typography.labelLarge,
+                        maxLines = 1,
+                    )
+                    if (tab == ChatTab.Mentions && mentionCount > 0) CountBadge(mentionCount.toString())
+                }
+            }
+        }
+    }
+}
 
 /** Shown in the Mentions tab when nobody has pinged you yet. */
 @Composable
@@ -639,13 +896,13 @@ private fun MentionsEmptyState(modifier: Modifier = Modifier) {
             Text(
                 "No mentions yet",
                 style = MaterialTheme.typography.titleSmall,
-                color = c.textSecondary,
+                color = c.onSurfaceVariant,
             )
             Spacer(Modifier.height(6.dp))
             Text(
                 "Messages that @ your name will show up here.",
                 style = MaterialTheme.typography.bodySmall,
-                color = c.textMuted,
+                color = c.outlineVariant,
                 textAlign = TextAlign.Center,
             )
         }
@@ -659,6 +916,7 @@ private fun ChatMessageList(
     modifier: Modifier = Modifier,
 ) {
     val c = PureTvTheme.colors
+    val shapes = PureTvTheme.shapes
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
 
@@ -689,28 +947,35 @@ private fun ChatMessageList(
     Box(modifier) {
         LazyColumn(
             state = listState,
-            modifier = Modifier.fillMaxSize().padding(horizontal = 10.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 8.dp),
+            modifier = Modifier.fillMaxSize().padding(horizontal = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+            contentPadding = PaddingValues(vertical = 14.dp),
         ) {
             items(messages, key = { it.id }) { ChatMessageRow(message = it, onReply = onReply) }
         }
         // Twitch parity: paused while scrolled up. Clicking snaps to the bottom and resumes
         // following so the feed keeps going seamlessly.
         if (!following) {
-            Surface(
-                onClick = {
-                    // Guard scrollToItem(-1) when the message list is momentarily empty (audit U3).
-                    scope.launch { following = true; if (messages.isNotEmpty()) listState.scrollToItem(messages.lastIndex) }
-                },
-                shape = PureTvShape.pill,
-                color = c.twitchPurple,
-                modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 12.dp),
+            val pillInteraction = remember { MutableInteractionSource() }
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 12.dp)
+                    .expressiveClickable(
+                        interaction = pillInteraction,
+                        onClick = {
+                            // Guard scrollToItem(-1) when the message list is momentarily empty (audit U3).
+                            scope.launch { following = true; if (messages.isNotEmpty()) listState.scrollToItem(messages.lastIndex) }
+                        },
+                        restRadius = shapes.pill,
+                        hoverRadius = shapes.pillMorph,
+                        color = c.primary,
+                    ),
             ) {
                 Text(
                     "Chat paused due to scroll",
-                    color = Color.White,
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+                    color = c.onPrimary,
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
                     style = MaterialTheme.typography.labelMedium,
                 )
             }
@@ -733,17 +998,31 @@ private fun ChatInputBar(
     // Anonymous (read-only) viewers get a tappable prompt instead of a composer —
     // sending requires a token + the token-owner's login (see StreamViewModel).
     if (!canChat) {
-        Row(
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(14.dp)
-                .border(1.dp, c.hairline, PureTvShape.lg)
-                .background(c.surfaceVariant, PureTvShape.lg)
-                .clickable { onRequestSignIn() }
-                .padding(horizontal = 13.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
+                .clip(RoundedCornerShape(CHAT_PANEL_RADIUS))
+                .background(c.surfaceContainer)
+                .padding(12.dp),
         ) {
-            Text("Sign in to chat", color = c.textMuted, style = MaterialTheme.typography.bodyMedium)
+            val interaction = remember { MutableInteractionSource() }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp)
+                    .expressiveClickable(
+                        interaction = interaction,
+                        onClick = onRequestSignIn,
+                        restRadius = 28.dp,
+                        hoverRadius = 16.dp,
+                        color = c.surfaceHigh,
+                        hoverColor = c.surfaceHighest,
+                    )
+                    .padding(horizontal = 20.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("Sign in to chat", color = c.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+            }
         }
         return
     }
@@ -775,25 +1054,24 @@ private fun ChatInputBar(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(start = 14.dp, end = 14.dp, top = 8.dp),
+                    .padding(start = 14.dp, end = 14.dp, bottom = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
                     "replying to @" + replyingTo.displayName,
-                    color = c.textMuted,
+                    color = c.onSurfaceVariant,
                     style = MaterialTheme.typography.labelMedium,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f),
                 )
-                IconButton(onClick = onCancelReply, modifier = Modifier.size(20.dp)) {
-                    Icon(
-                        Icons.Filled.Close,
-                        contentDescription = "Cancel reply",
-                        tint = c.textSecondary,
-                        modifier = Modifier.size(16.dp),
-                    )
-                }
+                ExpressiveIconButton(
+                    icon = ExpressiveIcons.Close,
+                    contentDescription = "Cancel reply",
+                    onClick = onCancelReply,
+                    boxSize = 28.dp,
+                    iconSize = 16.dp,
+                )
             }
         }
 
@@ -821,72 +1099,99 @@ private fun ChatInputBar(
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 suggestions.forEach { s ->
+                    val chipInteraction = remember(s.code) { MutableInteractionSource() }
                     Row(
                         modifier = Modifier
-                            .border(1.dp, c.hairline, PureTvShape.pill)
-                            .background(c.surfaceVariant, PureTvShape.pill)
-                            .clickable { applyCompletion(s.code) }
-                            .padding(horizontal = 8.dp, vertical = 4.dp),
+                            .expressiveClickable(
+                                interaction = chipInteraction,
+                                onClick = { applyCompletion(s.code) },
+                                restRadius = PureTvTheme.shapes.pill,
+                                hoverRadius = PureTvTheme.shapes.pillMorph,
+                                color = c.surfaceHigh,
+                                hoverColor = c.surfaceHighest,
+                            )
+                            .padding(horizontal = 10.dp, vertical = 6.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         EmoteImage(s.imageUrl, s.code, modifier = Modifier.size(20.dp))
                         Spacer(Modifier.width(5.dp))
-                        Text(s.code, color = c.textSecondary, style = PureTvType.dataSmall)
+                        Text(s.code, color = c.onSurfaceVariant, style = PureTvType.dataSmall)
                     }
                 }
             }
             Spacer(Modifier.height(8.dp))
         }
 
-        Row(
+        // Composer panel — the mockup's surfaceContainer card holding the one input row.
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(14.dp)
-                .border(1.dp, c.hairline, PureTvShape.lg)
-                .background(c.surfaceVariant, PureTvShape.lg)
-                .padding(horizontal = 13.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
+                .clip(RoundedCornerShape(CHAT_PANEL_RADIUS))
+                .background(c.surfaceContainer)
+                .padding(12.dp),
         ) {
-            Box(modifier = Modifier.weight(1f)) {
-                if (value.text.isEmpty()) {
-                    Text("Send a message…", color = c.textMuted, style = MaterialTheme.typography.bodyMedium)
-                }
-                BasicTextField(
-                    value = value,
-                    onValueChange = { value = it },
-                    singleLine = true,
-                    textStyle = TextStyle(color = c.textPrimary, fontSize = MaterialTheme.typography.bodyMedium.fontSize),
-                    cursorBrush = SolidColor(c.twitchPurple),
-                    // Report focus up so the player-hotkey dispatcher stands down while
-                    // the user is typing (otherwise f/t/c/space would be eaten).
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .onFocusChanged {
-                            fieldFocused = it.isFocused
-                            onFocusChanged(it.isFocused)
-                        }
-                        // Enter sends the message; Tab accepts the first emote
-                        // suggestion when one is offered (see composerKeyAction).
-                        .onPreviewKeyEvent { ev ->
-                            if (ev.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
-                            val isEnter = ev.key == Key.Enter || ev.key == Key.NumPadEnter
-                            when (composerKeyAction(isEnter, ev.key == Key.Tab, suggestions.isNotEmpty())) {
-                                ComposerKeyAction.SEND -> { submit(); true }
-                                ComposerKeyAction.COMPLETE -> { applyCompletion(suggestions.first().code); true }
-                                ComposerKeyAction.NONE -> false
+            val fieldInteraction = remember { MutableInteractionSource() }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp)
+                    .expressiveSurface(
+                        interaction = fieldInteraction,
+                        restRadius = 28.dp,
+                        hoverRadius = 16.dp,
+                        color = c.surfaceHigh,
+                    )
+                    .hoverable(fieldInteraction)
+                    .padding(start = 20.dp, end = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(modifier = Modifier.weight(1f)) {
+                    if (value.text.isEmpty()) {
+                        Text("Send a message…", color = c.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+                    }
+                    BasicTextField(
+                        value = value,
+                        onValueChange = { value = it },
+                        singleLine = true,
+                        textStyle = TextStyle(color = c.onSurface, fontSize = MaterialTheme.typography.bodyMedium.fontSize),
+                        cursorBrush = SolidColor(c.primary),
+                        // Report focus up so the player-hotkey dispatcher stands down while
+                        // the user is typing (otherwise f/t/c/space would be eaten).
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .onFocusChanged {
+                                fieldFocused = it.isFocused
+                                onFocusChanged(it.isFocused)
                             }
-                        },
+                            // Enter sends the message; Tab accepts the first emote
+                            // suggestion when one is offered (see composerKeyAction).
+                            .onPreviewKeyEvent { ev ->
+                                if (ev.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                                val isEnter = ev.key == Key.Enter || ev.key == Key.NumPadEnter
+                                when (composerKeyAction(isEnter, ev.key == Key.Tab, suggestions.isNotEmpty())) {
+                                    ComposerKeyAction.SEND -> { submit(); true }
+                                    ComposerKeyAction.COMPLETE -> { applyCompletion(suggestions.first().code); true }
+                                    ComposerKeyAction.NONE -> false
+                                }
+                            },
+                    )
+                }
+                ExpressiveIconButton(
+                    icon = ExpressiveIcons.Emote,
+                    contentDescription = "Emotes",
+                    onClick = { pickerOpen = !pickerOpen },
+                    boxSize = 44.dp,
+                    iconSize = 22.dp,
+                    tint = if (pickerOpen) c.primary else c.onSurfaceVariant,
                 )
-            }
-            IconButton(onClick = { pickerOpen = !pickerOpen }) {
-                Icon(
-                    Icons.Filled.Mood,
-                    "Emotes",
-                    tint = if (pickerOpen) c.twitchPurpleLight else c.textSecondary,
+                ExpressiveIconButton(
+                    icon = ExpressiveIcons.Send,
+                    contentDescription = "Send",
+                    onClick = { submit() },
+                    style = ExpressiveButtonStyle.Filled,
+                    boxSize = 44.dp,
+                    iconSize = 22.dp,
                 )
-            }
-            IconButton(onClick = { submit() }) {
-                Icon(Icons.AutoMirrored.Filled.Send, "Send", tint = c.twitchPurpleLight)
             }
         }
     }

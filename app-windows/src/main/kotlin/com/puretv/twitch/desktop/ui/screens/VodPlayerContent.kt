@@ -26,23 +26,12 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.Chat
-import androidx.compose.material.icons.automirrored.filled.VolumeOff
-import androidx.compose.material.icons.automirrored.filled.VolumeUp
-import androidx.compose.material.icons.filled.AspectRatio
-import androidx.compose.material.icons.filled.Fullscreen
-import androidx.compose.material.icons.filled.FullscreenExit
-import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Settings
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -56,16 +45,17 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.puretv.twitch.core.model.ChatMessage
-import com.puretv.twitch.core.model.StreamQuality
 import com.puretv.twitch.desktop.data.DesktopSettingsStore
 import com.puretv.twitch.desktop.player.VlcPlayerView
 import com.puretv.twitch.desktop.player.formatTimecode
@@ -76,15 +66,17 @@ import com.puretv.twitch.desktop.ui.VodLaunch
 import com.puretv.twitch.desktop.ui.VodPlayerViewModel
 import com.puretv.twitch.desktop.ui.chat.nextFollowing
 import com.puretv.twitch.desktop.ui.chat.scrollAnchor
-import com.puretv.twitch.desktop.ui.components.ButtonVariant
 import com.puretv.twitch.desktop.ui.components.ChatMessageRow
-import com.puretv.twitch.desktop.ui.components.PureButton
+import com.puretv.twitch.desktop.ui.components.ExpressiveButton
+import com.puretv.twitch.desktop.ui.components.ExpressiveButtonSize
+import com.puretv.twitch.desktop.ui.components.ExpressiveButtonStyle
+import com.puretv.twitch.desktop.ui.components.ExpressiveIconButton
+import com.puretv.twitch.desktop.ui.components.ExpressiveIcons
 import com.puretv.twitch.desktop.ui.components.PlayerSettingsMenu
 import com.puretv.twitch.desktop.ui.components.SeekPreview
-import com.puretv.twitch.desktop.ui.components.SegmentedControl
+import com.puretv.twitch.desktop.ui.components.expressiveClickable
 import com.puretv.twitch.desktop.ui.rememberDesktopViewModel
 import com.puretv.twitch.desktop.ui.theme.PureTvMotion
-import com.puretv.twitch.desktop.ui.theme.PureTvShape
 import com.puretv.twitch.desktop.ui.theme.PureTvTheme
 import com.puretv.twitch.desktop.ui.theme.PureTvType
 import kotlinx.coroutines.Job
@@ -97,6 +89,11 @@ import org.koin.core.parameter.parametersOf
 import java.awt.KeyEventDispatcher
 import java.awt.KeyboardFocusManager
 import java.awt.event.KeyEvent
+
+/** The player-chrome card radius. Fixed rather than [PureTvTheme.shapes] because the
+ *  live and VOD players share this exact silhouette regardless of the user's shape
+ *  intensity setting -- it is a player-surface convention, not a content-card one. */
+private val PlayerCardShape = RoundedCornerShape(24.dp)
 
 /**
  * VOD player with the same immersive modes as the live screen: Default / Theater /
@@ -166,7 +163,8 @@ fun VodPlayerContent(koin: Koin, launch: VodLaunch, onBack: () -> Unit) {
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black)
+            .background(c.surfaceLowest)
+            .padding(8.dp)
             .pointerInput(mode) {
                 var lastPos: Offset? = null
                 awaitPointerEventScope {
@@ -183,8 +181,8 @@ fun VodPlayerContent(koin: Koin, launch: VodLaunch, onBack: () -> Unit) {
                 }
             },
     ) {
-        Row(Modifier.fillMaxSize()) {
-            Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
+        Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(modifier = Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 AnimatedVisibility(
                     visible = controlsVisible || mode == PlayerMode.DEFAULT,
                     enter = slideInVertically { -it } + fadeIn(),
@@ -193,6 +191,7 @@ fun VodPlayerContent(koin: Koin, launch: VodLaunch, onBack: () -> Unit) {
                     VodTopBar(
                         mode = mode,
                         title = launch.title.ifBlank { "Past broadcast" },
+                        channelLogin = launch.channelLogin,
                         isChatOpen = isChatOpen,
                         onBack = onBack,
                         onToggleChat = { shell.toggleChat() },
@@ -201,6 +200,9 @@ fun VodPlayerContent(koin: Koin, launch: VodLaunch, onBack: () -> Unit) {
                     )
                 }
 
+                // The AWT Canvas is a heavyweight surface: it paints above every Compose
+                // layer and ignores clipping, so this slot stays an unrounded rectangle —
+                // no card radius here, unlike its siblings above and below.
                 Box(
                     modifier = Modifier.fillMaxWidth().weight(1f).background(Color.Black),
                     contentAlignment = Alignment.Center,
@@ -210,16 +212,18 @@ fun VodPlayerContent(koin: Koin, launch: VodLaunch, onBack: () -> Unit) {
                         // unavailable engine, an mpv init failure, and a failed start.
                         // Self-clears on recovery (file-loaded/playing resets error).
                         status.error != null && !status.isPlaying && !status.isBuffering ->
-                            Text(status.error!!, color = c.textSecondary, modifier = Modifier.padding(24.dp))
+                            Text(status.error!!, color = c.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(24.dp))
                         state.error != null ->
-                            Text(state.error!!, color = c.textSecondary, modifier = Modifier.padding(24.dp))
+                            Text(state.error!!, color = c.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(24.dp))
                         else -> VlcPlayerView(
                             vlcPlayer = viewModel.player,
                             modifier = Modifier.fillMaxSize(),
                             onUserActivity = { resetControls() },
                         )
                     }
-                    if (state.loading && state.error == null) Text("Loading…", color = c.textSecondary)
+                    if (state.loading && state.error == null) {
+                        Text("Loading…", color = c.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+                    }
                 }
 
                 // Playback menu in the Column (not over the video Canvas), above controls.
@@ -254,8 +258,7 @@ fun VodPlayerContent(koin: Koin, launch: VodLaunch, onBack: () -> Unit) {
             }
 
             if (isChatOpen) {
-                Column(Modifier.width(340.dp).fillMaxHeight().background(c.surface)) {
-                    Box(Modifier.fillMaxWidth().height(1.dp).background(c.hairline))
+                Column(Modifier.width(392.dp).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     val listState = rememberLazyListState()
                     // Geometry only DETECTS the bottom; it does NOT gate auto-scroll.
                     var following by remember { mutableStateOf(true) }
@@ -279,11 +282,11 @@ fun VodPlayerContent(koin: Koin, launch: VodLaunch, onBack: () -> Unit) {
                         }
                     }
 
-                    Box(Modifier.weight(1f).fillMaxWidth()) {
+                    Box(Modifier.weight(1f).fillMaxWidth().clip(PlayerCardShape).background(c.surfaceContainer)) {
                         LazyColumn(
                             state = listState,
                             modifier = Modifier.fillMaxSize().padding(horizontal = 10.dp),
-                            contentPadding = PaddingValues(vertical = 8.dp),
+                            contentPadding = PaddingValues(vertical = 12.dp),
                             verticalArrangement = Arrangement.spacedBy(4.dp),
                         ) {
                             items(chatMessages, key = { it.id }) { msg: ChatMessage ->
@@ -293,20 +296,28 @@ fun VodPlayerContent(koin: Koin, launch: VodLaunch, onBack: () -> Unit) {
                         // Twitch parity: paused while scrolled up. Clicking snaps to the
                         // bottom and resumes following so replay chat keeps going.
                         if (!following) {
-                            Surface(
-                                onClick = {
-                                    // Guard scrollToItem(-1): a VOD backward seek can empty the
-                                    // replay buffer while this pill is still shown (audit U3).
-                                    scope.launch { following = true; if (chatMessages.isNotEmpty()) listState.scrollToItem(chatMessages.lastIndex) }
-                                },
-                                shape = PureTvShape.pill,
-                                color = c.twitchPurple,
-                                modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 12.dp),
+                            val resumeInteraction = remember { MutableInteractionSource() }
+                            val shapes = PureTvTheme.shapes
+                            Box(
+                                modifier = Modifier
+                                    .align(Alignment.BottomCenter)
+                                    .padding(bottom = 12.dp)
+                                    .expressiveClickable(
+                                        interaction = resumeInteraction,
+                                        onClick = {
+                                            // Guard scrollToItem(-1): a VOD backward seek can empty the
+                                            // replay buffer while this pill is still shown (audit U3).
+                                            scope.launch { following = true; if (chatMessages.isNotEmpty()) listState.scrollToItem(chatMessages.lastIndex) }
+                                        },
+                                        restRadius = shapes.pill,
+                                        hoverRadius = shapes.pillMorph,
+                                        color = c.primary,
+                                    )
+                                    .padding(horizontal = 14.dp, vertical = 8.dp),
                             ) {
                                 Text(
                                     "Chat paused due to scroll",
-                                    color = Color.White,
-                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+                                    color = c.onPrimary,
                                     style = MaterialTheme.typography.labelMedium,
                                 )
                             }
@@ -322,6 +333,7 @@ fun VodPlayerContent(koin: Koin, launch: VodLaunch, onBack: () -> Unit) {
 private fun VodTopBar(
     mode: PlayerMode,
     title: String,
+    channelLogin: String,
     isChatOpen: Boolean,
     onBack: () -> Unit,
     onToggleChat: () -> Unit,
@@ -330,39 +342,69 @@ private fun VodTopBar(
 ) {
     val c = PureTvTheme.colors
     Row(
-        modifier = Modifier.fillMaxWidth().background(c.surface).padding(horizontal = 8.dp, vertical = 6.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(72.dp)
+            .clip(PlayerCardShape)
+            .background(c.surfaceContainer)
+            .padding(start = if (mode == PlayerMode.DEFAULT) 8.dp else 20.dp, end = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         if (mode == PlayerMode.DEFAULT) {
-            IconButton(onClick = onBack) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = c.textPrimary)
-            }
-        }
-        Text(
-            title,
-            style = MaterialTheme.typography.titleLarge,
-            color = c.textPrimary,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f).padding(start = if (mode == PlayerMode.DEFAULT) 4.dp else 12.dp),
-        )
-        IconButton(onClick = onToggleChat) {
-            Icon(Icons.AutoMirrored.Filled.Chat, "Toggle chat", tint = if (isChatOpen) c.twitchPurpleLight else c.textSecondary)
-        }
-        IconButton(onClick = onToggleTheater) {
-            Icon(Icons.Filled.AspectRatio, "Theater mode", tint = if (mode == PlayerMode.THEATER) c.twitchPurpleLight else c.textSecondary)
-        }
-        IconButton(onClick = onToggleFullscreen) {
-            Icon(
-                if (mode == PlayerMode.FULLSCREEN) Icons.Filled.FullscreenExit else Icons.Filled.Fullscreen,
-                "Fullscreen",
-                tint = c.textSecondary,
+            ExpressiveIconButton(
+                icon = ExpressiveIcons.Back,
+                contentDescription = "Back",
+                onClick = onBack,
+                boxSize = 48.dp,
             )
         }
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                title,
+                style = MaterialTheme.typography.titleLarge,
+                color = c.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            if (channelLogin.isNotBlank()) {
+                Text(
+                    channelLogin,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = c.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+        ExpressiveIconButton(
+            icon = ExpressiveIcons.Chat,
+            contentDescription = "Toggle chat",
+            onClick = onToggleChat,
+            style = if (isChatOpen) ExpressiveButtonStyle.Tonal else ExpressiveButtonStyle.Text,
+            boxSize = 48.dp,
+        )
+        ExpressiveIconButton(
+            icon = ExpressiveIcons.AspectRatio,
+            contentDescription = "Theater mode",
+            onClick = onToggleTheater,
+            style = if (mode == PlayerMode.THEATER) ExpressiveButtonStyle.Tonal else ExpressiveButtonStyle.Text,
+            boxSize = 48.dp,
+        )
+        ExpressiveIconButton(
+            icon = if (mode == PlayerMode.FULLSCREEN) ExpressiveIcons.FullscreenExit else ExpressiveIcons.Fullscreen,
+            contentDescription = "Fullscreen",
+            onClick = onToggleFullscreen,
+            style = if (mode == PlayerMode.FULLSCREEN) ExpressiveButtonStyle.Tonal else ExpressiveButtonStyle.Text,
+            boxSize = 48.dp,
+        )
     }
-    Box(Modifier.fillMaxWidth().height(1.dp).background(c.hairline))
 }
 
+// The custom track/thumb Slider overload is still @ExperimentalMaterial3Api in
+// material3 1.7; it is the only way to draw the Expressive seek bar's own geometry
+// (16dp track, 6x28 thumb) instead of the stock Slider's fixed-height groove.
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun VodControls(
     koin: Koin,
@@ -373,15 +415,24 @@ private fun VodControls(
     val state by viewModel.state.collectAsState()
     val status by viewModel.status.collectAsState()
     val c = PureTvTheme.colors
+    val shapes = PureTvTheme.shapes
 
-    Box(Modifier.fillMaxWidth().height(1.dp).background(c.hairline))
-    Column(Modifier.fillMaxWidth().background(c.surface).padding(horizontal = 12.dp, vertical = 8.dp)) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clip(PlayerCardShape)
+            .background(c.surfaceContainer)
+            .padding(horizontal = 16.dp),
+    ) {
         state.resumeOfferMs?.let { at ->
-            Row(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text("Resume from ${formatTimecode(at)}?", style = PureTvType.data, color = c.textPrimary, modifier = Modifier.weight(1f))
-                PureButton(text = "Resume", onClick = viewModel::resume, variant = ButtonVariant.Primary)
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("Resume from ${formatTimecode(at)}?", style = PureTvType.data, color = c.onSurface, modifier = Modifier.weight(1f))
+                ExpressiveButton(text = "Resume", onClick = viewModel::resume, style = ExpressiveButtonStyle.Filled, size = ExpressiveButtonSize.Small)
                 Spacer(Modifier.width(8.dp))
-                PureButton(text = "Start over", onClick = viewModel::startOver, variant = ButtonVariant.Secondary)
+                ExpressiveButton(text = "Start over", onClick = viewModel::startOver, style = ExpressiveButtonStyle.Outlined, size = ExpressiveButtonSize.Small)
             }
         }
 
@@ -389,7 +440,7 @@ private fun VodControls(
         val duration = status.durationMs.coerceAtLeast(1)
         val shown = dragMs ?: status.positionMs
         if (dragMs != null) {
-            BoxWithConstraints(Modifier.fillMaxWidth().padding(bottom = 4.dp)) {
+            BoxWithConstraints(Modifier.fillMaxWidth().padding(top = 8.dp)) {
                 val frac = (dragMs!!.toFloat() / duration.toFloat()).coerceIn(0f, 1f)
                 val x = (maxWidth - 160.dp) * frac
                 SeekPreview(
@@ -400,50 +451,90 @@ private fun VodControls(
                 )
             }
         }
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(formatTimecode(shown), style = PureTvType.data, color = c.textSecondary)
+
+        Row(
+            modifier = Modifier.fillMaxWidth().height(80.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            val playInteraction = remember { MutableInteractionSource() }
+            Box(
+                modifier = Modifier
+                    .size(width = 64.dp, height = 56.dp)
+                    .expressiveClickable(
+                        interaction = playInteraction,
+                        onClick = viewModel::togglePlayPause,
+                        restRadius = 28.dp,
+                        hoverRadius = shapes.thumb,
+                        color = c.primary,
+                    ),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    if (status.isPlaying) ExpressiveIcons.Pause else ExpressiveIcons.Play,
+                    contentDescription = if (status.isPlaying) "Pause" else "Play",
+                    tint = c.onPrimary,
+                    modifier = Modifier.size(26.dp),
+                )
+            }
+
+            ExpressiveIconButton(
+                icon = if (status.isMuted || status.volume == 0) ExpressiveIcons.VolumeOff else ExpressiveIcons.VolumeUp,
+                contentDescription = if (status.isMuted) "Unmute" else "Mute",
+                onClick = viewModel::toggleMute,
+                style = ExpressiveButtonStyle.Tonal,
+                boxSize = 52.dp,
+                iconSize = 22.dp,
+            )
+            Slider(
+                value = status.volume.toFloat(),
+                onValueChange = { viewModel.setVolume(it.toInt()) },
+                valueRange = 0f..100f,
+                modifier = Modifier.width(90.dp),
+                colors = SliderDefaults.colors(thumbColor = c.primary, activeTrackColor = c.primary, inactiveTrackColor = c.surfaceHighest),
+            )
+
+            Text(formatTimecode(shown), style = PureTvType.data, color = c.onSurfaceVariant)
             Slider(
                 value = (shown.toFloat() / duration.toFloat()).coerceIn(0f, 1f),
                 onValueChange = { f -> dragMs = (f * duration).toLong() },
                 onValueChangeFinished = { dragMs?.let { viewModel.seekTo(it) }; dragMs = null },
                 enabled = status.isSeekable,
-                modifier = Modifier.weight(1f).padding(horizontal = 10.dp),
-                colors = SliderDefaults.colors(thumbColor = c.twitchPurple, activeTrackColor = c.twitchPurple, inactiveTrackColor = c.surfaceVariant),
+                modifier = Modifier.weight(1f),
+                track = { sliderState ->
+                    val trackFrac = ((sliderState.value - sliderState.valueRange.start) / (sliderState.valueRange.endInclusive - sliderState.valueRange.start)).coerceIn(0f, 1f)
+                    Box(Modifier.fillMaxWidth().height(16.dp).clip(shapes.pillShape).background(c.surfaceHighest)) {
+                        Box(Modifier.fillMaxWidth(trackFrac).fillMaxHeight().clip(shapes.pillShape).background(c.primary))
+                    }
+                },
+                thumb = {
+                    Box(Modifier.size(width = 6.dp, height = 28.dp).clip(RoundedCornerShape(3.dp)).background(c.primary))
+                },
             )
-            Text(formatTimecode(status.durationMs), style = PureTvType.data, color = c.textSecondary)
-        }
-        Spacer(Modifier.height(4.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = viewModel::togglePlayPause) {
-                Icon(
-                    if (status.isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-                    contentDescription = if (status.isPlaying) "Pause" else "Play",
-                    tint = c.textPrimary,
-                )
-            }
-            IconButton(onClick = viewModel::toggleMute, modifier = Modifier.size(28.dp)) {
-                Icon(
-                    if (status.isMuted || status.volume == 0) Icons.AutoMirrored.Filled.VolumeOff else Icons.AutoMirrored.Filled.VolumeUp,
-                    if (status.isMuted) "Unmute" else "Mute",
-                    tint = c.textSecondary,
-                    modifier = Modifier.size(18.dp),
-                )
-            }
-            Slider(
-                value = status.volume.toFloat(),
-                onValueChange = { viewModel.setVolume(it.toInt()) },
-                valueRange = 0f..100f,
-                modifier = Modifier.width(110.dp).padding(horizontal = 6.dp),
-                colors = SliderDefaults.colors(thumbColor = c.twitchPurple, activeTrackColor = c.twitchPurple, inactiveTrackColor = c.surfaceVariant),
-            )
-            Spacer(Modifier.weight(1f))
-            IconButton(onClick = onToggleSettings, modifier = Modifier.size(28.dp)) {
-                Icon(
-                    Icons.Filled.Settings,
-                    contentDescription = "Playback settings",
-                    tint = if (settingsOpen) c.twitchPurple else c.textSecondary,
-                    modifier = Modifier.size(18.dp),
-                )
+            Text(formatTimecode(status.durationMs), style = PureTvType.data, color = c.onSurfaceVariant)
+
+            Box(Modifier.size(56.dp).clip(shapes.pillShape).background(c.surfaceHigh)) {
+                val settingsInteraction = remember { MutableInteractionSource() }
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .expressiveClickable(
+                            interaction = settingsInteraction,
+                            onClick = onToggleSettings,
+                            restRadius = 0.dp,
+                            hoverRadius = 0.dp,
+                            color = Color.Transparent,
+                            hoverColor = c.surfaceHighest,
+                        ),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        ExpressiveIcons.Settings,
+                        contentDescription = "Playback settings",
+                        tint = if (settingsOpen) c.primary else c.onSurfaceVariant,
+                        modifier = Modifier.size(24.dp),
+                    )
+                }
             }
         }
     }

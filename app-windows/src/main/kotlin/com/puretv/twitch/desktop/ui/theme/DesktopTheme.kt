@@ -91,32 +91,6 @@ data class PureTvDesktopColors(
     val live: Color get() = errorContainer
     val onLive: Color get() = onErrorContainer
 
-    // ---- Legacy aliases -----------------------------------------------------
-    // The pre-Expressive palette named colours by appearance ("twitchPurple",
-    // "textMuted"); the roles above name them by job. These aliases keep the
-    // not-yet-migrated call sites compiling and correctly toned. They are a
-    // migration aid, not part of the design system. Prefer the roles.
-    val background: Color get() = surfaceLowest
-    val surfaceVariant: Color get() = surfaceContainer
-    val surfaceRaised: Color get() = surfaceHigh
-    val surfaceHover: Color get() = surfaceHighest
-    val hairline: Color get() = outlineVariant.copy(alpha = 0.45f)
-    val hairlineStrong: Color get() = outlineVariant
-    val innerHighlight: Color get() = Color(0x0FFFFFFF)
-    val scrim: Color get() = Color(0xDD000000)
-    val scrimSoft: Color get() = Color(0x88000000)
-    val twitchPurple: Color get() = primary
-    val twitchPurpleLight: Color get() = onPrimaryContainer
-    val adBlockGreen: Color get() = tertiary
-    val textPrimary: Color get() = onSurface
-    val textSecondary: Color get() = onSurfaceVariant
-    val textTertiary: Color get() = outline
-    val textMuted: Color get() = outlineVariant
-    val online: Color get() = tertiary
-    val warning: Color get() = tertiary
-    val accentGradient: Brush get() = Brush.linearGradient(listOf(primary, onPrimaryContainer))
-    val topScrim: Brush get() = Brush.verticalGradient(listOf(Color(0xCC000000), Color.Transparent))
-
     /** The scrim that lets white text sit on arbitrary thumbnail artwork. */
     val cardScrim: Brush
         get() = Brush.verticalGradient(0f to Color(0xB3000000), 0.55f to Color.Transparent)
@@ -283,20 +257,6 @@ val shapeScale: Map<ShapeIntensity, PureTvShapes> = mapOf(
     ShapeIntensity.EXPRESSIVE to PureTvShapes(card = 20.dp, cardMorph = 32.dp, hero = 28.dp, heroMorph = 40.dp),
     ShapeIntensity.MAXIMAL to PureTvShapes(card = 28.dp, cardMorph = 48.dp, hero = 48.dp, heroMorph = 64.dp),
 )
-
-/**
- * Fixed-radius shapes for call sites that predate [PureTvShapes]. Kept so the
- * migration can proceed file by file; new code should use `PureTvTheme.shapes`,
- * which respects the user's chosen [ShapeIntensity].
- */
-object PureTvShape {
-    val xs = RoundedCornerShape(8.dp)
-    val sm = RoundedCornerShape(12.dp)
-    val md = RoundedCornerShape(16.dp)
-    val lg = RoundedCornerShape(20.dp)
-    val xl = RoundedCornerShape(28.dp)
-    val pill = RoundedCornerShape(999.dp)
-}
 
 // ── Motion ─────────────────────────────────────────────────────────────────────
 
