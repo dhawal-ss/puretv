@@ -54,19 +54,19 @@ fun PlayerSettingsMenu(
                 Text(
                     "Sharp = general; Anime = animation. Hold X to compare against Off, F3 for live stats.",
                     style = PureTvType.dataSmall,
-                    color = c.textTertiary,
+                    color = c.outline,
                 )
             } else {
                 Text(
                     "Switch engine to mpv for GPU upscaling.",
                     style = PureTvType.data,
-                    color = c.textMuted,
+                    color = c.outline,
                 )
             }
         }
         PlayerMenuSection("Engine") {
             SegmentedControl(PlaybackBackend.entries.toList(), backend, { it.label }, onBackendSelected)
-            Text("Applies after restart.", style = PureTvType.dataSmall, color = c.textTertiary)
+            Text("Applies after restart.", style = PureTvType.dataSmall, color = c.outline)
         }
     }
 }

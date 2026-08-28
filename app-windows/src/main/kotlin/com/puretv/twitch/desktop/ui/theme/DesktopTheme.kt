@@ -33,7 +33,7 @@ import androidx.compose.ui.unit.sp
  *     at a call site; picking a different palette re-tones the entire app.
  *  2. **Shape as a live axis.** [ShapeIntensity] scales the corner vocabulary from
  *     Calm to Maximal, and interactive surfaces MORPH their radius on hover/press
- *     (see `Modifier.morphSurface` in `ui/components/Expressive.kt`). Shape change
+ *     (see `Modifier.expressiveSurface` in `ui/components/Expressive.kt`). Shape change
  *     is the primary feedback channel, ahead of color.
  *  3. **Spring motion with overshoot.** [PureTvMotion.MorphSpring] settles past its
  *     target and back, which is what gives the morph its bounce.
@@ -43,7 +43,7 @@ import androidx.compose.ui.unit.sp
  * `MaterialShapes`, `ButtonGroup`, `WideNavigationRail`). Bumping would drag
  * Kotlin, AGP, KSP and both Android modules with it, against the version
  * catalog's explicit pin. So the Expressive language is implemented directly on
- * the pinned stack — the tokens and primitives here are the substitute for those
+ * the pinned stack. The tokens and primitives here are the substitute for those
  * library components, and no screen needs anything the current stack can't draw.
  */
 
@@ -55,22 +55,22 @@ import androidx.compose.ui.unit.sp
  * property here.
  */
 data class PureTvDesktopColors(
-    // Primary — the accent. One accent moment per region, never a wash.
+    // Primary: the accent. One accent moment per region, never a wash.
     val primary: Color,
     val onPrimary: Color,
     val primaryContainer: Color,
     val onPrimaryContainer: Color,
-    // Secondary — selected nav, segmented toggles, quiet emphasis.
+    // Secondary: selected nav, segmented toggles, quiet emphasis.
     val secondary: Color,
     val onSecondary: Color,
     val secondaryContainer: Color,
     val onSecondaryContainer: Color,
-    // Tertiary — the ad-block/shield voice, deliberately off-accent.
+    // Tertiary: the ad-block/shield voice, deliberately off-accent.
     val tertiary: Color,
     val onTertiary: Color,
     val tertiaryContainer: Color,
     val onTertiaryContainer: Color,
-    // Surfaces — the app body plus a five-step container ladder.
+    // Surfaces: the app body plus a five-step container ladder.
     val surface: Color,
     val onSurface: Color,
     val onSurfaceVariant: Color,
@@ -95,7 +95,7 @@ data class PureTvDesktopColors(
     // The pre-Expressive palette named colours by appearance ("twitchPurple",
     // "textMuted"); the roles above name them by job. These aliases keep the
     // not-yet-migrated call sites compiling and correctly toned. They are a
-    // migration aid, not part of the design system — prefer the roles.
+    // migration aid, not part of the design system. Prefer the roles.
     val background: Color get() = surfaceLowest
     val surfaceVariant: Color get() = surfaceContainer
     val surfaceRaised: Color get() = surfaceHigh
@@ -247,7 +247,7 @@ enum class ShapeIntensity(val key: String, val displayName: String) {
  *
  * [cardMorph] / [heroMorph] / [pillMorph] are the radii those surfaces animate TO
  * on hover. The M3 Expressive move is that a pill squares off and a square rounds
- * out — the delta is the feedback, so both directions are represented.
+ * out. The delta is the feedback, so both directions are represented.
  */
 data class PureTvShapes(
     val card: Dp,
@@ -263,7 +263,7 @@ data class PureTvShapes(
     /** Full-round. Used for nav items, chips, badges, avatars, CTA buttons. */
     val pill: Dp = 999.dp
 
-    /** What a pill morphs INTO on hover — the signature "pill squares off" cue. */
+    /** What a pill morphs INTO on hover: the signature "pill squares off" cue. */
     val pillMorph: Dp = 14.dp
 
     /** The outermost panes: nav rail and the content surface. */
@@ -309,7 +309,7 @@ object PureTvMotion {
     /**
      * The morph curve. Overshoots its target and settles back, which is what makes
      * a corner change read as elastic rather than as a plain tween. The CSS
-     * mockup expresses the same thing as `cubic-bezier(.2, 1.4, .3, 1)` — note the
+     * mockup expresses the same thing as `cubic-bezier(.2, 1.4, .3, 1)`. Note the
      * 1.4 control point above 1.
      */
     val MorphSpring: SpringSpec<Dp> = spring(dampingRatio = 0.55f, stiffness = Spring.StiffnessMediumLow)
@@ -327,19 +327,19 @@ object PureTvMotion {
  * Bricolage Grotesque carries display + section voice with tight negative
  * tracking, Archivo carries every functional string, IBM Plex Mono (see
  * [PureTvType]) carries data. Sizes follow the Material 3 Expressive type scale,
- * which runs noticeably larger than baseline M3 — expressive layouts lean on a
+ * which runs noticeably larger than baseline M3, because expressive layouts lean on a
  * big display step to anchor a page.
  */
 private val PureTvDesktopTypography = Typography(
-    // Display — hero titles only. One per screen at most.
+    // Display: hero titles only. One per screen at most.
     displayLarge = TextStyle(fontFamily = BricolageGrotesque, fontSize = 57.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = (-1.8).sp, lineHeight = 60.sp),
     displayMedium = TextStyle(fontFamily = BricolageGrotesque, fontSize = 45.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = (-1.2).sp, lineHeight = 52.sp),
     displaySmall = TextStyle(fontFamily = BricolageGrotesque, fontSize = 36.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = (-0.9).sp, lineHeight = 44.sp),
-    // Headline — section headings.
+    // Headline: section headings.
     headlineLarge = TextStyle(fontFamily = BricolageGrotesque, fontSize = 32.sp, fontWeight = FontWeight.Bold, letterSpacing = (-0.6).sp, lineHeight = 40.sp),
     headlineMedium = TextStyle(fontFamily = BricolageGrotesque, fontSize = 28.sp, fontWeight = FontWeight.Bold, letterSpacing = (-0.4).sp, lineHeight = 36.sp),
     headlineSmall = TextStyle(fontFamily = BricolageGrotesque, fontSize = 24.sp, fontWeight = FontWeight.Bold, letterSpacing = (-0.3).sp, lineHeight = 32.sp),
-    // Title — panel headings and card titles.
+    // Title: panel headings and card titles.
     titleLarge = TextStyle(fontFamily = BricolageGrotesque, fontSize = 22.sp, fontWeight = FontWeight.Bold, letterSpacing = (-0.2).sp, lineHeight = 28.sp),
     titleMedium = TextStyle(fontFamily = Archivo, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 0.15.sp, lineHeight = 22.sp),
     titleSmall = TextStyle(fontFamily = Archivo, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 0.1.sp, lineHeight = 20.sp),
@@ -347,7 +347,7 @@ private val PureTvDesktopTypography = Typography(
     bodyLarge = TextStyle(fontFamily = Archivo, fontSize = 16.sp, fontWeight = FontWeight.Normal, letterSpacing = 0.5.sp, lineHeight = 24.sp),
     bodyMedium = TextStyle(fontFamily = Archivo, fontSize = 14.sp, fontWeight = FontWeight.Normal, letterSpacing = 0.25.sp, lineHeight = 20.sp),
     bodySmall = TextStyle(fontFamily = Archivo, fontSize = 12.sp, fontWeight = FontWeight.Normal, letterSpacing = 0.4.sp, lineHeight = 16.sp),
-    // Label — buttons, chips, nav.
+    // Label: buttons, chips, nav.
     labelLarge = TextStyle(fontFamily = Archivo, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 0.1.sp, lineHeight = 20.sp),
     labelMedium = TextStyle(fontFamily = Archivo, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 0.5.sp, lineHeight = 16.sp),
     labelSmall = TextStyle(fontFamily = Archivo, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 0.5.sp, lineHeight = 16.sp),

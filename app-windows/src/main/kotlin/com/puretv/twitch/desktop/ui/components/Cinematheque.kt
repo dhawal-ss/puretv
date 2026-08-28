@@ -4,6 +4,7 @@ import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -59,13 +60,14 @@ import com.puretv.twitch.desktop.ui.emotes.AnimatedEmote
 import com.puretv.twitch.core.chat.BadgeIndex
 import com.puretv.twitch.desktop.ui.emotes.LocalEmoteAnimation
 import androidx.compose.runtime.staticCompositionLocalOf
+import com.puretv.twitch.desktop.ui.theme.PureTvMotion
 import com.puretv.twitch.desktop.ui.theme.PureTvShape
 import com.puretv.twitch.desktop.ui.theme.PureTvTheme
 import com.puretv.twitch.desktop.ui.theme.PureTvType
 import java.awt.Color as AwtColor
 
 /**
- * Cinémathèque shared components — the editorial vocabulary every screen speaks:
+ * Shared components: the vocabulary every screen speaks.
  * kickers, duotone cover art, poster lift, the segmented control, the ad-block
  * indicator, the cinematic hero, empty states, and rich chat rows.
  *
@@ -91,11 +93,11 @@ fun Kicker(
         Text(
             text.uppercase(),
             style = PureTvType.kicker,
-            color = if (accent) c.twitchPurple else c.textTertiary,
+            color = if (accent) c.primary else c.onSurfaceVariant,
         )
         if (rule) {
             Spacer(Modifier.width(12.dp))
-            Box(Modifier.weight(1f).height(1.dp).background(c.hairline))
+            Box(Modifier.weight(1f).height(1.dp).background(c.outlineVariant))
         }
     }
 }
@@ -124,7 +126,7 @@ fun LiveDot(modifier: Modifier = Modifier, size: Dp = 6.dp, color: Color? = null
 // ── Duotone cover art ────────────────────────────────────────────────────────────
 
 /**
- * Deterministic duotone fill — turns a missing/loading thumbnail into something that
+ * Deterministic duotone fill. Turns a missing or loading thumbnail into something that
  * looks *art-directed* rather than an empty gray box (the audit's #1 complaint). The
  * hue is seeded from a stable string so a given channel always gets the same tint.
  */
@@ -186,37 +188,26 @@ fun BoxScrim(modifier: Modifier = Modifier) {
 
 // ── Overlay chips (LIVE / viewer count on a cover) ───────────────────────────────
 
+/** The LIVE badge as it appears over cover art. Same badge as [LivePill]. */
 @Composable
-fun LiveChip(modifier: Modifier = Modifier) {
-    Row(
-        modifier
-            .clip(PureTvShape.xs)
-            .background(Color.Black.copy(alpha = 0.5f))
-            .padding(horizontal = 7.dp, vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        LiveDot(size = 5.dp)
-        Spacer(Modifier.width(5.dp))
-        Text("LIVE", style = PureTvType.dataSmall, color = Color.White)
-    }
-}
+fun LiveChip(modifier: Modifier = Modifier) = LivePill(modifier = modifier, height = 24.dp)
 
+/**
+ * Viewer count over cover art. No chip behind it: the card scrim already darkens
+ * that corner, and a second container there reads as clutter at card scale.
+ */
 @Composable
 fun ViewerChip(text: String, modifier: Modifier = Modifier) {
-    Text(
-        text,
-        style = PureTvType.dataSmall,
-        color = Color.White,
-        modifier = modifier
-            .clip(PureTvShape.xs)
-            .background(Color.Black.copy(alpha = 0.5f))
-            .padding(horizontal = 7.dp, vertical = 4.dp),
-    )
+    Text(text, style = PureTvType.dataSmall, color = Color.White, modifier = modifier)
 }
 
 // ── Segmented control ────────────────────────────────────────────────────────────
 
-/** Editorial replacement for the cramped quality-pill row. Generic over option type. */
+/**
+ * Kept for call sites that predate [SegmentedToggle]. Same control, one voice:
+ * a pill track holding pill segments, the selected one filled with the secondary
+ * container.
+ */
 @Composable
 fun <T> SegmentedControl(
     options: List<T>,
@@ -224,75 +215,62 @@ fun <T> SegmentedControl(
     label: (T) -> String,
     onSelect: (T) -> Unit,
     modifier: Modifier = Modifier,
-) {
-    val c = PureTvTheme.colors
-    Row(
-        modifier
-            .height(IntrinsicSize.Min)
-            .clip(PureTvShape.sm)
-            .border(1.dp, c.hairlineStrong, PureTvShape.sm),
-    ) {
-        options.forEachIndexed { index, option ->
-            if (index > 0) Box(Modifier.width(1.dp).fillMaxHeight().background(c.hairline))
-            val interaction = remember { MutableInteractionSource() }
-            val hovered by interaction.collectIsHoveredAsState()
-            val isSelected = option == selected
-            Box(
-                contentAlignment = Alignment.Center,
-                modifier = Modifier
-                    .background(
-                        when {
-                            isSelected -> c.twitchPurple
-                            hovered -> c.surfaceHover
-                            else -> Color.Transparent
-                        },
-                    )
-                    .hoverable(interaction)
-                    .handCursor()
-                    .clickable(interactionSource = interaction, indication = null) { onSelect(option) }
-                    .padding(horizontal = 12.dp, vertical = 7.dp),
-            ) {
-                Text(
-                    label(option),
-                    style = PureTvType.data,
-                    color = when {
-                        isSelected -> c.background
-                        hovered -> c.textPrimary
-                        else -> c.textSecondary
-                    },
-                )
-            }
-        }
-    }
-}
+) = SegmentedToggle(
+    options = options,
+    selected = selected,
+    label = label,
+    onSelect = onSelect,
+    modifier = modifier,
+    height = 40.dp,
+)
 
 // ── Ad-block pill ────────────────────────────────────────────────────────────────
 
+/**
+ * Playback ad-block state. Tertiary, never primary: it is a standing fact about
+ * the app rather than an action, so it must not compete with the play control
+ * sitting next to it. Inactive states drop to a plain outline so "on" is the only
+ * state that carries colour.
+ */
 @Composable
 fun AdBlockPill(status: AdBlockStatus, modifier: Modifier = Modifier) {
     val c = PureTvTheme.colors
-    val (label, dot) = when (status) {
-        AdBlockStatus.AD_BLOCKED -> "Ads blocked" to c.adBlockGreen
-        AdBlockStatus.AD_FILTERED -> "Ads filtered" to c.adBlockGreen
-        AdBlockStatus.AD_BLOCK_OFF -> "Ad block off" to c.textMuted
-        AdBlockStatus.DISABLED -> "Disabled" to c.textMuted
-        AdBlockStatus.UNKNOWN -> "Checking…" to c.textMuted
+    val label = when (status) {
+        AdBlockStatus.AD_BLOCKED -> "ADS BLOCKED"
+        AdBlockStatus.AD_FILTERED -> "ADS FILTERED"
+        AdBlockStatus.AD_BLOCK_OFF -> "AD BLOCK OFF"
+        AdBlockStatus.DISABLED -> "DISABLED"
+        AdBlockStatus.UNKNOWN -> "CHECKING"
     }
-    Row(
-        modifier
-            .clip(PureTvShape.pill)
-            .background(c.surfaceVariant.copy(alpha = 0.7f))
-            .border(1.dp, c.hairline, PureTvShape.pill)
-            .padding(horizontal = 10.dp, vertical = 5.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box(Modifier.size(6.dp).clip(CircleShape).background(dot))
-        Text(label.uppercase(), style = PureTvType.dataSmall, color = c.textSecondary, modifier = Modifier.padding(start = 7.dp))
+    val active = status == AdBlockStatus.AD_BLOCKED || status == AdBlockStatus.AD_FILTERED
+
+    if (active) {
+        ShieldPill(label, modifier = modifier, height = 36.dp)
+    } else {
+        Row(
+            modifier
+                .height(36.dp)
+                .clip(CircleShape)
+                .border(1.5.dp, c.outlineVariant, CircleShape)
+                .padding(horizontal = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(7.dp),
+        ) {
+            Icon(ExpressiveIcons.Shield, contentDescription = null, tint = c.onSurfaceVariant, modifier = Modifier.size(16.dp))
+            Text(label, style = PureTvType.badge, color = c.onSurfaceVariant, maxLines = 1)
+        }
     }
 }
 
 // ── Cinematic hero ───────────────────────────────────────────────────────────────
 
+/**
+ * The editorial hero. Artwork fills the card, a horizontal scrim darkens the left
+ * two thirds so the display type has a ground, and the copy stacks up from the
+ * bottom edge. The scrim runs sideways rather than upward because the title block
+ * is left-aligned: a bottom-up scrim would darken the artwork's subject and still
+ * leave the top of the headline floating.
+ */
 @Composable
 fun CinematicHero(
     seed: String,
@@ -302,37 +280,44 @@ fun CinematicHero(
     meta: String,
     onWatch: () -> Unit,
     modifier: Modifier = Modifier,
-    height: Dp = 300.dp,
+    height: Dp = 340.dp,
 ) {
     val c = PureTvTheme.colors
-    Box(modifier.fillMaxWidth().height(height)) {
+    Box(
+        modifier
+            .fillMaxWidth()
+            .height(height)
+            .clip(PureTvTheme.shapes.heroShape),
+    ) {
         CoverImage(imageUrl, seed, null, Modifier.fillMaxSize())
-        BoxScrim(Modifier.fillMaxSize())
+        Box(Modifier.fillMaxSize().background(c.heroScrim))
         Column(
             modifier = Modifier
                 .align(Alignment.BottomStart)
-                .padding(start = 38.dp, end = 38.dp, bottom = 30.dp),
+                .fillMaxWidth(0.64f)
+                .padding(40.dp),
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                LiveDot(size = 6.dp)
-                Spacer(Modifier.width(8.dp))
-                Text(kicker.uppercase(), style = PureTvType.kicker, color = c.textPrimary)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                LivePill()
+                Text(kicker.uppercase(), style = PureTvType.kicker, color = Color.White.copy(alpha = 0.72f), maxLines = 1)
             }
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(20.dp))
             Text(
                 title,
                 style = MaterialTheme.typography.displayLarge,
-                color = c.textPrimary,
+                color = Color.White,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.fillMaxWidth(0.7f),
             )
-            Spacer(Modifier.height(18.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                PureButton(text = "Watch now", onClick = onWatch, leadingIcon = Icons.Filled.PlayArrow)
-                Spacer(Modifier.width(16.dp))
-                Text(meta, style = PureTvType.data, color = c.textSecondary)
-            }
+            Spacer(Modifier.height(14.dp))
+            Text(meta, style = PureTvType.data, color = Color.White.copy(alpha = 0.82f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Spacer(Modifier.height(28.dp))
+            ExpressiveButton(
+                text = "Watch now",
+                onClick = onWatch,
+                icon = ExpressiveIcons.Play,
+                size = ExpressiveButtonSize.Large,
+            )
         }
     }
 }
@@ -355,12 +340,12 @@ fun EditorialEmptyState(
     ) {
         Kicker(kicker, accent = true)
         Spacer(Modifier.height(16.dp))
-        Text(title, style = MaterialTheme.typography.headlineMedium, color = c.textPrimary, textAlign = TextAlign.Center)
+        Text(title, style = MaterialTheme.typography.headlineMedium, color = c.onSurface, textAlign = TextAlign.Center)
         Spacer(Modifier.height(8.dp))
-        Text(message, style = MaterialTheme.typography.bodyMedium, color = c.textSecondary, textAlign = TextAlign.Center)
+        Text(message, style = MaterialTheme.typography.bodyLarge, color = c.onSurfaceVariant, textAlign = TextAlign.Center)
         if (actionLabel != null && onAction != null) {
             Spacer(Modifier.height(22.dp))
-            PureButton(text = actionLabel, onClick = onAction, variant = ButtonVariant.Secondary)
+            ExpressiveButton(text = actionLabel, onClick = onAction, style = ExpressiveButtonStyle.Outlined)
         }
     }
 }
@@ -381,13 +366,13 @@ fun ChatMessageRow(
 ) {
     val c = PureTvTheme.colors
 
-    // System rows (subs, raids, "chat cleared") carry no user identity — render a
+    // System rows (subs, raids, "chat cleared") carry no user identity, so render a
     // single centred, muted line and skip the whole badge/username/emote pipeline.
     if (message.isSystem) {
         Text(
             message.message,
             style = MaterialTheme.typography.labelMedium,
-            color = c.textMuted,
+            color = c.onSurfaceVariant,
             modifier = modifier
                 .fillMaxWidth()
                 .padding(vertical = 2.dp),
@@ -397,25 +382,35 @@ fun ChatMessageRow(
 
     val nameColor = remember(message.color) {
         runCatching { Color(AwtColor.decode(message.color).rgb or (0xFF shl 24)) }
-            .getOrDefault(c.twitchPurpleLight)
+            .getOrDefault(c.primary)
     }
-    // Highlight @-mentions of the local viewer with a faint accent wash + leading bar,
-    // matching Twitch/Chatterino's "someone pinged you" affordance.
-    val rowModifier = if (message.mentionsSelf) {
-        modifier
-            .fillMaxWidth()
-            .background(c.twitchPurple.copy(alpha = 0.12f))
-            .padding(start = 4.dp)
-    } else {
-        modifier.fillMaxWidth()
-    }
+    // Every row is its own rounded container rather than a flat line in a list. A
+    // mention fills with the primary container so being pinged is legible at a
+    // glance while scrolling; everything else stays transparent until hovered.
+    val rowInteraction = remember { MutableInteractionSource() }
+    val rowHovered by rowInteraction.collectIsHoveredAsState()
+    val rowFill by animateColorAsState(
+        targetValue = when {
+            message.mentionsSelf -> c.primaryContainer
+            rowHovered -> c.surfaceHigh
+            else -> Color.Transparent
+        },
+        animationSpec = tween(PureTvMotion.Fast),
+        label = "chatRowFill",
+    )
+    val rowModifier = modifier
+        .fillMaxWidth()
+        .clip(PureTvShape.md)
+        .background(rowFill)
+        .hoverable(rowInteraction)
+        .padding(horizontal = 12.dp, vertical = 7.dp)
     Column(modifier = rowModifier) {
         val parentName = message.replyParentDisplayName
         if (parentName != null) {
             Text(
                 "replying to @" + parentName,
                 style = MaterialTheme.typography.labelSmall,
-                color = c.textMuted,
+                color = c.onSurfaceVariant,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.padding(start = 2.dp, bottom = 1.dp),
@@ -428,7 +423,7 @@ fun ChatMessageRow(
         ) {
         if (showTimestamps) {
             val ts = remember(message.timestamp) { formatClock(message.timestamp) }
-            Text(ts, style = PureTvType.dataSmall, color = c.textMuted, modifier = Modifier.padding(end = 2.dp))
+            Text(ts, style = PureTvType.dataSmall, color = c.onSurfaceVariant.copy(alpha = 0.6f), modifier = Modifier.padding(end = 2.dp))
         }
         val badgeIndex = LocalBadgeIndex.current
         val resolvedBadges = if (badgeIndex === BadgeIndex.EMPTY) emptyList()
@@ -438,11 +433,11 @@ fun ChatMessageRow(
             // so a fixed square box is correct here, no aspect-ratio bug to fix.
             resolvedBadges.forEach { EmoteImage(it.url, it.title, Modifier.size(18.dp)) }
         } else {
-            // Badge art not loaded yet (or this channel returned none) — fall back to
+            // Badge art not loaded yet (or this channel returned none), so fall back to
             // the lightweight text chips so rank is still legible.
-            if (message.isBroadcaster) ChatBadge("HOST", c.twitchPurple, c.background)
-            else if (message.isModerator) ChatBadge("MOD", c.online, Color.White)
-            if (message.isSubscriber) ChatBadge("SUB", c.twitchPurpleLight.copy(alpha = 0.22f), c.twitchPurpleLight)
+            if (message.isBroadcaster) ChatBadge("HOST", c.primary, c.onPrimary)
+            else if (message.isModerator) ChatBadge("MOD", c.tertiaryContainer, c.onTertiaryContainer)
+            if (message.isSubscriber) ChatBadge("SUB", c.secondaryContainer, c.onSecondaryContainer)
         }
 
         Text(
@@ -457,7 +452,7 @@ fun ChatMessageRow(
             // instead of dropping the row so the thread stays readable.
             Text(
                 "<message deleted>",
-                color = c.textMuted,
+                color = c.onSurfaceVariant,
                 style = MaterialTheme.typography.bodyMedium,
                 fontStyle = FontStyle.Italic,
             )
@@ -465,7 +460,7 @@ fun ChatMessageRow(
             val parts = message.parsedParts.ifEmpty { listOf(MessagePart.Text(message.message)) }
             parts.forEach { part ->
                 when (part) {
-                    is MessagePart.Text -> Text(part.content, color = c.textPrimary, style = MaterialTheme.typography.bodyMedium)
+                    is MessagePart.Text -> Text(part.content, color = c.onSurface, style = MaterialTheme.typography.bodyLarge)
                     is MessagePart.TwitchEmote -> StackedEmote(
                         "https://static-cdn.jtvnw.net/emoticons/v2/${part.id}/default/dark/2.0",
                         part.name,
@@ -488,7 +483,7 @@ fun ChatMessageRow(
                 Icon(
                     Icons.AutoMirrored.Filled.Reply,
                     contentDescription = "Reply",
-                    tint = c.textMuted,
+                    tint = c.onSurfaceVariant,
                     modifier = Modifier.size(16.dp),
                 )
             }

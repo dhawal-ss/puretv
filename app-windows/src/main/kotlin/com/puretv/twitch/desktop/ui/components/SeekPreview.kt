@@ -61,8 +61,8 @@ fun SeekPreview(
     Box(
         modifier
             .size(160.dp, 90.dp)
-            .background(c.background, PureTvShape.sm)
-            .border(1.dp, c.hairline, PureTvShape.sm),
+            .background(c.surfaceLowest, PureTvShape.sm)
+            .border(1.dp, c.outlineVariant, PureTvShape.sm),
     ) {
         Canvas(Modifier.size(160.dp, 90.dp)) {
             drawImage(

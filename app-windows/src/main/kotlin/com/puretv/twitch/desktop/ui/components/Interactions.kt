@@ -77,7 +77,7 @@ fun Modifier.focusRing(
     cornerRadius: Dp = 10.dp,
     width: Dp = 2.dp,
 ): Modifier = composed {
-    val ringColor = color ?: PureTvTheme.colors.twitchPurple
+    val ringColor = color ?: PureTvTheme.colors.primary
     val alpha by animateFloatAsState(if (focused) 1f else 0f, tween(PureTvMotion.Fast), label = "focusRing")
     drawWithContent {
         drawContent()

@@ -1,14 +1,6 @@
 package com.puretv.twitch.desktop.ui.components
 
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.tween
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsFocusedAsState
-import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -16,38 +8,40 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import com.puretv.twitch.desktop.ui.theme.PureTvMotion
-import com.puretv.twitch.desktop.ui.theme.PureTvShape
 import com.puretv.twitch.desktop.ui.theme.PureTvTheme
 
 /**
- * The PureTV button system. One composable, all six states wired through a single
- * [MutableInteractionSource]: rest / hover / pressed / focused / disabled / loading.
+ * The pre-Expressive button API, kept so existing call sites keep working, and
+ * re-expressed on top of [ExpressiveButton] so they get the shape morph, the
+ * press compression and the tonal roles for free.
  *
- * Tactility comes from a spring press-scale (0.96) + a hover fill shift + an accent
- * focus ring — Material's ripple is deliberately disabled (`indication = null`)
- * because ripple reads "Android," not desktop-premium.
+ * New code should call [ExpressiveButton] / [ExpressiveIconButton] directly:
+ * those expose the full M3 emphasis ladder, where this exposes only four
+ * variants inherited from the old design.
  */
 enum class ButtonVariant { Primary, Secondary, Ghost, Destructive }
 
 enum class ButtonSize(val height: Dp, val hPad: Dp) {
-    Sm(30.dp, 12.dp),
-    Md(38.dp, 18.dp),
-    Lg(46.dp, 24.dp),
+    Sm(40.dp, 18.dp),
+    Md(48.dp, 22.dp),
+    Lg(56.dp, 26.dp),
+}
+
+private fun ButtonSize.expressive() = when (this) {
+    ButtonSize.Sm -> ExpressiveButtonSize.Small
+    ButtonSize.Md -> ExpressiveButtonSize.Medium
+    ButtonSize.Lg -> ExpressiveButtonSize.Large
 }
 
 @Composable
@@ -61,99 +55,84 @@ fun PureButton(
     loading: Boolean = false,
     leadingIcon: ImageVector? = null,
 ) {
-    val c = PureTvTheme.colors
-    val interaction = remember { MutableInteractionSource() }
-    val hovered by interaction.collectIsHoveredAsState()
-    val focused by interaction.collectIsFocusedAsState()
-    val active = enabled && !loading
-
-    // Primary is a SOLID accent (no gradient — gradients read "AI slop"); the light
-    // violet wants dark ink on top, so Primary text is the near-black background color.
-    val fg = when (variant) {
-        ButtonVariant.Primary -> c.background
-        ButtonVariant.Destructive -> Color.White
-        ButtonVariant.Secondary -> c.textPrimary
-        ButtonVariant.Ghost -> if (hovered) c.textPrimary else c.textSecondary
-    }
-    val bg by animateColorAsState(
-        targetValue = when (variant) {
-            ButtonVariant.Primary -> if (hovered) c.twitchPurpleLight else c.twitchPurple
-            ButtonVariant.Secondary -> if (hovered) c.surfaceHover else c.surfaceRaised
-            ButtonVariant.Ghost -> if (hovered) c.surfaceHover else Color.Transparent
-            ButtonVariant.Destructive -> if (hovered) c.live.copy(alpha = 0.88f) else c.live
-        },
-        animationSpec = tween(PureTvMotion.Fast),
-        label = "btnBg",
-    )
-
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        modifier = modifier
-            .height(size.height)
-            .graphicsLayer { alpha = if (active) 1f else 0.4f }
-            .pressScale(interaction)
-            .focusRing(focused, cornerRadius = 8.dp)
-            .clip(PureTvShape.sm)
-            .background(bg)
-            .then(
-                if (variant == ButtonVariant.Secondary) Modifier.border(1.dp, c.hairlineStrong, PureTvShape.sm)
-                else Modifier,
-            )
-            .hoverable(interaction)
-            .handCursor()
-            .clickable(interactionSource = interaction, indication = null, enabled = active, onClick = onClick)
-            .padding(horizontal = size.hPad),
-    ) {
-        if (loading) {
-            CircularProgressIndicator(modifier = Modifier.size(16.dp), color = fg, strokeWidth = 2.dp)
-        } else {
-            leadingIcon?.let { Icon(it, contentDescription = null, tint = fg, modifier = Modifier.size(18.dp)) }
-            Text(text, color = fg, style = MaterialTheme.typography.labelLarge, maxLines = 1)
+    // Loading is the one state ExpressiveButton has no slot for, because a spinner
+    // inside a morphing pill fights the morph. It gets its own minimal surface that
+    // keeps the button's footprint while the action is in flight.
+    if (loading) {
+        val c = PureTvTheme.colors
+        val interaction = remember { MutableInteractionSource() }
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = modifier
+                .height(size.height)
+                .expressiveSurface(
+                    interaction = interaction,
+                    restRadius = size.height / 2,
+                    hoverRadius = size.height / 2,
+                    color = when (variant) {
+                        ButtonVariant.Primary -> c.primary
+                        ButtonVariant.Destructive -> c.errorContainer
+                        ButtonVariant.Secondary -> c.secondaryContainer
+                        ButtonVariant.Ghost -> Color.Transparent
+                    },
+                )
+                .padding(horizontal = size.hPad),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(18.dp),
+                    color = if (variant == ButtonVariant.Primary) c.onPrimary else c.onSurface,
+                    strokeWidth = 2.dp,
+                )
+                Text(
+                    text,
+                    color = if (variant == ButtonVariant.Primary) c.onPrimary else c.onSurface,
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                )
+            }
         }
+        return
     }
+
+    ExpressiveButton(
+        text = text,
+        onClick = onClick,
+        modifier = modifier,
+        style = when (variant) {
+            ButtonVariant.Primary -> ExpressiveButtonStyle.Filled
+            ButtonVariant.Secondary -> ExpressiveButtonStyle.Outlined
+            ButtonVariant.Ghost -> ExpressiveButtonStyle.Text
+            // The destructive voice is the error container, the same fill the LIVE
+            // badge and the close button use, so "irreversible" reads consistently.
+            ButtonVariant.Destructive -> ExpressiveButtonStyle.FilledTertiary
+        },
+        size = size.expressive(),
+        icon = leadingIcon,
+        enabled = enabled,
+    )
 }
 
-/**
- * Square icon-only button with the same tactile feedback. [tintActive] is the
- * resting tint; on hover it brightens to textPrimary and fills the surface.
- */
 @Composable
 fun PureIconButton(
     icon: ImageVector,
     contentDescription: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    boxSize: Dp = 38.dp,
-    iconSize: Dp = 18.dp,
+    boxSize: Dp = 48.dp,
+    iconSize: Dp = 22.dp,
     enabled: Boolean = true,
     tint: Color? = null,
 ) {
-    val c = PureTvTheme.colors
-    val interaction = remember { MutableInteractionSource() }
-    val hovered by interaction.collectIsHoveredAsState()
-    val focused by interaction.collectIsFocusedAsState()
-    val bg by animateColorAsState(if (hovered && enabled) c.surfaceHover else Color.Transparent, tween(PureTvMotion.Fast), label = "iconBg")
-    val resting = tint ?: c.textSecondary
-
-    Box(
-        contentAlignment = Alignment.Center,
-        modifier = modifier
-            .size(boxSize)
-            .graphicsLayer { alpha = if (enabled) 1f else 0.4f }
-            .pressScale(interaction)
-            .focusRing(focused, cornerRadius = 8.dp)
-            .clip(PureTvShape.sm)
-            .background(bg)
-            .hoverable(interaction)
-            .handCursor()
-            .clickable(interactionSource = interaction, indication = null, enabled = enabled, onClick = onClick),
-    ) {
-        Icon(
-            icon,
-            contentDescription = contentDescription,
-            tint = if (hovered && enabled) c.textPrimary else resting,
-            modifier = Modifier.size(iconSize),
-        )
-    }
+    ExpressiveIconButton(
+        icon = icon,
+        contentDescription = contentDescription,
+        onClick = onClick,
+        modifier = modifier,
+        boxSize = boxSize,
+        iconSize = iconSize,
+        enabled = enabled,
+        tint = tint,
+    )
 }

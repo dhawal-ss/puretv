@@ -1,12 +1,13 @@
 package com.puretv.twitch.desktop.ui.screens
 
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -18,12 +19,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -35,19 +34,21 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.puretv.twitch.core.api.ChannelSearchResult
 import com.puretv.twitch.desktop.ui.SearchViewModel
 import com.puretv.twitch.desktop.ui.components.Avatar
 import com.puretv.twitch.desktop.ui.components.EditorialEmptyState
-import com.puretv.twitch.desktop.ui.components.Kicker
-import com.puretv.twitch.desktop.ui.components.LiveDot
+import com.puretv.twitch.desktop.ui.components.ExpressiveIconButton
+import com.puretv.twitch.desktop.ui.components.ExpressiveIcons
+import com.puretv.twitch.desktop.ui.components.LivePill
 import com.puretv.twitch.desktop.ui.components.handCursor
 import com.puretv.twitch.desktop.ui.rememberDesktopViewModel
 import com.puretv.twitch.desktop.ui.theme.PureTvMotion
-import com.puretv.twitch.desktop.ui.theme.PureTvShape
 import com.puretv.twitch.desktop.ui.theme.PureTvTheme
 import com.puretv.twitch.desktop.ui.theme.PureTvType
 import org.koin.core.Koin
@@ -58,48 +59,12 @@ fun SearchContent(koin: Koin, onOpenChannel: (String) -> Unit) {
     val state by viewModel.state.collectAsState()
     val c = PureTvTheme.colors
 
-    Column(modifier = Modifier.fillMaxSize().padding(32.dp)) {
-        Kicker("Search")
-        Spacer(Modifier.height(14.dp))
-
-        // Large editorial search field — surface plate, hairline border, accent cursor.
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(PureTvShape.lg)
-                .background(c.surface)
-                .border(1.dp, c.hairline, PureTvShape.lg)
-                .padding(horizontal = 16.dp, vertical = 14.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(
-                imageVector = Icons.Filled.Search,
-                contentDescription = null,
-                tint = c.textSecondary,
-                modifier = Modifier.size(20.dp),
-            )
-            Spacer(Modifier.width(12.dp))
-            Box(modifier = Modifier.weight(1f)) {
-                if (state.query.isEmpty()) {
-                    Text(
-                        "Search channels and categories…",
-                        color = c.textMuted,
-                        style = MaterialTheme.typography.titleLarge.copy(fontFamily = PureTvType.display),
-                    )
-                }
-                BasicTextField(
-                    value = state.query,
-                    onValueChange = viewModel::onQueryChange,
-                    singleLine = true,
-                    textStyle = MaterialTheme.typography.titleLarge.copy(
-                        fontFamily = PureTvType.display,
-                        color = c.textPrimary,
-                    ),
-                    cursorBrush = SolidColor(c.twitchPurple),
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
-        }
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(top = 36.dp, start = 32.dp, end = 32.dp, bottom = 40.dp),
+    ) {
+        SearchField(query = state.query, onQueryChange = viewModel::onQueryChange)
 
         when {
             state.error != null -> {
@@ -120,11 +85,11 @@ fun SearchContent(koin: Koin, onOpenChannel: (String) -> Unit) {
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     CircularProgressIndicator(
-                        color = c.twitchPurple,
+                        color = c.primary,
                         strokeWidth = 2.dp,
                         modifier = Modifier.size(18.dp),
                     )
-                    Text("Searching…", style = PureTvType.data, color = c.textTertiary)
+                    Text("Searching...", style = PureTvType.data, color = c.onSurfaceVariant)
                 }
             }
 
@@ -138,15 +103,89 @@ fun SearchContent(koin: Koin, onOpenChannel: (String) -> Unit) {
             }
 
             else -> {
-                Spacer(Modifier.height(28.dp))
-                Kicker("Channels", rule = true)
-                Spacer(Modifier.height(8.dp))
-                LazyColumn(modifier = Modifier.fillMaxSize()) {
-                    items(state.results, key = { it.id }) { result ->
-                        SearchResultRow(result = result, onClick = { onOpenChannel(result.broadcaster_login) })
+                Spacer(Modifier.height(24.dp))
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .clip(RoundedCornerShape(PureTvTheme.shapes.card))
+                        .background(c.surfaceLow),
+                ) {
+                    // Container clips its children, so the first and last row inherit
+                    // its rounding without each row needing its own corner logic.
+                    LazyColumn(modifier = Modifier.fillMaxSize()) {
+                        items(state.results, key = { it.id }) { result ->
+                            SearchResultRow(result = result, onClick = { onOpenChannel(result.broadcaster_login) })
+                        }
                     }
                 }
             }
+        }
+    }
+}
+
+/**
+ * The morphing search bar: a real editable [BasicTextField] wearing the pill's
+ * clothes. It shares one interaction source between the outer hover and the
+ * field's own focus, so the corner squares off on either.
+ */
+@Composable
+private fun SearchField(query: String, onQueryChange: (String) -> Unit, modifier: Modifier = Modifier) {
+    val c = PureTvTheme.colors
+    val interaction = remember { MutableInteractionSource() }
+    val hovered by interaction.collectIsHoveredAsState()
+    val focused by interaction.collectIsFocusedAsState()
+    val radius by animateDpAsState(
+        targetValue = if (hovered || focused) 20.dp else 32.dp,
+        animationSpec = PureTvMotion.MorphSpring,
+        label = "searchFieldRadius",
+    )
+
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(64.dp)
+            .hoverable(interaction)
+            .clip(RoundedCornerShape(radius))
+            .background(c.surfaceHigh)
+            .padding(horizontal = 24.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        Icon(
+            imageVector = ExpressiveIcons.Search,
+            contentDescription = null,
+            tint = c.onSurfaceVariant,
+            modifier = Modifier.size(26.dp),
+        )
+
+        Box(modifier = Modifier.weight(1f)) {
+            if (query.isEmpty()) {
+                Text(
+                    "Search channels and categories",
+                    style = MaterialTheme.typography.titleMedium.copy(fontSize = 18.sp),
+                    color = c.onSurfaceVariant,
+                    maxLines = 1,
+                )
+            }
+            BasicTextField(
+                value = query,
+                onValueChange = onQueryChange,
+                singleLine = true,
+                interactionSource = interaction,
+                textStyle = MaterialTheme.typography.titleMedium.copy(fontSize = 18.sp, color = c.onSurface),
+                cursorBrush = SolidColor(c.primary),
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+
+        if (query.isNotEmpty()) {
+            ExpressiveIconButton(
+                icon = ExpressiveIcons.Close,
+                contentDescription = "Clear search",
+                onClick = { onQueryChange("") },
+                boxSize = 44.dp,
+                iconSize = 22.dp,
+            )
         }
     }
 }
@@ -156,10 +195,10 @@ private fun SearchResultRow(result: ChannelSearchResult, onClick: () -> Unit) {
     val c = PureTvTheme.colors
     val interaction = remember { MutableInteractionSource() }
     val hovered by interaction.collectIsHoveredAsState()
-    val indent by animateDpAsState(
-        if (hovered) 8.dp else 0.dp,
-        tween(PureTvMotion.Fast),
-        label = "rowIndent",
+    val rowColor by animateColorAsState(
+        targetValue = if (hovered) c.surfaceHigh else Color.Transparent,
+        animationSpec = tween(PureTvMotion.Fast),
+        label = "rowHover",
     )
 
     Row(
@@ -168,55 +207,40 @@ private fun SearchResultRow(result: ChannelSearchResult, onClick: () -> Unit) {
             .hoverable(interaction)
             .handCursor()
             .clickable(interactionSource = interaction, indication = null, onClick = onClick)
-            .background(if (hovered) c.surfaceHover else c.background)
-            .padding(start = 8.dp + indent, end = 8.dp, top = 12.dp, bottom = 12.dp),
+            .background(rowColor)
+            .padding(horizontal = 20.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         // The search/channels result carries a profile image, not a stream still,
         // so the channel reads best as an Avatar rather than a 16:10 cover.
         Avatar(
             displayName = result.display_name,
             imageUrl = result.thumbnail_url.takeIf { it.isNotBlank() },
-            size = 48,
+            size = 52,
         )
 
-        Column(modifier = Modifier.weight(1f).padding(start = 16.dp)) {
+        Column(modifier = Modifier.weight(1f)) {
             Text(
                 result.display_name,
                 style = MaterialTheme.typography.titleMedium,
-                color = c.textPrimary,
+                color = c.onSurface,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
                 if (result.is_live) result.game_name.ifBlank { result.title.ifBlank { "Live" } } else "Offline",
                 style = MaterialTheme.typography.bodyMedium,
-                color = c.textSecondary,
+                color = c.onSurfaceVariant,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
         }
 
-        // Right-aligned status. No viewer count exists on the search model,
-        // so live shows a LIVE marker and offline shows a muted dot.
+        // No viewer count exists on the search model, so live results show a bare
+        // LIVE pill rather than LivePill's trailing-count form.
         if (result.is_live) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                modifier = Modifier.padding(start = 16.dp),
-            ) {
-                LiveDot(size = 6.dp)
-                Text("LIVE", style = PureTvType.dataSmall, color = c.live)
-            }
-        } else {
-            Text(
-                "·",
-                style = PureTvType.data,
-                color = c.textMuted,
-                modifier = Modifier.padding(start = 16.dp),
-            )
+            LivePill()
         }
     }
-
-    Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(c.hairline))
 }

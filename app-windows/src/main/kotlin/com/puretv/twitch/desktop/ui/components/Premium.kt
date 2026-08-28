@@ -57,53 +57,60 @@ import com.puretv.twitch.desktop.ui.theme.PureTvType
 
 // ── Stream card ────────────────────────────────────────────────────────────────
 
+/**
+ * The shelf card: a tonal container holding 16:9 art, then the channel identity
+ * below it. The whole card rounds further out and lifts on hover rather than
+ * tinting its title, so the feedback is the same gesture used everywhere else.
+ */
 @Composable
 fun StreamCard(stream: StreamInfo, onClick: () -> Unit, modifier: Modifier = Modifier) {
     val c = PureTvTheme.colors
-    val interaction = remember { MutableInteractionSource() }
-    val hovered by interaction.collectIsHoveredAsState()
-    // Cinémathèque hover: a clean lift + the title shifting to accent. No gradient
-    // border, no scale bloat — "lift, don't glow".
-    val titleColor by animateColorAsState(
-        if (hovered) c.twitchPurpleLight else c.textPrimary,
-        tween(PureTvMotion.Fast),
-        label = "cardTitle",
-    )
+    val shapes = PureTvTheme.shapes
 
-    Column(
-        modifier = modifier
-            .hoverLift(interaction, lift = 6.dp, scaleTo = 1f)
-            .hoverable(interaction)
-            .handCursor()
-            .clickable(interactionSource = interaction, indication = null, onClick = onClick),
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .aspectRatio(16f / 9f)
-                .clip(PureTvShape.md),
-        ) {
-            val thumbUrl = stream.thumbnailUrl
-                .replace("{width}", "440")
-                .replace("{height}", "248")
-            CoverImage(
-                imageUrl = thumbUrl,
-                seed = stream.userName,
-                contentDescription = stream.title,
-                modifier = Modifier.fillMaxSize(),
-            )
-            BoxScrim(Modifier.fillMaxSize())
-            LiveChip(Modifier.align(Alignment.TopStart).padding(8.dp))
-            ViewerChip(formatViewerCount(stream.viewerCount), Modifier.align(Alignment.BottomEnd).padding(8.dp))
-        }
+    ExpressiveCard(onClick = onClick, modifier = modifier) {
+        Column {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(16f / 9f)
+                    .clip(shapes.thumbShape),
+            ) {
+                val thumbUrl = stream.thumbnailUrl
+                    .replace("{width}", "440")
+                    .replace("{height}", "248")
+                CoverImage(
+                    imageUrl = thumbUrl,
+                    seed = stream.userName,
+                    contentDescription = stream.title,
+                    modifier = Modifier.fillMaxSize(),
+                )
+                Box(Modifier.fillMaxSize().background(c.cardScrim))
+                LivePill(Modifier.align(Alignment.TopStart).padding(10.dp), height = 24.dp)
+                Text(
+                    formatViewerCount(stream.viewerCount),
+                    style = PureTvType.dataSmall,
+                    color = Color.White,
+                    modifier = Modifier.align(Alignment.BottomEnd).padding(10.dp),
+                )
+            }
 
-        Spacer(Modifier.height(10.dp))
-        Text(stream.userName, style = MaterialTheme.typography.titleMedium, color = titleColor, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        if (stream.gameName.isNotBlank()) {
-            Text(stream.gameName, style = MaterialTheme.typography.bodyMedium, color = c.textSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        }
-        if (stream.title.isNotBlank()) {
-            Text(stream.title, style = MaterialTheme.typography.bodyMedium, color = c.textMuted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Column(Modifier.padding(start = 8.dp, end = 8.dp, top = 14.dp, bottom = 8.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    // The Helix streams payload carries no avatar URL, so this is the
+                    // deterministic initial chip rather than a fetch-per-card.
+                    Avatar(stream.userName, imageUrl = null, size = 32)
+                    Column(Modifier.weight(1f)) {
+                        Text(stream.userName, style = MaterialTheme.typography.titleMedium, color = c.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        if (stream.gameName.isNotBlank()) {
+                            Text(stream.gameName, style = MaterialTheme.typography.bodyMedium, color = c.primary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                    }
+                }
+                if (stream.title.isNotBlank()) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(stream.title, style = MaterialTheme.typography.bodyMedium, color = c.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+            }
         }
     }
 }
@@ -118,19 +125,15 @@ internal fun formatViewerCount(count: Int): String = when {
 
 // ── Section header ─────────────────────────────────────────────────────────────
 
+/** Kept for call sites that predate [SectionHeading]; same thing, one voice. */
 @Composable
 fun SectionHeader(title: String, onSeeAll: (() -> Unit)? = null, modifier: Modifier = Modifier) {
-    val c = PureTvTheme.colors
-    Row(
-        modifier = modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Kicker(title)
-        if (onSeeAll != null) {
-            Text("See all", style = PureTvType.data, color = c.twitchPurpleLight, modifier = Modifier.clickable(onClick = onSeeAll).handCursor())
-        }
-    }
+    SectionHeading(
+        title = title,
+        modifier = modifier,
+        actionLabel = if (onSeeAll != null) "See all" else null,
+        onAction = onSeeAll,
+    )
 }
 
 // ── Skeleton shimmer ───────────────────────────────────────────────────────────
@@ -149,7 +152,7 @@ fun Skeleton(modifier: Modifier = Modifier) {
         label = "shimmerX",
     )
     val shimmerBrush = Brush.linearGradient(
-        colors = listOf(c.surfaceVariant, c.surfaceHover, c.surfaceVariant),
+        colors = listOf(c.surfaceLow, c.surfaceHighest, c.surfaceLow),
         start = Offset(translateX * 600f, 0f),
         end = Offset(translateX * 600f + 600f, 0f),
     )
@@ -159,7 +162,7 @@ fun Skeleton(modifier: Modifier = Modifier) {
 @Composable
 fun StreamCardSkeleton(modifier: Modifier = Modifier) {
     Column(modifier = modifier) {
-        Skeleton(modifier = Modifier.fillMaxWidth().aspectRatio(16f / 9f).clip(RoundedCornerShape(10.dp)))
+        Skeleton(modifier = Modifier.fillMaxWidth().aspectRatio(16f / 9f).clip(PureTvTheme.shapes.thumbShape))
         Spacer(Modifier.height(8.dp))
         Skeleton(modifier = Modifier.fillMaxWidth(0.6f).height(14.dp).clip(RoundedCornerShape(4.dp)))
         Spacer(Modifier.height(6.dp))
@@ -180,14 +183,14 @@ fun Avatar(displayName: String, imageUrl: String?, size: Int = 36, modifier: Mod
             model = imageUrl,
             contentDescription = displayName,
             contentScale = ContentScale.Crop,
-            modifier = modifier.size(sizeDp).clip(CircleShape).border(1.dp, c.hairline, CircleShape),
+            modifier = modifier.size(sizeDp).clip(CircleShape).border(1.dp, c.outlineVariant, CircleShape),
         )
     } else {
         Box(
-            modifier = modifier.size(sizeDp).clip(CircleShape).background(c.twitchPurple),
+            modifier = modifier.size(sizeDp).clip(CircleShape).background(c.primaryContainer),
             contentAlignment = Alignment.Center,
         ) {
-            Text(displayName.take(1).uppercase(), style = MaterialTheme.typography.labelSmall, color = c.background, fontWeight = FontWeight.Bold)
+            Text(displayName.take(1).uppercase(), style = MaterialTheme.typography.labelLarge, color = c.onPrimaryContainer, fontWeight = FontWeight.Bold)
         }
     }
 }

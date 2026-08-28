@@ -1,39 +1,40 @@
 package com.puretv.twitch.desktop.ui.components
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Download
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.puretv.twitch.desktop.update.UpdateState
 import com.puretv.twitch.desktop.update.resolveReleaseUrl
 import com.puretv.twitch.desktop.ui.theme.PureTvTheme
+import com.puretv.twitch.desktop.ui.theme.PureTvType
 
 /**
- * Slim, dismissible update bar shown under the title bar when an update is
- * available / downloading / failed. Renders nothing when [state] is Idle.
+ * The Material 3 banner: a dismissible strip under the title bar carrying one
+ * piece of news and its actions. It sits in the window gutter rather than inside
+ * the content pane, because an update is about the app rather than about
+ * whatever the user is currently looking at.
+ *
+ * Renders nothing when [state] is Idle.
  */
 @Composable
 fun UpdateBanner(
@@ -42,101 +43,122 @@ fun UpdateBanner(
     onOpenReleasePage: (String) -> Unit,
     onDismiss: () -> Unit,
 ) {
+    val c = PureTvTheme.colors
     when (state) {
         UpdateState.Idle -> Unit
-        is UpdateState.Available -> BannerShell {
+        is UpdateState.Available -> BannerShell(container = c.primaryContainer) {
+            BannerIcon(ExpressiveIcons.Download, c.onPrimaryContainer, c.primaryContainer)
             Column(Modifier.weight(1f)) {
                 Text(
-                    "Update available — ${state.info.version}",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = PureTvTheme.colors.textPrimary,
-                    fontWeight = FontWeight.SemiBold,
+                    "Update available",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = c.onPrimaryContainer,
+                    fontWeight = FontWeight.Bold,
                 )
-                if (state.info.notes.isNotBlank()) {
-                    Text(
-                        state.info.notes,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = PureTvTheme.colors.textSecondary,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
+                Text(
+                    if (state.info.notes.isNotBlank()) "${state.info.version} · ${state.info.notes}" else state.info.version,
+                    style = PureTvType.data,
+                    color = c.onPrimaryContainer.copy(alpha = 0.86f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
             }
-            UpdateButton("Update", onUpdate)
-            Spacer(Modifier.width(4.dp))
-            DismissButton(onDismiss)
+            ExpressiveButton(
+                text = "Update",
+                onClick = onUpdate,
+                style = ExpressiveButtonStyle.Filled,
+                size = ExpressiveButtonSize.Small,
+                icon = ExpressiveIcons.Download,
+            )
+            DismissButton(onDismiss, c.onPrimaryContainer)
         }
-        is UpdateState.Downloading -> BannerShell {
+        is UpdateState.Downloading -> BannerShell(container = c.primaryContainer) {
+            BannerIcon(ExpressiveIcons.Download, c.onPrimaryContainer, c.primaryContainer)
             Column(Modifier.weight(1f)) {
                 Text(
-                    "Downloading update… ${(state.progress * 100).toInt()}%",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = PureTvTheme.colors.textPrimary,
-                    fontWeight = FontWeight.SemiBold,
+                    "Downloading update, ${(state.progress * 100).toInt()}%",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = c.onPrimaryContainer,
+                    fontWeight = FontWeight.Bold,
                 )
-                Spacer(Modifier.height(4.dp))
+                Spacer(Modifier.height(8.dp))
                 LinearProgressIndicator(
                     progress = { state.progress },
-                    modifier = Modifier.fillMaxWidth().height(4.dp),
-                    color = PureTvTheme.colors.twitchPurpleLight,
-                    trackColor = PureTvTheme.colors.surfaceHover,
+                    modifier = Modifier.fillMaxWidth().height(6.dp).clip(CircleShape),
+                    color = c.onPrimaryContainer,
+                    trackColor = c.onPrimaryContainer.copy(alpha = 0.24f),
                 )
             }
         }
-        is UpdateState.Error -> BannerShell {
+        is UpdateState.Error -> BannerShell(container = c.errorContainer) {
+            BannerIcon(ExpressiveIcons.Refresh, c.onErrorContainer, c.errorContainer)
             Text(
                 "Update failed: ${state.message}",
-                style = MaterialTheme.typography.bodyMedium,
-                color = PureTvTheme.colors.textPrimary,
+                style = MaterialTheme.typography.titleMedium,
+                color = c.onErrorContainer,
                 modifier = Modifier.weight(1f),
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
-            UpdateButton("Open download page") { onOpenReleasePage(state.releaseUrl ?: resolveReleaseUrl("")) }
-            Spacer(Modifier.width(4.dp))
-            UpdateButton("Retry", onUpdate)
-            Spacer(Modifier.width(4.dp))
-            DismissButton(onDismiss)
+            ExpressiveButton(
+                text = "Open download page",
+                onClick = { onOpenReleasePage(state.releaseUrl ?: resolveReleaseUrl("")) },
+                style = ExpressiveButtonStyle.Outlined,
+                size = ExpressiveButtonSize.Small,
+            )
+            ExpressiveButton(
+                text = "Retry",
+                onClick = onUpdate,
+                style = ExpressiveButtonStyle.Filled,
+                size = ExpressiveButtonSize.Small,
+                icon = ExpressiveIcons.Refresh,
+            )
+            DismissButton(onDismiss, c.onErrorContainer)
         }
     }
 }
 
 @Composable
-private fun BannerShell(content: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit) {
-    val c = PureTvTheme.colors
+private fun BannerShell(
+    container: androidx.compose.ui.graphics.Color,
+    content: @Composable RowScope.() -> Unit,
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(c.surfaceVariant)
-            .padding(horizontal = 16.dp, vertical = 8.dp),
+            .padding(start = 8.dp, end = 8.dp, bottom = 8.dp)
+            .clip(PureTvTheme.shapes.cardShape)
+            .background(container)
+            .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
         content = content,
     )
-    Box(Modifier.fillMaxWidth().height(1.dp).background(c.hairline))
 }
 
+/** The banner's leading token: an inverted circular chip, the M3 banner idiom. */
 @Composable
-private fun UpdateButton(label: String, onClick: () -> Unit) {
-    val c = PureTvTheme.colors
-    Button(
-        onClick = onClick,
-        colors = ButtonDefaults.buttonColors(containerColor = c.twitchPurple, contentColor = c.textPrimary),
-        shape = RoundedCornerShape(8.dp),
+private fun BannerIcon(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    circle: androidx.compose.ui.graphics.Color,
+    glyph: androidx.compose.ui.graphics.Color,
+) {
+    Box(
+        Modifier.size(40.dp).clip(CircleShape).background(circle),
+        contentAlignment = Alignment.Center,
     ) {
-        Icon(Icons.Filled.Download, contentDescription = null, modifier = Modifier.size(16.dp))
-        Spacer(Modifier.width(6.dp))
-        Text(label, style = MaterialTheme.typography.labelLarge)
+        Icon(icon, contentDescription = null, tint = glyph, modifier = Modifier.size(22.dp))
     }
 }
 
 @Composable
-private fun DismissButton(onDismiss: () -> Unit) {
-    IconButton(onClick = onDismiss, modifier = Modifier.size(28.dp)) {
-        Icon(
-            Icons.Filled.Close,
-            contentDescription = "Dismiss",
-            tint = PureTvTheme.colors.textSecondary,
-            modifier = Modifier.size(16.dp),
-        )
-    }
+private fun DismissButton(onDismiss: () -> Unit, tint: androidx.compose.ui.graphics.Color) {
+    ExpressiveIconButton(
+        icon = ExpressiveIcons.Close,
+        contentDescription = "Dismiss",
+        onClick = onDismiss,
+        boxSize = 40.dp,
+        iconSize = 20.dp,
+        tint = tint,
+    )
 }

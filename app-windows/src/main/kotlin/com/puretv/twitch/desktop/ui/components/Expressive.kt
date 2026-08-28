@@ -51,7 +51,7 @@ import com.puretv.twitch.desktop.ui.theme.PureTvType
  * The organising idea: **shape is the primary feedback channel**. A resting pill
  * squares off into a soft rectangle on hover; a resting card rounds further out.
  * Colour shifts a little, position shifts a little, but it is the corner
- * animation — on a spring that overshoots — that makes the UI feel alive.
+ * animation, on a spring that overshoots, that makes the UI feel alive.
  *
  * Everything here is built on [Modifier.expressiveSurface], so the timing and
  * curve are identical across buttons, chips, cards, nav items and pills. That
@@ -69,7 +69,7 @@ import com.puretv.twitch.desktop.ui.theme.PureTvType
  *
  * @param restRadius corner radius at rest.
  * @param hoverRadius corner radius while hovered. Deliberately allowed to be
- *   either larger or smaller than [restRadius] — pills square off, cards round out.
+ *   either larger or smaller than [restRadius]: pills square off, cards round out.
  * @param pressRadius corner radius while pressed; defaults to [hoverRadius].
  * @param color resting fill.
  * @param hoverColor fill while hovered; defaults to [color].
@@ -240,7 +240,8 @@ fun ExpressiveButton(
         animationSpec = PureTvMotion.MorphSpring,
         label = "buttonPad",
     )
-    val ink by animateColorAsState(fgHover.takeIf { interaction.collectIsHoveredAsState().value } ?: fg, tween(PureTvMotion.Medium), label = "buttonInk")
+    val hovered by interaction.collectIsHoveredAsState()
+    val ink by animateColorAsState(if (hovered) fgHover else fg, tween(PureTvMotion.Medium), label = "buttonInk")
 
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -272,7 +273,7 @@ fun ExpressiveButton(
 }
 
 /**
- * Icon-only button. Round at rest, squircle on hover — the smallest possible
+ * Icon-only button. Round at rest, squircle on hover: the smallest possible
  * expression of the morph, and the one the user meets most often.
  */
 @Composable
@@ -432,7 +433,6 @@ fun ExpressiveFilterChip(
     modifier: Modifier = Modifier,
 ) {
     val c = PureTvTheme.colors
-    val shapes = PureTvTheme.shapes
     val interaction = remember { MutableInteractionSource() }
     val fg by animateColorAsState(
         if (selected) c.onSecondaryContainer else c.onSurfaceVariant,
@@ -540,7 +540,7 @@ fun <T> SegmentedToggle(
 // ── Status pills ───────────────────────────────────────────────────────────────
 
 /**
- * The LIVE badge. Error-container red with a pulsing dot — the one place in the
+ * The LIVE badge. Error-container red with a pulsing dot. It is the one place in the
  * app where colour alone carries meaning, so the dot's motion backs it up.
  */
 @Composable
@@ -595,7 +595,7 @@ fun ShieldPill(
     }
 }
 
-/** Small numeric badge — unread mentions, live-follow count on the nav rail. */
+/** Small numeric badge: unread mentions, live-follow count on the nav rail. */
 @Composable
 fun CountBadge(text: String, modifier: Modifier = Modifier) {
     val c = PureTvTheme.colors
@@ -718,7 +718,11 @@ fun SectionHeading(
 
 // ── Switch ─────────────────────────────────────────────────────────────────────
 
-/** M3 switch: the thumb slides and the track re-tones. */
+/**
+ * M3 switch. Both the track colour and the thumb SIZE change with state: the
+ * thumb grows as it slides on, so the control still reads as on or off in a
+ * greyscale screenshot or to a colour-blind viewer.
+ */
 @Composable
 fun ExpressiveSwitch(
     checked: Boolean,
@@ -728,8 +732,10 @@ fun ExpressiveSwitch(
     val c = PureTvTheme.colors
     val interaction = remember { MutableInteractionSource() }
     val track by animateColorAsState(if (checked) c.primary else c.surfaceHighest, tween(PureTvMotion.Medium), label = "switchTrack")
-    val offset by animateDpAsState(if (checked) 28.dp else 4.dp, PureTvMotion.MorphSpring, label = "switchThumb")
-    val thumbSize by animateDpAsState(if (checked) 24.dp else 18.dp, PureTvMotion.MorphSpring, label = "switchThumbSize")
+    // Resting positions inside a 56x32 track: 4dp inset on the off side for the
+    // small thumb, 28dp on the on side for the large one.
+    val thumbStart by animateDpAsState(if (checked) 28.dp else 8.dp, PureTvMotion.MorphSpring, label = "switchThumbStart")
+    val thumbSize by animateDpAsState(if (checked) 24.dp else 16.dp, PureTvMotion.MorphSpring, label = "switchThumbSize")
 
     Box(
         modifier
@@ -743,9 +749,9 @@ fun ExpressiveSwitch(
     ) {
         Box(
             Modifier
-                .padding(start = (offset - thumbSize / 2 + 9.dp).coerceAtLeast(0.dp))
                 .align(Alignment.CenterStart)
-                .size(thumbSize)
+                .padding(start = thumbStart.coerceAtLeast(0.dp))
+                .size(thumbSize.coerceAtLeast(0.dp))
                 .clip(CircleShape)
                 .background(if (checked) c.onPrimary else c.outline),
         )

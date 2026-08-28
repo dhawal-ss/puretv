@@ -51,7 +51,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
  * The Material 3 Expressive spec draws with **Material Symbols Rounded**, which
  * is a variable icon font addressed by ligature. Compose Desktop has no
  * icon-font pipeline, so these are the nearest `material-icons-extended`
- * `ImageVector` equivalents — same semantics, slightly squarer terminals.
+ * `ImageVector` equivalents: same semantics, slightly squarer terminals.
  * Substituting here rather than at 200 call sites means swapping in a real
  * Symbols font later is a one-file change.
  *
