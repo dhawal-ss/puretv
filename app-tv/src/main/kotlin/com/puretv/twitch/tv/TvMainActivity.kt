@@ -6,6 +6,12 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.media3.common.util.UnstableApi
 import com.puretv.twitch.tv.ui.PureTvTvNavHost
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import com.puretv.twitch.core.model.AppSettings
+import com.puretv.twitch.tv.data.AppSettingsStore
+import com.puretv.twitch.tv.ui.theme.ThemeVariant
+import org.koin.compose.koinInject
 import com.puretv.twitch.tv.ui.theme.PureTvTvTheme
 
 /**
@@ -31,7 +37,13 @@ class TvMainActivity : ComponentActivity() {
         handleAuthRedirect(intent)
 
         setContent {
-            PureTvTvTheme {
+            // The palette is a user setting, so the theme is driven from the
+            // store rather than from the default. Collected at the root so
+            // changing it re-tones the whole tree at once.
+            val settingsStore: AppSettingsStore = koinInject()
+            val settings by settingsStore.flow.collectAsState(initial = AppSettings())
+
+            PureTvTvTheme(variant = ThemeVariant.fromKey(settings.theme)) {
                 PureTvTvNavHost()
             }
         }

@@ -17,6 +17,13 @@ import androidx.navigation.compose.rememberNavController
 import com.puretv.twitch.android.player.TwitchPlayer
 import com.puretv.twitch.android.ui.RootScreen
 import com.puretv.twitch.android.ui.Routes
+import com.puretv.twitch.android.data.AppSettingsStore
+import com.puretv.twitch.android.ui.theme.ShapeIntensity
+import com.puretv.twitch.android.ui.theme.ThemeVariant
+import com.puretv.twitch.core.model.AppSettings
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import org.koin.compose.koinInject
 import com.puretv.twitch.android.ui.theme.PureTvTheme
 import org.koin.android.ext.android.inject
 
@@ -75,8 +82,17 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
+            // The palette and shape intensity are user settings, so the theme has
+            // to be driven from the store rather than from defaults. Collected
+            // here at the root so a change re-tones the whole tree at once.
+            val settingsStore: AppSettingsStore = koinInject()
+            val settings by settingsStore.flow.collectAsState(initial = AppSettings())
+
             CompositionLocalProvider(LocalIsInPip provides isInPipState.value) {
-                PureTvTheme {
+                PureTvTheme(
+                    variant = ThemeVariant.fromKey(settings.theme),
+                    shapeIntensity = ShapeIntensity.fromKey(settings.shapeIntensity),
+                ) {
                     RootScreen(navController = navController)
                 }
             }

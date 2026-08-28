@@ -58,6 +58,7 @@ class AppSettingsStore(
         val CHAT_TIMESTAMPS = booleanPreferencesKey("chat_timestamps")
         val CHAT_FRACTION = floatPreferencesKey("chat_fraction")
         val THEME = stringPreferencesKey("theme")
+        val SHAPE_INTENSITY = stringPreferencesKey("shape_intensity")
         val COMPACT_MODE = booleanPreferencesKey("compact_mode")
     }
 
@@ -107,6 +108,7 @@ class AppSettingsStore(
             chatTimestamps = prefs[Keys.CHAT_TIMESTAMPS] ?: false,
             chatFraction = prefs[Keys.CHAT_FRACTION] ?: 0.5f,
             theme = prefs[Keys.THEME] ?: "dark",
+            shapeIntensity = prefs[Keys.SHAPE_INTENSITY] ?: AppSettings().shapeIntensity,
             compactMode = prefs[Keys.COMPACT_MODE] ?: false,
             accessToken = token.accessToken,
             username = token.username,
@@ -135,6 +137,7 @@ class AppSettingsStore(
             prefs[Keys.CHAT_TIMESTAMPS] = next.chatTimestamps
             prefs[Keys.CHAT_FRACTION] = next.chatFraction
             prefs[Keys.THEME] = next.theme
+            prefs[Keys.SHAPE_INTENSITY] = next.shapeIntensity
             prefs[Keys.COMPACT_MODE] = next.compactMode
         }
     }
