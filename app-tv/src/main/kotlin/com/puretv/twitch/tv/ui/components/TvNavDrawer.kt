@@ -32,6 +32,7 @@ import com.puretv.twitch.tv.ui.theme.PureTvTvTheme
 
 enum class TvNavDestination(val label: String, val icon: ImageVector, val outlineIcon: ImageVector) {
     HOME("Live Channels", ExpressiveIcons.Home, ExpressiveIcons.HomeOutlined),
+    FOLLOWING("Following", ExpressiveIcons.Following, ExpressiveIcons.FollowingOutlined),
     BROWSE("Categories", ExpressiveIcons.Browse, ExpressiveIcons.BrowseOutlined),
     SEARCH("Search", ExpressiveIcons.Search, ExpressiveIcons.SearchOutlined),
     SETTINGS("Settings", ExpressiveIcons.Settings, ExpressiveIcons.SettingsOutlined),

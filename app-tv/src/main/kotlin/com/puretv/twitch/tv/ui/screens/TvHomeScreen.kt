@@ -28,6 +28,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
@@ -85,6 +89,7 @@ import org.koin.compose.koinInject
 fun TvHomeScreen(
     onOpenStream: (String) -> Unit,
     onOpenChannel: (String) -> Unit,
+    onOpenFollowing: () -> Unit,
     onOpenBrowse: () -> Unit,
     onOpenSearch: () -> Unit,
     onOpenSettings: () -> Unit,
@@ -96,6 +101,7 @@ fun TvHomeScreen(
     val updateState by updateManager.state.collectAsState()
     val c = PureTvTvTheme.colors
     val drawerFocusRequester = remember { FocusRequester() }
+    val focusManager = LocalFocusManager.current
     val heroFocusRequester = remember { FocusRequester() }
     val firstCardFocusRequester = remember { FocusRequester() }
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -136,6 +142,7 @@ fun TvHomeScreen(
             onSelect = { dest ->
                 when (dest) {
                     TvNavDestination.HOME -> Unit
+                    TvNavDestination.FOLLOWING -> onOpenFollowing()
                     TvNavDestination.BROWSE -> onOpenBrowse()
                     TvNavDestination.SEARCH -> onOpenSearch()
                     TvNavDestination.SETTINGS -> onOpenSettings()
@@ -152,7 +159,15 @@ fun TvHomeScreen(
                     // Section 7.3: DPAD LEFT on the leftmost column re-targets focus
                     // into the rail instead of being swallowed by Compose's focus search.
                     if (event.key == Key.DirectionLeft) {
-                        runCatching { drawerFocusRequester.requestFocus() }
+                        // Only hand focus to the rail when there is genuinely
+                        // nothing further left. Swallowing every LEFT press made
+                        // it impossible to walk back along a shelf or a grid row,
+                        // since the rail stole the very first one.
+                        if (event.type == KeyEventType.KeyDown &&
+                            !focusManager.moveFocus(FocusDirection.Left)
+                        ) {
+                            runCatching { drawerFocusRequester.requestFocus() }
+                        }
                         true
                     } else {
                         false

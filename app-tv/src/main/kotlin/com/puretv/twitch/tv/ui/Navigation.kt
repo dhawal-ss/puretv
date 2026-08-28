@@ -8,6 +8,7 @@ import androidx.navigation.compose.rememberNavController
 import com.puretv.twitch.tv.ui.screens.TvBrowseScreen
 import com.puretv.twitch.tv.ui.screens.TvCategoryScreen
 import com.puretv.twitch.tv.ui.screens.TvChannelScreen
+import com.puretv.twitch.tv.ui.screens.TvFollowingScreen
 import com.puretv.twitch.tv.ui.screens.TvHomeScreen
 import com.puretv.twitch.tv.ui.screens.TvLoginScreen
 import com.puretv.twitch.tv.ui.screens.TvSearchScreen
@@ -21,6 +22,9 @@ import com.puretv.twitch.tv.ui.screens.TvStreamScreen
  * with app-android.
  *
  *   TvHomeScreen     → Nav rail (Live/Following/Categories/Search/Settings) + content rows
+ *   TvFollowingScreen → Following's own destination: live follows in a card
+ *                        grid, everyone else in a focusable row list, its own
+ *                        copy of the nav rail (same LEFT-to-rail behaviour as Home)
  *   TvBrowseScreen   → Category/game grid, D-pad navigable
  *   TvSearchScreen   → On-screen-keyboard-driven search
  *   TvStreamScreen   → Immersive fullscreen player + auto-hide controls + chat overlay
@@ -30,6 +34,7 @@ import com.puretv.twitch.tv.ui.screens.TvStreamScreen
  */
 object Routes {
     const val HOME = "home"
+    const val FOLLOWING = "following"
     const val BROWSE = "browse"
     const val SEARCH = "search"
     const val SETTINGS = "settings"
@@ -50,6 +55,17 @@ fun PureTvTvNavHost(navController: NavHostController = rememberNavController()) 
             TvHomeScreen(
                 onOpenStream = { navController.navigate(Routes.stream(it)) },
                 onOpenChannel = { navController.navigate(Routes.channel(it)) },
+                onOpenFollowing = { navController.navigate(Routes.FOLLOWING) },
+                onOpenBrowse = { navController.navigate(Routes.BROWSE) },
+                onOpenSearch = { navController.navigate(Routes.SEARCH) },
+                onOpenSettings = { navController.navigate(Routes.SETTINGS) },
+                onOpenLogin = { navController.navigate(Routes.LOGIN) },
+            )
+        }
+        composable(Routes.FOLLOWING) {
+            TvFollowingScreen(
+                onOpenChannel = { navController.navigate(Routes.channel(it)) },
+                onOpenHome = navController::popBackStack,
                 onOpenBrowse = { navController.navigate(Routes.BROWSE) },
                 onOpenSearch = { navController.navigate(Routes.SEARCH) },
                 onOpenSettings = { navController.navigate(Routes.SETTINGS) },

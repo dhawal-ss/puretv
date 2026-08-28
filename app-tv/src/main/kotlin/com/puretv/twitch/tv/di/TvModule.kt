@@ -3,6 +3,8 @@ package com.puretv.twitch.tv.di
 import androidx.media3.common.util.UnstableApi
 import androidx.room.Room
 import com.puretv.twitch.core.di.TokenHolder
+import com.puretv.twitch.core.follows.FollowedChannelsService
+import com.puretv.twitch.core.follows.FollowedChannelsSource
 import com.puretv.twitch.tv.data.AppSettingsStore
 import com.puretv.twitch.tv.data.SecureTokenStore
 import com.puretv.twitch.tv.data.TokenRefresher
@@ -17,6 +19,7 @@ import com.puretv.twitch.tv.ui.LoginViewModel
 import com.puretv.twitch.tv.ui.SearchViewModel
 import com.puretv.twitch.tv.ui.SettingsViewModel
 import com.puretv.twitch.tv.ui.StreamViewModel
+import com.puretv.twitch.tv.ui.TvFollowingViewModel
 import io.ktor.client.engine.HttpClientEngine
 import io.ktor.client.engine.okhttp.OkHttp
 import org.koin.androidx.viewmodel.dsl.viewModel
@@ -54,6 +57,9 @@ val tvModule = module {
     single { AppSettingsStore(get(), get(), get<TokenHolder>()) }
     // Launch-time access-token refresh + identity backfill (fail-soft).
     single { TokenRefresher(get(), get(), get()) }
+    // Followed-rail data for the Following destination: real Twitch follows
+    // (paginated), no local pins on TV. Mirrors desktopModule's binding.
+    single<FollowedChannelsSource> { FollowedChannelsService(get()) }
 
     // In-app updater (GitHub Releases → PackageInstaller). Singleton so the
     // Settings section and the Home update banner observe one state.
@@ -72,6 +78,9 @@ val tvModule = module {
     // the last two power cached-first paint/write-through + the on-failure token
     // refresh so "Live Now" survives token expiry and repopulates on refresh.
     viewModel { HomeViewModel(get(), get(), get(), get(), get()) }
+    // TvFollowingViewModel(followedChannelsSource, settings): the Following
+    // destination's own nav-rail screen, see TvFollowingScreen.
+    viewModel { TvFollowingViewModel(get(), get()) }
     // BrowseViewModel(channelRepo, tokenRefresher): tokenRefresher recovers the
     // expired-token 401 that used to blank the category grid.
     viewModel { BrowseViewModel(get(), get()) }

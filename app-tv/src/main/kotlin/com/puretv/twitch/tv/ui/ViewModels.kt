@@ -159,6 +159,73 @@ class HomeViewModel(
     }
 }
 
+data class TvFollowingUiState(
+    val isLoggedIn: Boolean = false,
+    val isLoading: Boolean = false,
+    val live: List<FollowRow> = emptyList(),
+    val offline: List<FollowRow> = emptyList(),
+    val errored: Boolean = false,
+)
+
+/**
+ * Drives the Following destination (its own nav-rail entry, not just Home's
+ * shelf). TV ships no local-pin store the way desktop does, so every row
+ * comes straight from the Twitch follow graph and [FollowedChannelsSource.load]
+ * always sees an empty pin list.
+ *
+ * Mirrors the desktop app's `FollowedRailViewModel`: a single in-flight load,
+ * cancelled and replaced on [refresh] so a screen re-entry and a manual retry
+ * can't race; a fast partial paint the moment live status resolves (avatars
+ * may still be loading); and a logged-out reset that clears the profile cache
+ * so a different account signing in within the same process never reuses it.
+ * The signed-in user id is read the same way [HomeViewModel.refresh] reads
+ * it, from `settings.flow.first()`, rather than a synchronous accessor.
+ */
+class TvFollowingViewModel(
+    private val source: FollowedChannelsSource,
+    private val settings: AppSettingsStore,
+) : ViewModel() {
+    private val _state = MutableStateFlow(TvFollowingUiState())
+    val state: StateFlow<TvFollowingUiState> = _state.asStateFlow()
+
+    private var loadJob: Job? = null
+
+    init {
+        viewModelScope.launch {
+            settings.flow.collect { prefs ->
+                _state.update { it.copy(isLoggedIn = prefs.accessToken.isNotBlank()) }
+            }
+        }
+        refresh()
+    }
+
+    fun refresh() {
+        loadJob?.cancel()
+        loadJob = viewModelScope.launch { loadOnce() }
+    }
+
+    private suspend fun loadOnce() {
+        val userId = settings.flow.first().userId
+        if (userId.isBlank()) {
+            // Signed out (manually or via token-expiry): drop cached profiles so a
+            // different account signing in next within this process never reuses them.
+            source.clear()
+            _state.update { it.copy(isLoggedIn = false, isLoading = false, live = emptyList(), offline = emptyList()) }
+            return
+        }
+        _state.update { it.copy(isLoggedIn = true, isLoading = it.live.isEmpty() && it.offline.isEmpty()) }
+        runCatching {
+            source.load(userId, emptyList()) { partial ->
+                // Fast partial: live channels are in (avatars may still be loading). Drop
+                // the loading state now so the list appears without waiting on avatars.
+                _state.update { it.copy(isLoading = false, errored = false, live = partial.live, offline = partial.offline) }
+            }
+        }
+            .onSuccess { full -> _state.update { it.copy(isLoading = false, errored = false, live = full.live, offline = full.offline) } }
+            .onFailure { _state.update { it.copy(isLoading = false, errored = true) } }
+    }
+}
+
 data class BrowseUiState(
     val games: List<GameInfo> = emptyList(),
     val isLoading: Boolean = true,
