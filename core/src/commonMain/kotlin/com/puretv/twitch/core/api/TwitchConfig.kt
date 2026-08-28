@@ -27,6 +27,18 @@ object TwitchConfig {
     const val REDIRECT_URI_MOBILE = "puretv-twitch://auth"
     const val SCOPES = "user:read:follows chat:read chat:edit"
 
+    /**
+     * Where a viewer types the device-flow code. Deliberately bare.
+     *
+     * The device-code response carries a `verification_uri` that already has the
+     * code hung off it, and Twitch's pre-filled activate page frequently fails to
+     * load. Opening it, or encoding it into the TV's QR, is what made sign-in
+     * flaky. Every client points at this plain page instead and shows the code
+     * separately for the viewer to type. Being a constant also means the TV can
+     * draw its QR before Twitch has answered.
+     */
+    const val ACTIVATE_URL = "https://www.twitch.tv/activate"
+
     const val API_BASE = "https://api.twitch.tv/helix"
     const val AUTH_BASE = "https://id.twitch.tv/oauth2"
     const val IRC_ENDPOINT = "wss://irc-ws.chat.twitch.tv:443"

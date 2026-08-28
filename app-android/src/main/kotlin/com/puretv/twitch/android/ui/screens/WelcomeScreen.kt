@@ -42,6 +42,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
+import com.puretv.twitch.core.api.TwitchConfig
 import com.puretv.twitch.android.ui.LoginViewModel
 import com.puretv.twitch.android.ui.WelcomeViewModel
 import com.puretv.twitch.android.ui.components.ExpressiveButton
@@ -133,7 +134,6 @@ fun WelcomeScreen(
                     enabled = !login.isAuthenticating,
                 )
             } else {
-                val verifyUrl = login.verificationUri ?: "https://www.twitch.tv/activate"
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     modifier = Modifier
@@ -150,16 +150,13 @@ fun WelcomeScreen(
                     )
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    ExpressiveButton(
-                        text = "Copy",
-                        onClick = { clipboard.setText(AnnotatedString(code)) },
-                        style = ExpressiveButtonStyle.Outlined,
-                        size = ExpressiveButtonSize.Small,
-                    )
+                    CopyCodeButton(onCopyCode = { clipboard.setText(AnnotatedString(code)) })
                     ExpressiveButton(
                         text = "Open Twitch",
-                        onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(verifyUrl))) },
-                        style = ExpressiveButtonStyle.Tonal,
+                        onClick = {
+                            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(TwitchConfig.ACTIVATE_URL)))
+                        },
+                        style = ExpressiveButtonStyle.Outlined,
                         size = ExpressiveButtonSize.Small,
                     )
                 }

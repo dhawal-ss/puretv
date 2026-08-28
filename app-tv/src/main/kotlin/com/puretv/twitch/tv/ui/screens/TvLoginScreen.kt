@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import com.puretv.twitch.core.api.TwitchConfig
 import com.puretv.twitch.tv.ui.LoginViewModel
 import com.puretv.twitch.tv.ui.QrCode
 import com.puretv.twitch.tv.ui.components.ExpressiveIcons
@@ -44,12 +45,14 @@ import org.koin.androidx.compose.koinViewModel
  * SECTION 03.2 / 07: TV login entry point (Twitch Device Code Grant flow).
  *
  * Typing a Twitch username/password with a D-pad is painful and Twitch rejects
- * custom-scheme redirects, so this screen shows a scannable QR of the
- * [LoginUiState.verificationUri] (twitch.tv/activate) plus a short
- * [LoginUiState.userCode] to enter on a phone or computer. [LoginViewModel]
- * polls Twitch in the background; once the code is approved the session persists
- * on THIS device and the screen auto-advances via [onLoggedIn]. That flow, its
- * polling and its error handling are untouched here, only the shell around it.
+ * custom-scheme redirects, so this screen shows a scannable QR of the plain
+ * twitch.tv/activate page plus a short [LoginUiState.userCode] to type there.
+ * The QR points at the bare page on purpose: Twitch's own code-bearing
+ * verification URL often fails to load, which is what made this flow flaky.
+ *
+ * [LoginViewModel] polls Twitch in the background; once the code is approved the
+ * session persists on THIS device and the screen auto-advances via [onLoggedIn].
+ * That flow, its polling and its error handling are untouched here.
  */
 @Composable
 fun TvLoginScreen(onLoggedIn: () -> Unit, onBack: () -> Unit, viewModel: LoginViewModel = koinViewModel()) {
@@ -87,8 +90,9 @@ fun TvLoginScreen(onLoggedIn: () -> Unit, onBack: () -> Unit, viewModel: LoginVi
                 )
                 Spacer(Modifier.height(16.dp))
                 Text(
-                    "Scan this code with your phone, or open the address below on any device. " +
-                        "Sign-in happens on Twitch's own page, so your password never reaches this app.",
+                    "Scan the code with your phone, or open twitch.tv/activate on any device, then " +
+                        "type the code below. Sign-in happens on Twitch's own page, so your " +
+                        "password never reaches this app.",
                     style = MaterialTheme.typography.bodyLarge,
                     color = c.onSurfaceVariant,
                     textAlign = TextAlign.Center,
@@ -96,11 +100,12 @@ fun TvLoginScreen(onLoggedIn: () -> Unit, onBack: () -> Unit, viewModel: LoginVi
 
                 Spacer(Modifier.height(36.dp))
 
-                val verificationUri = state.verificationUri ?: "https://www.twitch.tv/activate"
-                // Regenerate the QR only when the verification URL actually changes.
-                val qr = remember(state.verificationUri) {
-                    state.verificationUri?.let { QrCode.generate(it) }
-                }
+                // The destination never varies, so the QR is built once and is on
+                // screen before Twitch has even answered. It deliberately does NOT
+                // encode the code-bearing URL Twitch hands back: that pre-filled
+                // activate page often fails to load, which is what made scanning
+                // unreliable. Scan takes you to a plain page, then you type the code.
+                val qr = remember { QrCode.generate(TwitchConfig.ACTIVATE_URL) }
 
                 Row(horizontalArrangement = Arrangement.spacedBy(36.dp), verticalAlignment = Alignment.CenterVertically) {
                     // QR on a white plate so phone cameras read it reliably.
@@ -113,20 +118,23 @@ fun TvLoginScreen(onLoggedIn: () -> Unit, onBack: () -> Unit, viewModel: LoginVi
                         if (qr != null) {
                             Image(bitmap = qr, contentDescription = "Sign-in QR code", modifier = Modifier.size(220.dp))
                         } else {
+                            // Only reachable if the encoder itself fails. The address
+                            // below is then the whole instruction, so say so rather
+                            // than leaving a blank plate.
                             Box(modifier = Modifier.size(220.dp), contentAlignment = Alignment.Center) {
-                                Text(text = "Loading…", color = Color(0xFF555555))
+                                Text(text = "Use the address", color = Color(0xFF555555))
                             }
                         }
                     }
 
                     Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
                         Text(
-                            text = verificationUri.removePrefix("https://").removePrefix("http://").removePrefix("www."),
+                            text = "1. Go to twitch.tv/activate",
                             style = MaterialTheme.typography.headlineMedium,
                             color = c.primary,
                         )
                         Text(
-                            text = "then enter this code:",
+                            text = "2. Enter this code:",
                             style = MaterialTheme.typography.bodyLarge,
                             color = c.onSurface,
                         )

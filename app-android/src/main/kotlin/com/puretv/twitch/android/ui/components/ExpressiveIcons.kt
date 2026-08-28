@@ -14,6 +14,7 @@ import androidx.compose.material.icons.filled.AspectRatio
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
@@ -92,6 +93,7 @@ object ExpressiveIcons {
     val Refresh: ImageVector = Icons.Filled.Refresh
     val Download: ImageVector = Icons.Filled.Download
     val OpenInNew: ImageVector = Icons.Filled.OpenInNew
+    val Copy: ImageVector = Icons.Filled.ContentCopy
     val SignIn: ImageVector = Icons.AutoMirrored.Filled.Login
     val SignOut: ImageVector = Icons.AutoMirrored.Filled.Logout
 

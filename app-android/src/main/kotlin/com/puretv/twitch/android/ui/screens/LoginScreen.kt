@@ -21,6 +21,8 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -33,6 +35,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.puretv.twitch.core.api.TwitchConfig
 import com.puretv.twitch.android.ui.LoginViewModel
 import com.puretv.twitch.android.ui.components.ExpressiveButton
 import com.puretv.twitch.android.ui.components.ExpressiveButtonSize
@@ -43,6 +46,7 @@ import com.puretv.twitch.android.ui.components.ShieldPill
 import com.puretv.twitch.android.ui.components.expressiveClickable
 import com.puretv.twitch.android.ui.theme.PureTvTheme
 import com.puretv.twitch.android.ui.theme.PureTvType
+import kotlinx.coroutines.delay
 import org.koin.androidx.compose.koinViewModel
 
 /**
@@ -115,12 +119,13 @@ fun LoginScreen(onLoggedIn: () -> Unit, onBack: () -> Unit) {
                         enabled = !state.isAuthenticating,
                     )
                 } else {
-                    val verifyUrl = state.verificationUri ?: "https://www.twitch.tv/activate"
                     AuthenticatingArea(
                         userCode = code,
                         isAuthenticating = state.isAuthenticating,
                         onCopyCode = { clipboard.setText(AnnotatedString(code)) },
-                        onOpenTwitch = { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(verifyUrl))) },
+                        onOpenTwitch = {
+                            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(TwitchConfig.ACTIVATE_URL)))
+                        },
                     )
                 }
 
@@ -141,6 +146,32 @@ fun LoginScreen(onLoggedIn: () -> Unit, onBack: () -> Unit) {
             }
         }
     }
+}
+
+/**
+ * The primary action while a code is on screen. Copying is silent on Android, so
+ * without an acknowledgement the button reads as dead and viewers tap it twice.
+ * The label flips to "Copied" for a couple of seconds and back. Shared with the
+ * welcome sheet, which shows the same code.
+ */
+@Composable
+internal fun CopyCodeButton(onCopyCode: () -> Unit) {
+    var copied by remember { mutableStateOf(false) }
+    // Keyed on `copied` so a second tap restarts the countdown rather than
+    // letting the first one clear the label early.
+    LaunchedEffect(copied) {
+        if (copied) {
+            delay(2_000)
+            copied = false
+        }
+    }
+    ExpressiveButton(
+        text = if (copied) "Copied" else "Copy code",
+        onClick = { onCopyCode(); copied = true },
+        style = ExpressiveButtonStyle.Filled,
+        size = ExpressiveButtonSize.Small,
+        icon = if (copied) ExpressiveIcons.Check else ExpressiveIcons.Copy,
+    )
 }
 
 /** The 80dp app mark: a rounded square at rest that rounds all the way into a
@@ -199,8 +230,8 @@ private fun AuthenticatingArea(
 
         Spacer(Modifier.height(16.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            ExpressiveButton(text = "Copy code", onClick = onCopyCode, style = ExpressiveButtonStyle.Outlined, size = ExpressiveButtonSize.Small)
-            ExpressiveButton(text = "Open Twitch", onClick = onOpenTwitch, style = ExpressiveButtonStyle.Tonal, size = ExpressiveButtonSize.Small)
+            CopyCodeButton(onCopyCode = onCopyCode)
+            ExpressiveButton(text = "Open Twitch", onClick = onOpenTwitch, style = ExpressiveButtonStyle.Outlined, size = ExpressiveButtonSize.Small)
         }
 
         if (isAuthenticating) {
