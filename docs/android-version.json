@@ -1,6 +1,6 @@
 {
-  "versionCode": 4,
-  "versionName": "1.1.0",
+  "versionCode": 5,
+  "versionName": "1.1.1",
   "apkUrl": "https://github.com/dhawal-ss/puretv/releases/download/android-latest/PureTV-for-Twitch-Android.apk",
-  "notes": "A complete redesign built on Material 3 Expressive: every screen rebuilt with rounder shapes and bigger type, five colour themes derived from a single source colour (Settings, Colour), an Expressiveness setting for how far corners round and how much things move, a Following page that now shows offline channels as well as live ones, and bundled typefaces so text looks right on every phone. Ad-free playback, Picture-in-Picture and chat work exactly as before."
+  "notes": "Bug fixes. Signing in no longer sends you to Twitch's pre-filled activate page, which often failed to load: PureTV opens the plain twitch.tv/activate and shows the code separately, with Copy code as the main button. Fixed the gap that could stick to one edge after using fullscreen, and the dead space between the content and the navigation buttons."
 }

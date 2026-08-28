@@ -1,6 +1,6 @@
 {
-  "versionCode": 4,
-  "versionName": "1.2.0",
+  "versionCode": 5,
+  "versionName": "1.2.1",
   "apkUrl": "https://github.com/dhawal-ss/puretv/releases/download/tv-latest/PureTV-FireTV-AndroidTV.apk",
-  "notes": "A complete redesign built on Material 3 Expressive, matching the phone and desktop apps. Bigger 10-foot type, a focused card that grows, rounds and rings so you can always tell where you are, five colour themes derived from a single source colour (Settings, Colour), and a new Following destination that shows offline channels as well as live ones. Ad blocking, remote controls and chat work exactly as before."
+  "notes": "Bug fixes. Signing in no longer points the QR code at Twitch's pre-filled activate page, which often failed to load: it now points at the plain twitch.tv/activate and the code is shown beside it, so the QR appears immediately. The screensaver no longer interrupts a stream while it is playing (thanks to xexuu)."
 }

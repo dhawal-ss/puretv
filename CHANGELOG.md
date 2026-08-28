@@ -11,6 +11,25 @@ release notes automatically.
 
 ---
 
+## 1.11.1 - 2026-08-28
+
+Bug fixes across all three apps.
+
+### Fixed
+- **Signing in is more reliable.** Twitch hands back an activate link with the
+  code already in it, and that page often failed to load. PureTV now opens the
+  plain twitch.tv/activate and shows the code separately for you to type. On the
+  TV the QR code points at the plain page too, so it appears straight away
+  instead of waiting for Twitch to answer.
+- **Copy code is the main button on Android**, and it tells you when it has
+  copied.
+- **Past broadcasts skip with the arrow keys on Windows.** Left and Right jump
+  10 seconds, hold Shift for 30.
+- **The screensaver no longer interrupts a stream on Fire TV** while it is
+  playing. Thanks to xexuu for the fix.
+- **Android layout.** Fixed the gap that could stick to one edge after using
+  fullscreen, and the dead space between the content and the navigation buttons.
+
 ## 1.11.0 - 2026-08-28
 
 A complete visual redesign, built on Material 3 Expressive, across Windows,
