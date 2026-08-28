@@ -76,8 +76,14 @@ data class PureTvTvColors(
     /** The ring drawn around the focused element. Focus must be unmistakable at 3 metres. */
     val focusRing: Color get() = primary
 
+    /**
+     * Darkens the BOTTOM of a card, which is where the viewer count sits. The
+     * LIVE badge at the top carries its own opaque fill and needs no help, so a
+     * top-down scrim only washed out the artwork while leaving the one piece of
+     * text that actually needed a ground sitting on bare pixels.
+     */
     val cardScrim: Brush
-        get() = Brush.verticalGradient(0f to Color(0xB3000000), 0.55f to Color.Transparent)
+        get() = Brush.verticalGradient(0f to Color.Transparent, 0.45f to Color.Transparent, 1f to Color(0xB3000000))
     val heroScrim: Brush
         get() = Brush.horizontalGradient(0f to Color(0xD9000000), 0.5f to Color(0x8C000000), 0.9f to Color.Transparent)
     val bottomScrim: Brush

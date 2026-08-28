@@ -86,6 +86,7 @@ fun Modifier.tvFocusSurface(
     ring: Boolean = true,
     ringColor: Color? = null,
     ringWidth: Dp = 3.dp,
+    idleBorderColor: Color = Color.Transparent,
 ): Modifier = composed {
     val focused by interaction.collectIsFocusedAsState()
     val accent = ringColor ?: PureTvTvTheme.colors.focusRing
@@ -106,7 +107,7 @@ fun Modifier.tvFocusSurface(
         label = "tvMorphScale",
     )
     val stroke by animateColorAsState(
-        targetValue = if (focused && ring) accent else Color.Transparent,
+        targetValue = if (focused && ring) accent else idleBorderColor,
         animationSpec = tween(PureTvTvMotion.Fast),
         label = "tvFocusRing",
     )
@@ -136,6 +137,7 @@ fun Modifier.tvFocusClickable(
     focusColor: Color = color,
     scale: Float = PureTvTvMotion.FocusScale,
     ring: Boolean = true,
+    idleBorderColor: Color = Color.Transparent,
     enabled: Boolean = true,
 ): Modifier = this
     .graphicsLayer { alpha = if (enabled) 1f else 0.38f }
@@ -147,6 +149,7 @@ fun Modifier.tvFocusClickable(
         focusColor = focusColor,
         scale = scale,
         ring = ring,
+        idleBorderColor = idleBorderColor,
     )
     .clickable(interactionSource = interaction, indication = null, enabled = enabled, onClick = onClick)
     .focusable(enabled = enabled, interactionSource = interaction)
@@ -311,6 +314,7 @@ fun TvFilterChip(
                 color = if (selected) c.secondaryContainer else Color.Transparent,
                 focusColor = c.primary,
                 scale = 1.05f,
+                idleBorderColor = if (selected) Color.Transparent else c.outlineVariant,
             )
             .padding(horizontal = 22.dp),
     ) {
@@ -426,6 +430,9 @@ fun TvPanel(
     val c = PureTvTvTheme.colors
     Box(
         modifier
+            // Panels stack vertically down a settings page, so they fill the
+            // column by default. A content-sized panel left the stack ragged.
+            .fillMaxWidth()
             .clip(PureTvTvTheme.shapes.cardShape)
             .background(color ?: c.surfaceLow)
             .padding(padding),

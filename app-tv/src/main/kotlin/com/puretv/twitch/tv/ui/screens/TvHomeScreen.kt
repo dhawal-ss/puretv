@@ -53,6 +53,7 @@ import com.puretv.twitch.tv.ui.components.TvSectionHeading
 import com.puretv.twitch.tv.ui.components.TvShieldPill
 import com.puretv.twitch.tv.ui.components.TvStreamCard
 import com.puretv.twitch.tv.ui.components.formatTvViewerCount
+import com.puretv.twitch.tv.ui.components.TvPanel
 import com.puretv.twitch.tv.ui.theme.PureTvTvTheme
 import com.puretv.twitch.tv.ui.theme.PureTvTvType
 import com.puretv.twitch.tv.update.TvUpdateManager
@@ -197,11 +198,24 @@ fun TvHomeScreen(
             // Only surfaces when there's genuinely nothing to show (no cache, no
             // network) — the cached-first paint keeps this hidden in the common case.
             if (state.topStreams.isEmpty() && !state.isLoading) {
-                Text(
-                    text = state.error ?: "Nothing live right now. It'll refresh automatically.",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = c.onSurfaceVariant,
-                )
+                // A bare line of text reads as a rendering failure on a ten-foot
+                // screen. Give the message the same panel every other block has,
+                // so an empty Home still looks deliberate.
+                TvPanel(modifier = Modifier.padding(horizontal = 48.dp)) {
+                    Column {
+                        Text(
+                            text = if (state.error != null) "Could not load" else "Nothing live right now",
+                            style = MaterialTheme.typography.headlineSmall,
+                            color = c.onSurface,
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            text = state.error ?: "This refreshes on its own, so it will fill in as channels go live.",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = c.onSurfaceVariant,
+                        )
+                    }
+                }
             }
         }
     }
