@@ -124,6 +124,23 @@ class VodPlayerViewModel(
         settingsStore.updateSettings { it.copy(playbackBackend = backend) }
 
     fun seekTo(ms: Long) = player.seekTo(ms)
+
+    /**
+     * Relative seek, backing the arrow-key shortcuts. Clamped to 0..duration, the
+     * same range the scrub slider is bound to, so holding an arrow at either end
+     * settles on the boundary instead of asking the backend to seek past it.
+     *
+     * Reports whether it acted: a VOD that is still resolving has no duration and
+     * cannot seek yet, and the caller uses a false here to leave the key
+     * unconsumed rather than swallowing it into a silent no-op.
+     */
+    fun seekBy(deltaMs: Long): Boolean {
+        val s = player.status.value
+        if (!s.isSeekable || s.durationMs <= 0L) return false
+        player.seekTo((s.positionMs + deltaMs).coerceIn(0L, s.durationMs))
+        return true
+    }
+
     fun togglePlayPause() = player.togglePlayPause()
     fun setVolume(v: Int) = player.setVolume(v)
     fun toggleMute() = player.toggleMute()

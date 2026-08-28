@@ -94,11 +94,19 @@ import java.awt.event.KeyEvent
  *  intensity setting -- it is a player-surface convention, not a content-card one. */
 private val PlayerCardShape = RoundedCornerShape(24.dp)
 
+/** Arrow-key skip distances. Shift takes the coarse step, matching most players. */
+private const val SeekStepMs = 10_000L
+private const val SeekStepLargeMs = 30_000L
+
 /**
  * VOD player with the same immersive modes as the live screen: Default / Theater /
  * Fullscreen via the shared [LocalAppShell], auto-hiding chrome in immersive modes,
- * and F/T/C/Space/Esc shortcuts. Preserves resume prompt, scrub preview, transport,
+ * and the shortcuts below. Preserves resume prompt, scrub preview, transport,
  * quality, and the synced chat-replay panel.
+ *
+ *   F      toggle fullscreen      T          toggle theater
+ *   C      toggle chat            Space      play/pause
+ *   Esc    exit immersive         Left/Right skip 10s (Shift: 30s)
  */
 @Composable
 fun VodPlayerContent(koin: Koin, launch: VodLaunch, onBack: () -> Unit) {
@@ -151,6 +159,18 @@ fun VodPlayerContent(koin: Koin, launch: VodLaunch, onBack: () -> Unit) {
                 KeyEvent.VK_C -> { shell.toggleChat(); true }
                 KeyEvent.VK_SPACE -> { viewModel.togglePlayPause(); true }
                 KeyEvent.VK_ESCAPE -> if (m != PlayerMode.DEFAULT) { shell.exitImmersive(); true } else false
+                // Skip back / forward. Auto-repeat scrubs, since AWT sends a fresh
+                // KEY_PRESSED per repeat. resetControls() rides along so a seek in
+                // an immersive mode brings the timecode back rather than leaving
+                // the viewer jumping around behind hidden chrome; the mouse-move
+                // handler above already drives it far harder than key repeat does.
+                KeyEvent.VK_LEFT, KeyEvent.VK_RIGHT -> {
+                    val step = if (e.isShiftDown) SeekStepLargeMs else SeekStepMs
+                    val delta = if (e.keyCode == KeyEvent.VK_RIGHT) step else -step
+                    // Unconsumed when the media cannot seek yet, so a still-resolving
+                    // VOD leaves the arrows to normal focus traversal.
+                    if (viewModel.seekBy(delta)) { resetControls(); true } else false
+                }
                 else -> false
             }
         }
