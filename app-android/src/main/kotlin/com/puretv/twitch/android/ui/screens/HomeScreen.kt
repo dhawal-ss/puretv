@@ -46,7 +46,6 @@ import com.puretv.twitch.android.ui.components.ExpressiveIcons
 import com.puretv.twitch.android.ui.components.GameTile
 import com.puretv.twitch.android.ui.components.LivePill
 import com.puretv.twitch.android.ui.components.SectionHeading
-import com.puretv.twitch.android.ui.components.ShieldPill
 import com.puretv.twitch.android.ui.components.StreamCard
 import com.puretv.twitch.android.ui.components.StreamCardSkeleton
 import com.puretv.twitch.android.ui.components.formatViewerCount
@@ -265,7 +264,6 @@ private fun HomeHero(hero: Featured, onWatch: () -> Unit, modifier: Modifier = M
         ) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 LivePill()
-                ShieldPill("ADS BLOCKED")
             }
             Spacer(Modifier.height(14.dp))
             Text(

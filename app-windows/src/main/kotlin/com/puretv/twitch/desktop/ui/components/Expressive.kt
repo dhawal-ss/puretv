@@ -256,7 +256,9 @@ fun ExpressiveButton(
 
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        // Centred, not merely spaced: a button stretched to fillMaxWidth would
+        // otherwise pin its icon and label to the left edge.
+        horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterHorizontally),
         modifier = modifier
             .height(size.height)
             .expressiveClickable(

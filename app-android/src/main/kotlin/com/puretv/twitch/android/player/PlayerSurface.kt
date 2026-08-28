@@ -22,7 +22,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
-import com.puretv.twitch.android.ui.theme.PureTvColors
+import com.puretv.twitch.android.ui.theme.PureTvTheme
 import org.koin.compose.koinInject
 
 /**
@@ -106,10 +106,10 @@ fun PlayerSurface(
 
     if (playableUrl == null) {
         androidx.compose.foundation.layout.Box(
-            modifier = modifier.background(PureTvColors.Surface),
+            modifier = modifier.background(PureTvTheme.colors.surfaceLowest),
             contentAlignment = Alignment.Center,
         ) {
-            CircularProgressIndicator(color = PureTvColors.TwitchPurple)
+            CircularProgressIndicator(color = PureTvTheme.colors.primary)
         }
         return
     }

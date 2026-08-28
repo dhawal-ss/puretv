@@ -126,7 +126,6 @@ fun TvControlsOverlay(
                     )
                     TvLivePill()
                     Spacer(modifier = Modifier.weight(1f))
-                    TvAdBlockPill(status = adBlockStatus)
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     // Same order stepQuality() in TvStreamScreen walks via FF/RW, so the
