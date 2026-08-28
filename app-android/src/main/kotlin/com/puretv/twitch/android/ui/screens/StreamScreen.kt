@@ -6,8 +6,8 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -18,18 +18,17 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
@@ -42,23 +41,34 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.media3.ui.AspectRatioFrameLayout
+import coil3.compose.AsyncImage
 import com.puretv.twitch.android.LocalIsInPip
 import com.puretv.twitch.android.player.PlayerSurface
 import com.puretv.twitch.android.ui.StreamUiState
 import com.puretv.twitch.android.ui.StreamViewModel
 import com.puretv.twitch.android.ui.components.AdBlockPill
 import com.puretv.twitch.android.ui.components.ChatPanel
-import com.puretv.twitch.android.ui.components.LiveBadge
-import com.puretv.twitch.android.ui.theme.PureTvColors
+import com.puretv.twitch.android.ui.components.ExpressiveButton
+import com.puretv.twitch.android.ui.components.ExpressiveButtonSize
+import com.puretv.twitch.android.ui.components.ExpressiveButtonStyle
+import com.puretv.twitch.android.ui.components.ExpressiveIcons
+import com.puretv.twitch.android.ui.components.LivePill
+import com.puretv.twitch.android.ui.components.expressiveClickable
+import com.puretv.twitch.android.ui.components.formatViewerCount
+import com.puretv.twitch.android.ui.theme.PureTvTheme
+import com.puretv.twitch.android.ui.theme.PureTvType
 import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
 
@@ -74,6 +84,7 @@ fun StreamScreen(channelLogin: String, onBack: () -> Unit) {
     val state by viewModel.state.collectAsState()
     val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
     val isInPip = LocalIsInPip.current
+    val c = PureTvTheme.colors
 
     // Saveable so an immersive fullscreen survives process death + restore (plain
     // remember would silently drop the user back to the windowed layout).
@@ -125,7 +136,7 @@ fun StreamScreen(channelLogin: String, onBack: () -> Unit) {
     }
 
     if (sideBySide) {
-        BoxWithConstraints(modifier = Modifier.fillMaxSize().background(PureTvColors.Background)) {
+        BoxWithConstraints(modifier = Modifier.fillMaxSize().background(c.surfaceLowest)) {
             val widthPx = constraints.maxWidth.toFloat()
             Row(modifier = Modifier.fillMaxSize()) {
                 PlayerArea(
@@ -147,7 +158,7 @@ fun StreamScreen(channelLogin: String, onBack: () -> Unit) {
                         modifier = Modifier
                             .fillMaxHeight()
                             .width(6.dp)
-                            .background(PureTvColors.SurfaceVariant)
+                            .background(c.outlineVariant)
                             .pointerInput(widthPx) {
                                 detectHorizontalDragGestures(
                                     onDragEnd = { viewModel.setChatFraction(chatFraction) },
@@ -167,7 +178,7 @@ fun StreamScreen(channelLogin: String, onBack: () -> Unit) {
             }
         }
     } else {
-        Column(modifier = Modifier.fillMaxSize().background(PureTvColors.Background)) {
+        Column(modifier = Modifier.fillMaxSize().background(c.surfaceLowest)) {
             PlayerArea(
                 state = state,
                 fullscreen = false,
@@ -183,18 +194,7 @@ fun StreamScreen(channelLogin: String, onBack: () -> Unit) {
                 modifier = if (isInPip) Modifier.fillMaxSize() else Modifier.fillMaxWidth().aspectRatio(16f / 9f),
             )
             if (!isInPip) {
-                state.channel?.let { channel ->
-                    Column(
-                        modifier = Modifier.fillMaxWidth().padding(12.dp),
-                        verticalArrangement = Arrangement.spacedBy(2.dp),
-                    ) {
-                        Text(channel.displayName, style = MaterialTheme.typography.titleLarge, color = PureTvColors.TextPrimary)
-                        state.streamInfo?.let { info ->
-                            Text(info.title, style = MaterialTheme.typography.bodyMedium, color = PureTvColors.TextSecondary, maxLines = 2)
-                            Text(info.gameName, style = MaterialTheme.typography.bodySmall, color = PureTvColors.TwitchPurpleLight)
-                        }
-                    }
-                }
+                state.channel?.let { channel -> ChannelHeaderRow(channel = channel, streamInfo = state.streamInfo) }
             }
             if (showChat) {
                 ChatPanel(
@@ -203,6 +203,48 @@ fun StreamScreen(channelLogin: String, onBack: () -> Unit) {
                     emotes = state.emotes,
                     canSend = state.isLoggedIn,
                     modifier = Modifier.weight(1f).fillMaxWidth(),
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Avatar, name, category and viewer count, mirroring the desktop watch page's
+ * top bar. No follow action here: unlike desktop's `StreamViewModel`, the
+ * Android one exposes no `isFollowed`/`toggleFollow`, so a follow button would
+ * be chrome with nothing behind it. Left out rather than faked.
+ */
+@Composable
+private fun ChannelHeaderRow(channel: com.puretv.twitch.core.model.ChannelInfo, streamInfo: com.puretv.twitch.core.model.StreamInfo?) {
+    val c = PureTvTheme.colors
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        AsyncImage(
+            model = channel.profileImageUrl,
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.size(44.dp).clip(CircleShape).background(c.surfaceHigh),
+        )
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(
+                channel.displayName,
+                style = MaterialTheme.typography.titleMedium,
+                color = c.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            streamInfo?.let { info ->
+                val game = info.gameName.takeIf { it.isNotBlank() } ?: "No category"
+                Text(
+                    "$game · ${formatViewerCount(info.viewerCount.toLong())} viewers",
+                    style = PureTvType.data,
+                    color = c.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
         }
@@ -224,13 +266,16 @@ private fun PlayerArea(
     isInPip: Boolean,
     modifier: Modifier = Modifier,
 ) {
+    val c = PureTvTheme.colors
     // Keep the top controls clear of the status bar / notch in portrait and
     // windowed landscape. In fullscreen the system bars are hidden, so no inset.
     val topInset = if (fullscreen) Modifier else Modifier.windowInsetsPadding(WindowInsets.statusBars)
 
     // Overlay chrome (back, pills, badges) tracks the player controller: it shows
     // on a tap and fades out with the controller after ~3s so it does not persist
-    // over the video. Starts visible (the controller auto-shows on attach).
+    // over the video. Starts visible (the controller auto-shows on attach). Play/
+    // pause itself is drawn by ExoPlayer's own PlayerView controller (useController
+    // below), which owns that state; this overlay only adds the chrome around it.
     var controlsVisible by remember { mutableStateOf(true) }
 
     Box(modifier = modifier.background(Color.Black)) {
@@ -258,15 +303,18 @@ private fun PlayerArea(
                 ) {
                     Text(
                         state.playbackError,
-                        color = Color.White,
+                        color = c.onSurface,
                         style = MaterialTheme.typography.bodyLarge,
                         textAlign = TextAlign.Center,
                     )
-                    Button(onClick = onRetry) { Text("Try again") }
+                    ExpressiveButton(
+                        text = "Try again",
+                        onClick = onRetry,
+                        style = ExpressiveButtonStyle.Filled,
+                        size = ExpressiveButtonSize.Medium,
+                    )
                 }
-                IconButton(onClick = onBack, modifier = Modifier.align(Alignment.TopStart).then(topInset).padding(6.dp)) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Color.White)
-                }
+                PlayerBackButton(onClick = onBack, modifier = Modifier.align(Alignment.TopStart).then(topInset).padding(6.dp))
             } else {
                 // Playing: the whole chrome group fades in/out with the controls.
                 AnimatedVisibility(
@@ -276,21 +324,17 @@ private fun PlayerArea(
                     modifier = Modifier.fillMaxSize(),
                 ) {
                     Box(modifier = Modifier.fillMaxSize()) {
-                        IconButton(onClick = onBack, modifier = Modifier.align(Alignment.TopStart).then(topInset).padding(6.dp)) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Color.White)
-                        }
-                        Row(
+                        PlayerBackButton(onClick = onBack, modifier = Modifier.align(Alignment.TopStart).then(topInset).padding(6.dp))
+
+                        PlayerControlsGroup(
+                            chatVisible = chatVisible,
+                            fullscreen = fullscreen,
+                            fillScreen = fillScreen,
+                            onToggleChat = onToggleChat,
+                            onToggleFill = onToggleFill,
+                            onToggleFullscreen = onToggleFullscreen,
                             modifier = Modifier.align(Alignment.TopEnd).then(topInset).padding(6.dp),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            OverlayPill(text = if (chatVisible) "Hide chat" else "Show chat", onClick = onToggleChat)
-                            // Fill/Fit only matters once we own the whole screen (fullscreen).
-                            if (fullscreen) {
-                                OverlayPill(text = if (fillScreen) "Fit" else "Fill", onClick = onToggleFill)
-                            }
-                            OverlayPill(text = if (fullscreen) "Exit fullscreen" else "Fullscreen", onClick = onToggleFullscreen)
-                        }
+                        )
 
                         AdBlockPill(
                             status = state.adBlockStatus,
@@ -299,9 +343,10 @@ private fun PlayerArea(
                         )
 
                         state.streamInfo?.let { info ->
-                            Box(modifier = Modifier.align(Alignment.BottomStart).padding(6.dp)) {
-                                LiveBadge(viewerCount = info.viewerCount.toLong())
-                            }
+                            LivePill(
+                                trailing = formatViewerCount(info.viewerCount.toLong()),
+                                modifier = Modifier.align(Alignment.BottomStart).padding(6.dp),
+                            )
                         }
                     }
                 }
@@ -310,16 +355,104 @@ private fun PlayerArea(
     }
 }
 
+/**
+ * Round scrim button for chrome that floats directly over the video (back,
+ * mirrors [AdBlockPill]'s own contrast handling): a translucent black circle
+ * with a white glyph reads over any frame the stream throws at it, which a
+ * theme role tuned for the app's own dark surfaces would not guarantee.
+ */
 @Composable
-private fun OverlayPill(text: String, onClick: () -> Unit) {
-    Text(
-        text = text,
-        style = MaterialTheme.typography.labelMedium,
-        color = Color.White,
+private fun PlayerBackButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
+    val interaction = remember { MutableInteractionSource() }
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = modifier
+            .size(44.dp)
+            .expressiveClickable(
+                interaction = interaction,
+                onClick = onClick,
+                restRadius = 22.dp,
+                pressRadius = PureTvTheme.shapes.pillMorph,
+                color = Color.Black.copy(alpha = 0.45f),
+            ),
+    ) {
+        Icon(ExpressiveIcons.Back, contentDescription = "Back", tint = Color.White, modifier = Modifier.size(22.dp))
+    }
+}
+
+/**
+ * The welded chat/fill/fullscreen cluster: one 28dp-radius `surfaceHigh` bar
+ * with 1dp `outlineVariant` dividers between square segments, matching the
+ * desktop controls bar's `ConnectedControlsGroup`. Fill/Fit only matters once
+ * fullscreen owns the whole display, so that segment only appears there.
+ */
+@Composable
+private fun PlayerControlsGroup(
+    chatVisible: Boolean,
+    fullscreen: Boolean,
+    fillScreen: Boolean,
+    onToggleChat: () -> Unit,
+    onToggleFill: () -> Unit,
+    onToggleFullscreen: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val c = PureTvTheme.colors
+    Row(
+        modifier = modifier
+            .height(48.dp)
+            .clip(RoundedCornerShape(28.dp))
+            .background(c.surfaceHigh),
+    ) {
+        ControlsGroupButton(
+            icon = ExpressiveIcons.Chat,
+            contentDescription = if (chatVisible) "Hide chat" else "Show chat",
+            onClick = onToggleChat,
+            tint = if (chatVisible) c.primary else null,
+        )
+        if (fullscreen) {
+            GroupDivider()
+            ControlsGroupButton(
+                icon = ExpressiveIcons.AspectRatio,
+                contentDescription = if (fillScreen) "Fit to screen" else "Fill screen",
+                onClick = onToggleFill,
+                tint = if (fillScreen) c.primary else null,
+            )
+        }
+        GroupDivider()
+        ControlsGroupButton(
+            icon = if (fullscreen) ExpressiveIcons.FullscreenExit else ExpressiveIcons.Fullscreen,
+            contentDescription = if (fullscreen) "Exit fullscreen" else "Fullscreen",
+            onClick = onToggleFullscreen,
+        )
+    }
+}
+
+@Composable
+private fun GroupDivider() {
+    Box(Modifier.width(1.dp).fillMaxHeight().background(PureTvTheme.colors.outlineVariant))
+}
+
+@Composable
+private fun ControlsGroupButton(
+    icon: ImageVector,
+    contentDescription: String,
+    onClick: () -> Unit,
+    tint: Color? = null,
+) {
+    val c = PureTvTheme.colors
+    val interaction = remember { MutableInteractionSource() }
+    Box(
+        contentAlignment = Alignment.Center,
         modifier = Modifier
-            .clip(RoundedCornerShape(6.dp))
-            .background(Color.Black.copy(alpha = 0.6f))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 10.dp, vertical = 6.dp),
-    )
+            .size(48.dp)
+            .expressiveClickable(
+                interaction = interaction,
+                onClick = onClick,
+                restRadius = 0.dp,
+                pressRadius = 0.dp,
+                color = Color.Transparent,
+            ),
+    ) {
+        Icon(icon, contentDescription = contentDescription, tint = tint ?: c.onSurface, modifier = Modifier.size(22.dp))
+    }
 }

@@ -82,30 +82,6 @@ data class PureTvTvColors(
         get() = Brush.horizontalGradient(0f to Color(0xD9000000), 0.5f to Color(0x8C000000), 0.9f to Color.Transparent)
     val bottomScrim: Brush
         get() = Brush.verticalGradient(0f to Color.Transparent, 1f to Color(0xE6000000))
-
-    /**
-     * The pre-Expressive palette, named by appearance rather than by job, held
-     * at the Violet Dusk values. Screens not yet moved onto the tonal roles keep
-     * compiling and stay roughly in tone through these. Being statics they
-     * cannot follow the user's palette choice, which is exactly why they are
-     * temporary: read `PureTvTvTheme.colors` instead, and this block goes away
-     * once nothing references it.
-     */
-    companion object {
-        val Background = Color(0xFF0F0D13)
-        val Surface = Color(0xFF141218)
-        val SurfaceVariant = Color(0xFF211F26)
-        val TwitchPurple = Color(0xFFCFBCFF)
-        val TwitchPurpleLight = Color(0xFFE9DDFF)
-        val AdBlockGreen = Color(0xFFEFB8C8)
-        val TextPrimary = Color(0xFFE6E0E9)
-        val TextSecondary = Color(0xFFCAC4D0)
-        val TextMuted = Color(0xFF938F99)
-        val Live = Color(0xFF93000A)
-        val Online = Color(0xFFEFB8C8)
-        val Warning = Color(0xFFEFB8C8)
-        val FocusBorder = TwitchPurple
-    }
 }
 
 enum class ThemeVariant(val key: String, val displayName: String, val seed: String) {

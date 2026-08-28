@@ -1,109 +1,83 @@
 package com.puretv.twitch.android.ui.screens
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyGridScope
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
-import coil3.compose.AsyncImage
 import com.puretv.twitch.android.ui.BrowseViewModel
 import com.puretv.twitch.android.ui.components.EmptyState
 import com.puretv.twitch.android.ui.components.ErrorState
+import com.puretv.twitch.android.ui.components.GameTile
 import com.puretv.twitch.android.ui.components.GameTileSkeleton
-import com.puretv.twitch.android.ui.theme.PureTvColors
-import com.puretv.twitch.core.model.GameInfo
+import com.puretv.twitch.android.ui.components.PageTitle
 import org.koin.androidx.compose.koinViewModel
 
-/** SECTION 06.4 — category/game browse grid (Helix `Get Top Games`). */
+/**
+ * SECTION 06.4: category/game browse grid (Helix `Get Top Games`), phone
+ * Expressive edition. One scrolling grid, page title as its own full-span row,
+ * same shape as [HomeScreen] and every other migrated list screen so the eye
+ * never has to relearn where content starts.
+ *
+ * GameInfo carries no viewer count or genre facet to filter by (same gap the
+ * desktop screen documents), so there is no chip row here either: nothing real
+ * to wire one to.
+ */
 @Composable
 fun BrowseScreen(onOpenCategory: (String) -> Unit) {
     val viewModel: BrowseViewModel = koinViewModel()
     val state by viewModel.state.collectAsState()
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Browse", color = PureTvColors.TextPrimary) },
-            )
-        },
-        containerColor = PureTvColors.Background,
-    ) { padding ->
-        when {
-            state.isLoading && state.games.isEmpty() -> LazyVerticalGrid(
-                columns = GridCells.Adaptive(minSize = 140.dp),
-                modifier = Modifier.fillMaxSize().padding(padding),
-                contentPadding = PaddingValues(16.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                items(12) { GameTileSkeleton() }
+    LazyVerticalGrid(
+        columns = GridCells.Adaptive(minSize = 140.dp),
+        // The shell's Scaffold zeroes its own content insets so each screen owns
+        // its status-bar clearance; PageTitle is the first thing on screen now
+        // that the TopAppBar is gone, so it carries that padding instead.
+        modifier = Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.statusBars),
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 24.dp),
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+        verticalArrangement = Arrangement.spacedBy(20.dp),
+    ) {
+        fullSpan {
+            Column {
+                PageTitle("Browse")
+                Spacer(Modifier.height(16.dp))
             }
-            state.error != null && state.games.isEmpty() -> ErrorState(
-                message = state.error!!,
-                onRetry = viewModel::retry,
-                modifier = Modifier.padding(padding),
-            )
-            state.games.isEmpty() -> EmptyState(
-                title = "No categories",
-                subtitle = "Couldn't find anything to browse right now.",
-                modifier = Modifier.padding(padding),
-            )
-            else -> LazyVerticalGrid(
-                columns = GridCells.Adaptive(minSize = 140.dp),
-                modifier = Modifier.fillMaxSize().padding(padding),
-                contentPadding = PaddingValues(16.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                items(state.games, key = { it.id }) { game ->
-                    GameCard(game, onClick = { onOpenCategory(game.id) })
-                }
+        }
+
+        when {
+            state.isLoading && state.games.isEmpty() -> items(12) { GameTileSkeleton() }
+            state.error != null && state.games.isEmpty() -> fullSpan {
+                ErrorState(message = state.error!!, onRetry = viewModel::retry)
+            }
+            state.games.isEmpty() -> fullSpan {
+                EmptyState(
+                    title = "No categories",
+                    subtitle = "Couldn't find anything to browse right now.",
+                )
+            }
+            else -> items(state.games, key = { it.id }) { game ->
+                GameTile(game = game, onClick = { onOpenCategory(game.id) })
             }
         }
     }
 }
 
-@Composable
-private fun GameCard(game: GameInfo, onClick: () -> Unit) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(8.dp))
-            .clickable(onClick = onClick)
-            .background(PureTvColors.Surface)
-            .padding(8.dp),
-    ) {
-        AsyncImage(
-            model = game.boxArtUrl.replace("{width}", "285").replace("{height}", "380"),
-            contentDescription = game.name,
-            contentScale = ContentScale.Crop,
-            modifier = Modifier.fillMaxWidth().aspectRatio(3f / 4f).clip(RoundedCornerShape(6.dp)),
-        )
-        Text(
-            text = game.name,
-            style = MaterialTheme.typography.bodyLarge,
-            color = PureTvColors.TextPrimary,
-            maxLines = 1,
-            modifier = Modifier.padding(top = 6.dp),
-        )
-    }
+/** A full-width row inside the grid (page header, empty/error states). */
+private fun LazyGridScope.fullSpan(content: @Composable () -> Unit) {
+    item(span = { GridItemSpan(maxLineSpan) }) { content() }
 }

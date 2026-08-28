@@ -31,7 +31,7 @@ import com.puretv.twitch.tv.player.TvPlayer
 import com.puretv.twitch.tv.ui.StreamViewModel
 import com.puretv.twitch.tv.ui.components.TvChatOverlay
 import com.puretv.twitch.tv.ui.components.TvControlsOverlay
-import com.puretv.twitch.tv.ui.theme.PureTvTvColors
+import com.puretv.twitch.tv.ui.theme.PureTvTvTheme
 import kotlinx.coroutines.delay
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
@@ -120,7 +120,7 @@ fun TvStreamScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(PureTvTvColors.Background)
+            .background(PureTvTvTheme.colors.surfaceLowest)
             .focusRequester(rootFocusRequester)
             .focusable()
             .onKeyEvent { event ->

@@ -1,7 +1,6 @@
 package com.puretv.twitch.android.ui.components
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -10,50 +9,55 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
-import com.puretv.twitch.android.ui.theme.PureTvColors
+import com.puretv.twitch.android.ui.theme.PureTvTheme
 import com.puretv.twitch.core.model.GameInfo
 
 /**
- * A category/game tile: portrait box-art (3:4) plus the game name. The box-art
- * sits on a Surface2 placeholder so it never flashes black, is clipped to the
- * medium shape to match StreamCard, and the label reserves exactly two lines so
- * tiles in a grid row keep their baselines aligned regardless of name length.
+ * A category/game tile: a 3:4 box-art card at `shapes.card` that morphs out to
+ * `shapes.cardMorph` under the finger, plus the game name below. The label sits
+ * outside the morphing surface so the tile's shape feedback stays confined to
+ * the art, and reserves exactly two lines so tiles in a grid row keep their
+ * baselines aligned regardless of name length.
  */
 @Composable
 fun GameTile(game: GameInfo, onClick: () -> Unit, modifier: Modifier = Modifier) {
-    Column(
-        modifier = modifier
-            .width(120.dp)
-            .clip(MaterialTheme.shapes.medium)
-            .clickable(onClick = onClick),
-    ) {
+    val c = PureTvTheme.colors
+    val shapes = PureTvTheme.shapes
+    val interaction = remember { MutableInteractionSource() }
+
+    Column(modifier = modifier.width(120.dp)) {
         AsyncImage(
             model = game.boxArtUrl.replace("{width}", "285").replace("{height}", "380"),
             contentDescription = game.name,
             modifier = Modifier
                 .width(120.dp)
                 .aspectRatio(3f / 4f)
-                .clip(MaterialTheme.shapes.medium)
-                .background(PureTvColors.Surface2),
+                .expressiveClickable(
+                    interaction = interaction,
+                    onClick = onClick,
+                    restRadius = shapes.card,
+                    pressRadius = shapes.cardMorph,
+                    color = c.surfaceHigh,
+                ),
             contentScale = ContentScale.Crop,
         )
         Text(
             game.name,
             style = MaterialTheme.typography.titleMedium,
-            color = PureTvColors.TextPrimary,
+            color = c.onSurface,
             // Two lines, fixed, so rows of tiles align even when names wrap.
             minLines = 2,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(top = 6.dp),
+                .padding(top = 8.dp),
         )
     }
 }

@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
@@ -22,14 +21,15 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.unit.dp
-import com.puretv.twitch.android.ui.theme.PureTvColors
+import com.puretv.twitch.android.ui.theme.PureTvTheme
 
 /**
  * SECTION 10: loading skeletons. A traveling-highlight shimmer plus card-shaped
  * placeholders, so a list that is still fetching shows its eventual SHAPE rather
- * than a spinner over a void. Built on the same elevation tokens (Surface1 base,
- * Surface2/Surface3 highlight) and the same corner shapes as the real cards, so
- * the loading state dissolves cleanly into the loaded one.
+ * than a spinner over a void. The sweep runs from `surfaceLow` to
+ * `surfaceHighest`, the same ends of the elevation ladder the real cards sit on,
+ * and the placeholders share their corner shapes, so the loading state dissolves
+ * cleanly into the loaded one.
  */
 
 /**
@@ -38,6 +38,7 @@ import com.puretv.twitch.android.ui.theme.PureTvColors
  */
 @Composable
 fun Modifier.shimmer(): Modifier {
+    val c = PureTvTheme.colors
     val transition = rememberInfiniteTransition(label = "shimmer")
     val translate by transition.animateFloat(
         initialValue = 0f,
@@ -49,11 +50,7 @@ fun Modifier.shimmer(): Modifier {
         label = "shimmer-translate",
     )
     val brush = Brush.linearGradient(
-        colors = listOf(
-            PureTvColors.Surface1,
-            PureTvColors.Surface3,
-            PureTvColors.Surface1,
-        ),
+        colors = listOf(c.surfaceLow, c.surfaceHighest, c.surfaceLow),
         start = Offset(translate - 300f, translate - 300f),
         end = Offset(translate, translate),
     )
@@ -67,18 +64,22 @@ private fun ShimmerBlock(modifier: Modifier, corner: Int = 6) {
 }
 
 /**
- * Placeholder matching [StreamCard]: a 16:9 shimmering thumbnail over three
- * stacked text lines of decreasing width.
+ * Placeholder matching [StreamCard]: the same surfaceLow card housing a
+ * shimmering `thumbShape` thumbnail over three stacked text lines of
+ * decreasing width.
  */
 @Composable
 fun StreamCardSkeleton(modifier: Modifier = Modifier) {
+    val c = PureTvTheme.colors
+    val shapes = PureTvTheme.shapes
     Column(
         modifier = modifier
-            .clip(MaterialTheme.shapes.medium)
-            .background(PureTvColors.Surface1),
+            .clip(shapes.cardShape)
+            .background(c.surfaceLow)
+            .padding(10.dp),
     ) {
-        ShimmerBlock(Modifier.fillMaxWidth().aspectRatio(16f / 9f), corner = 0)
-        Column(modifier = Modifier.padding(8.dp)) {
+        ShimmerBlock(Modifier.fillMaxWidth().aspectRatio(16f / 9f), corner = shapes.thumb.value.toInt())
+        Column(modifier = Modifier.padding(top = 10.dp)) {
             ShimmerBlock(Modifier.fillMaxWidth(0.7f).height(13.dp))
             Spacer(Modifier.height(6.dp))
             ShimmerBlock(Modifier.fillMaxWidth(0.45f).height(11.dp))
@@ -88,15 +89,13 @@ fun StreamCardSkeleton(modifier: Modifier = Modifier) {
     }
 }
 
-/** Placeholder matching [GameTile]: a 3:4 box-art block plus a label line. */
+/** Placeholder matching [GameTile]: a `card`-shaped 3:4 box-art block plus a label line. */
 @Composable
 fun GameTileSkeleton(modifier: Modifier = Modifier) {
+    val shapes = PureTvTheme.shapes
     Column(modifier = modifier.width(120.dp)) {
-        ShimmerBlock(
-            Modifier.width(120.dp).aspectRatio(3f / 4f),
-            corner = 8,
-        )
-        Spacer(Modifier.height(6.dp))
+        ShimmerBlock(Modifier.width(120.dp).aspectRatio(3f / 4f), corner = shapes.card.value.toInt())
+        Spacer(Modifier.height(8.dp))
         ShimmerBlock(Modifier.fillMaxWidth(0.8f).height(13.dp))
     }
 }
