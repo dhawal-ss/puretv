@@ -28,7 +28,7 @@ import com.puretv.twitch.desktop.ui.theme.PureTvMotion
 import com.puretv.twitch.desktop.ui.theme.PureTvTheme
 
 /**
- * Reusable interaction modifiers — the substrate every premium component composes.
+ * Reusable interaction modifiers: the substrate every interactive component composes.
  *
  * The convention: each interactive component creates ONE
  * `remember { MutableInteractionSource() }`, threads it into

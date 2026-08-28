@@ -72,7 +72,7 @@ fun EmotePickerPanel(
     }
     // groupBy preserves both key-encounter order and per-key member order, so the
     // headers fall out in the same channel/global/third-party order buildPickableEmotes
-    // already established — no re-sort needed.
+    // already established, so no re-sort is needed.
     val grouped = remember(filtered) { filtered.groupBy { it.source } }
 
     Column(

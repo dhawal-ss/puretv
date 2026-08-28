@@ -63,9 +63,9 @@ import org.koin.core.parameter.parametersOf
  * an avatar straddling its lower edge, the identity + action row, and a
  * two-column body pairing About / past broadcasts against the audience stats.
  *
- * Only real [ChannelViewModel] state drives this screen — `state.channel`
+ * Only real [ChannelViewModel] state drives this screen: `state.channel`
  * ([com.puretv.twitch.core.model.ChannelInfo]), `state.isLive`, and
- * `isFollowed` — so the header shows strictly the fields Twitch returns for a
+ * `isFollowed`, so the header shows strictly the fields Twitch returns for a
  * channel (broadcaster type, total views). No live viewer/game data is
  * surfaced in the header because this screen's own state never exposes it;
  * that lives in [ChannelStatsPanel], which polls independently.
@@ -168,7 +168,7 @@ private fun IdentityRow(
                     LivePill()
                 }
             }
-            // Metadata line — mono, real ChannelInfo fields only, " · " separated.
+            // Metadata line: mono, real ChannelInfo fields only, separated by " · ".
             val meta = buildList {
                 channel?.broadcasterType?.takeIf { it.isNotBlank() }
                     ?.let { add(it.replaceFirstChar(Char::uppercase)) }

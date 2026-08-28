@@ -16,14 +16,14 @@ import com.puretv.twitch.desktop.ui.theme.PureTvTheme
 import com.puretv.twitch.desktop.ui.theme.PureTvType
 
 /**
- * The in-player "Playback" menu — one panel reused by the live stream and VOD
+ * The in-player "Playback" menu: one panel reused by the live stream and VOD
  * players (highlights are VODs). It consolidates the per-playback controls:
  * Resolution (source quality, live), Scaling (mpv GPU upscaler, live), and Engine
- * (restart-gated). Rendered in the player Column (NOT floating over the video —
+ * (restart-gated). Rendered in the player Column (NOT floating over the video,
  * the heavyweight AWT Canvas paints above Compose), styled to the Cinémathèque
  * system. Stateless: the caller owns current values + callbacks.
  *
- * @param scalingEnabled false on the VLC backend, which has no GPU upscaler here —
+ * @param scalingEnabled false on the VLC backend, which has no GPU upscaler here, so
  *   the Scaling section then shows guidance instead of a dead control.
  */
 @Composable

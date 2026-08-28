@@ -108,7 +108,7 @@ fun VodPlayerContent(koin: Koin, launch: VodLaunch, onBack: () -> Unit) {
     // Only the error branch below reads `status` at this level; the position slider
     // lives in VodControls, which collects the full status itself. Project away the
     // volatile position fields + de-dup so the per-second time ticks don't recompose
-    // this whole screen (including the chat-replay LazyColumn) — the dominant VOD
+    // this whole screen (including the chat-replay LazyColumn), the dominant VOD
     // stutter. VodControls remains the one place that sees the live position.
     val status by remember(viewModel) {
         viewModel.status
@@ -201,14 +201,14 @@ fun VodPlayerContent(koin: Koin, launch: VodLaunch, onBack: () -> Unit) {
                 }
 
                 // The AWT Canvas is a heavyweight surface: it paints above every Compose
-                // layer and ignores clipping, so this slot stays an unrounded rectangle —
+                // layer and ignores clipping, so this slot stays an unrounded rectangle:
                 // no card radius here, unlike its siblings above and below.
                 Box(
                     modifier = Modifier.fillMaxWidth().weight(1f).background(Color.Black),
                     contentAlignment = Alignment.Center,
                 ) {
                     when {
-                        // Show a player error whenever playback isn't active — covers an
+                        // Show a player error whenever playback isn't active, which covers an
                         // unavailable engine, an mpv init failure, and a failed start.
                         // Self-clears on recovery (file-loaded/playing resets error).
                         status.error != null && !status.isPlaying && !status.isBuffering ->
@@ -269,7 +269,7 @@ fun VodPlayerContent(koin: Koin, launch: VodLaunch, onBack: () -> Unit) {
                             info.totalItemsCount == 0 || lastVisible >= info.totalItemsCount - 1
                         }
                     }
-                    // Auto-scroll on every new message while FOLLOWING — instant + intent-gated
+                    // Auto-scroll on every new message while FOLLOWING: instant and intent-gated
                     // so it keeps up with VOD's bursty per-second batch appends (the bug: a batch
                     // makes the geometry read "not at bottom", which used to skip the scroll).
                     LaunchedEffect(scrollAnchor(chatMessages)) {
