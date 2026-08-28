@@ -11,6 +11,43 @@ release notes automatically.
 
 ---
 
+## 1.11.0 - 2026-08-28
+
+A complete visual redesign, built on Material 3 Expressive, across Windows,
+Android and Android TV.
+
+### New
+- **A brand new design across all three apps.** Every screen has been rebuilt,
+  with rounder shapes, bigger type and a real sense of depth.
+- **Five colour themes.** Violet Dusk, Ember, Teal Deep, Pure Black and Midnight
+  Forest. Each is derived from one source colour, so picking a theme re-tones the
+  whole app instead of swapping an accent. Settings, then Colour.
+- **An Expressiveness setting** on Windows and Android: Calm, Expressive or
+  Maximal controls how far corners round and how much the interface moves.
+- **Following is its own page** on all three apps now, showing offline channels
+  as well as live ones. On Windows it also gets a Grid and List switch, and on
+  Android TV it is a new destination in the navigation rail.
+- **A collapsible navigation rail on Windows**, with a Resume button for whatever
+  you were last watching.
+- **Bundled typefaces**, shared by all three apps, so text looks the same
+  everywhere instead of borrowing whatever the system provides.
+
+### Improved
+- Buttons, cards and chips change shape as you use them: on hover and press on
+  Windows, under your finger on Android, and on focus on the television, where
+  the focused item also grows and takes a coloured ring so you can follow it from
+  across the room.
+- The Windows player uses one slider design everywhere.
+
+### Fixed
+- Viewer counts on stream cards were hard to read over bright thumbnails, because
+  the shading ran the wrong way and left them on bare artwork.
+- The volume handle on live streams was invisible on Windows.
+- Long stream titles no longer push the buttons off the bottom of the Home
+  banner.
+- On Android TV, pressing Left now moves along a row first and only reaches the
+  navigation rail when there is nothing further left.
+
 ## 1.10.4 - 2026-08-24
 
 Improves how chat emotes look and how quickly badges show up.

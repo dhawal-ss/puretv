@@ -1,6 +1,6 @@
 {
-  "versionCode": 3,
-  "versionName": "1.1.1",
+  "versionCode": 4,
+  "versionName": "1.2.0",
   "apkUrl": "https://github.com/dhawal-ss/puretv/releases/download/tv-latest/PureTV-FireTV-AndroidTV.apk",
-  "notes": "Fixes followed channels not showing up: the followed list no longer stops at 100 channels, and Following - Live now checks your followed channels directly instead of only the biggest streams on Twitch."
+  "notes": "A complete redesign built on Material 3 Expressive, matching the phone and desktop apps. Bigger 10-foot type, a focused card that grows, rounds and rings so you can always tell where you are, five colour themes derived from a single source colour (Settings, Colour), and a new Following destination that shows offline channels as well as live ones. Ad blocking, remote controls and chat work exactly as before."
 }

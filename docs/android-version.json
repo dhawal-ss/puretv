@@ -1,6 +1,6 @@
 {
-  "versionCode": 3,
-  "versionName": "1.0.2",
+  "versionCode": 4,
+  "versionName": "1.1.0",
   "apkUrl": "https://github.com/dhawal-ss/puretv/releases/download/android-latest/PureTV-for-Twitch-Android.apk",
-  "notes": "Adds automatic updates: PureTV now checks for a new version on launch and can install it in one tap from Settings, no more manually downloading the APK. Also fixes followed channels not showing up past the first 100."
+  "notes": "A complete redesign built on Material 3 Expressive: every screen rebuilt with rounder shapes and bigger type, five colour themes derived from a single source colour (Settings, Colour), an Expressiveness setting for how far corners round and how much things move, a Following page that now shows offline channels as well as live ones, and bundled typefaces so text looks right on every phone. Ad-free playback, Picture-in-Picture and chat work exactly as before."
 }
