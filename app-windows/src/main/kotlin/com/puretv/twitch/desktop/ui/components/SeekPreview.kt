@@ -19,7 +19,7 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.puretv.twitch.core.stream.Storyboard
 import com.puretv.twitch.core.stream.StoryboardParser
-import com.puretv.twitch.desktop.ui.theme.PureTvShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import com.puretv.twitch.desktop.ui.theme.PureTvTheme
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
@@ -61,8 +61,8 @@ fun SeekPreview(
     Box(
         modifier
             .size(160.dp, 90.dp)
-            .background(c.surfaceLowest, PureTvShape.sm)
-            .border(1.dp, c.outlineVariant, PureTvShape.sm),
+            .background(c.surfaceLowest, RoundedCornerShape(12.dp))
+            .border(1.dp, c.outlineVariant, RoundedCornerShape(12.dp)),
     ) {
         Canvas(Modifier.size(160.dp, 90.dp)) {
             drawImage(

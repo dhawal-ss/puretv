@@ -61,7 +61,6 @@ import com.puretv.twitch.core.chat.BadgeIndex
 import com.puretv.twitch.desktop.ui.emotes.LocalEmoteAnimation
 import androidx.compose.runtime.staticCompositionLocalOf
 import com.puretv.twitch.desktop.ui.theme.PureTvMotion
-import com.puretv.twitch.desktop.ui.theme.PureTvShape
 import com.puretv.twitch.desktop.ui.theme.PureTvTheme
 import com.puretv.twitch.desktop.ui.theme.PureTvType
 import java.awt.Color as AwtColor
@@ -400,7 +399,7 @@ fun ChatMessageRow(
     )
     val rowModifier = modifier
         .fillMaxWidth()
-        .clip(PureTvShape.md)
+        .clip(PureTvTheme.shapes.mdShape)
         .background(rowFill)
         .hoverable(rowInteraction)
         .padding(horizontal = 12.dp, vertical = 7.dp)
@@ -499,7 +498,7 @@ private fun ChatBadge(text: String, bg: Color, fg: Color) {
         style = PureTvType.dataSmall,
         color = fg,
         modifier = Modifier
-            .clip(PureTvShape.xs)
+            .clip(CircleShape)
             .background(bg)
             .padding(horizontal = 4.dp, vertical = 1.dp),
     )

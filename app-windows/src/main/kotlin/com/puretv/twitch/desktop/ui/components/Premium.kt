@@ -51,7 +51,6 @@ import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.puretv.twitch.core.model.StreamInfo
 import com.puretv.twitch.desktop.ui.theme.PureTvMotion
-import com.puretv.twitch.desktop.ui.theme.PureTvShape
 import com.puretv.twitch.desktop.ui.theme.PureTvTheme
 import com.puretv.twitch.desktop.ui.theme.PureTvType
 
