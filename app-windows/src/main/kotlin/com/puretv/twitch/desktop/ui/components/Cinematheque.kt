@@ -103,7 +103,7 @@ fun Kicker(
 // ── Live dot (pulsing) ───────────────────────────────────────────────────────────
 
 @Composable
-fun LiveDot(modifier: Modifier = Modifier, size: Dp = 6.dp) {
+fun LiveDot(modifier: Modifier = Modifier, size: Dp = 6.dp, color: Color? = null) {
     val c = PureTvTheme.colors
     val transition = rememberInfiniteTransition(label = "liveDot")
     val alpha by transition.animateFloat(
@@ -117,7 +117,7 @@ fun LiveDot(modifier: Modifier = Modifier, size: Dp = 6.dp) {
             .size(size)
             .graphicsLayer { this.alpha = alpha }
             .clip(CircleShape)
-            .background(c.live),
+            .background(color ?: c.live),
     )
 }
 

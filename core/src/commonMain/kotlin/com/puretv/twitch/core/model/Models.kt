@@ -213,7 +213,10 @@ data class AppSettings(
     val chatFraction: Float = 0.5f,
 
     // UI
-    val theme: String = "dark", // dark, darker, purple
+    val theme: String = "dark", // palette key: dark (Violet Dusk), ember, teal, amoled, forest
+    // How far corners round and morph: calm, expressive, maximal. Desktop only for
+    // now; the Android/TV UIs have their own shape language.
+    val shapeIntensity: String = "expressive",
     val compactMode: Boolean = false,
 
     // Account
