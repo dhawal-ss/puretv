@@ -57,3 +57,6 @@ tokens.enc
 # OS
 .DS_Store
 Thumbs.db
+
+# Kotlin compiler session markers, written on every build.
+.kotlin/
