@@ -2,7 +2,7 @@
 
 <h1>PureTV</h1>
 
-**Twitch without the ads. On your PC, your phone, and your TV.**
+**Live streams without the ads. On your PC, your phone, and your TV.**
 
 Ads get filtered out on your own device before the player ever sees them.
 No relay server, no account with us, no logging of what you watch.
@@ -15,7 +15,7 @@ No relay server, no account with us, no logging of what you watch.
 
 <br>
 
-<img src="docs/images/desktop-home.png" alt="PureTV on Windows" width="860">
+<img src="docs/images/champions-player.png" alt="PureTV playing the Pokemon World Championships with ads blocked and chat open" width="900">
 
 </div>
 
@@ -36,17 +36,25 @@ No relay server, no account with us, no logging of what you watch.
 
 <div align="center">
 
-<img src="docs/images/desktop-channel.png" alt="Channel page on Windows" width="420">
+<img src="docs/images/browse.png" alt="Browsing categories" width="440">
 &nbsp;
-<img src="docs/images/tv-home.png" alt="PureTV on Android TV" width="420">
+<img src="docs/images/settings.png" alt="Settings, with the five colour themes and the expressiveness dial" width="440">
 
-<sub>Windows channel page, and the 10-foot TV layout</sub>
+<sub>Browse every category, and make it look how you want</sub>
 
 <br><br>
 
-<img src="docs/images/android-home.png" alt="PureTV on Android" width="240">
+<img src="docs/images/live-now.png" alt="The Live now grid" width="440">
+&nbsp;
+<img src="docs/images/channel.png" alt="A channel page with past broadcasts and stats" width="440">
 
-<sub>Android</sub>
+<sub>Everything live right now, and a channel's past broadcasts</sub>
+
+<br><br>
+
+<img src="docs/images/pokemongo-player.png" alt="A stream playing with chat beside it" width="900">
+
+<sub>Chat sits beside the stream, emotes and all</sub>
 
 </div>
 
