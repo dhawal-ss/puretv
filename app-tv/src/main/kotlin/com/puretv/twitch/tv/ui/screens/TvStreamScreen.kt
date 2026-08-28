@@ -1,5 +1,9 @@
 package com.puretv.twitch.tv.ui.screens
 
+import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
+import android.view.WindowManager
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -24,6 +28,7 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.common.MediaItem
+import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.ui.PlayerView
 import com.puretv.twitch.core.model.StreamQuality
@@ -110,11 +115,33 @@ fun TvStreamScreen(
     }
 
     DisposableEffect(Unit) {
+        val player = tvPlayer.exoPlayer
+        val window = context.findActivity()?.window
+        val playbackListener = object : Player.Listener {
+            override fun onIsPlayingChanged(nowPlaying: Boolean) {
+                isPlaying = nowPlaying
+                if (nowPlaying) {
+                    window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                } else {
+                    window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                }
+            }
+        }
+
+        player.addListener(playbackListener)
+        playbackListener.onIsPlayingChanged(player.isPlaying)
+
         // TvPlayer is an app-wide Koin singleton with playWhenReady=true, so
         // leaving this screen must STOP it, otherwise audio keeps playing after
         // the viewer navigates back. We stop (not release): the singleton is reused
         // for the next stream and rebuilds itself if it was ever released.
-        onDispose { tvPlayer.stop() }
+        // The screen-on flag is tied to actual playback and always cleared here,
+        // allowing Fire TV's screensaver to work normally in menus or when paused.
+        onDispose {
+            player.removeListener(playbackListener)
+            window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            tvPlayer.stop()
+        }
     }
 
     Box(
@@ -228,4 +255,11 @@ private fun stepQuality(current: StreamQuality, up: Boolean): StreamQuality {
     val index = ordered.indexOf(current).let { if (it < 0) 0 else it }
     val next = if (up) (index - 1).coerceAtLeast(0) else (index + 1).coerceAtMost(ordered.lastIndex)
     return ordered[next]
+}
+
+/** Unwraps Compose's themed context to the Activity that owns the TV window. */
+private tailrec fun Context.findActivity(): Activity? = when (this) {
+    is Activity -> this
+    is ContextWrapper -> baseContext.findActivity()
+    else -> null
 }
