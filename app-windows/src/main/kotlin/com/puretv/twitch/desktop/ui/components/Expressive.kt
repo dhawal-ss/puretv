@@ -162,7 +162,7 @@ fun Modifier.expressiveClickable(
     val focused by interaction.collectIsFocusedAsState()
     return this
         .graphicsLayer { alpha = if (enabled) 1f else 0.38f }
-        .focusRing(focused, cornerRadius = restRadius.coerceAtMost(20.dp))
+        .focusRing(focused, cornerRadius = restRadius)
         .expressiveSurface(
             interaction = interaction,
             restRadius = restRadius,

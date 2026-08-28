@@ -3,10 +3,6 @@ package com.puretv.twitch.desktop.ui
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.expandHorizontally
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
@@ -17,7 +13,6 @@ import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -43,6 +38,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -79,7 +75,6 @@ import com.puretv.twitch.desktop.ui.components.ExpressiveIcons
 import com.puretv.twitch.desktop.ui.components.FollowedRail
 import com.puretv.twitch.desktop.ui.components.UpdateBanner
 import com.puretv.twitch.desktop.ui.components.expressiveClickable
-import com.puretv.twitch.desktop.ui.components.handCursor
 import com.puretv.twitch.desktop.ui.screens.BrowseContent
 import com.puretv.twitch.desktop.ui.screens.CategoryContent
 import com.puretv.twitch.desktop.ui.screens.ChannelContent
@@ -611,6 +606,7 @@ private fun NavigationRail(
             .width(width)
             .clip(shapes.paneShape)
             .background(c.surfaceContainer)
+            .clipToBounds()
             .padding(vertical = 12.dp),
     ) {
         RailRow(
@@ -688,7 +684,7 @@ private fun NavigationRail(
                     maxLines = 1,
                     softWrap = false,
                     overflow = TextOverflow.Clip,
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.weight(1f, fill = false),
                 )
             }
             Spacer(Modifier.height(4.dp))
@@ -696,18 +692,13 @@ private fun NavigationRail(
 
         // The live-follow list is the rail's reason to be wide. Collapsed, it would
         // be a column of anonymous avatars, so it simply is not there.
-        AnimatedVisibility(
-            visible = expanded,
-            enter = fadeIn(),
-            exit = fadeOut(),
-            modifier = Modifier.weight(1f),
-        ) {
+        if (expanded) {
             FollowedRail(
                 state = railState,
                 onToggleOffline = { railVm.toggleOffline() },
                 onOpenChannel = onOpenChannel,
                 onSignIn = onSignIn,
-                modifier = Modifier.fillMaxSize().padding(top = 20.dp),
+                modifier = Modifier.weight(1f).fillMaxWidth().padding(top = 20.dp),
             )
         }
     }
@@ -752,12 +743,12 @@ private fun RailRow(
         horizontalArrangement = if (expanded) Arrangement.spacedBy(14.dp) else Arrangement.Center,
     ) {
         Icon(icon, contentDescription = contentDescription, tint = iconTint, modifier = Modifier.size(24.dp))
-        AnimatedVisibility(
-            visible = expanded,
-            enter = fadeIn() + expandHorizontally(),
-            exit = fadeOut() + shrinkHorizontally(),
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (expanded) {
+            Row(
+                modifier = Modifier.weight(1f),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
                 label()
                 trailing()
             }

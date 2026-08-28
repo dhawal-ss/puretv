@@ -252,9 +252,12 @@ private fun LiveFollowCard(row: FollowRow, onClick: () -> Unit, modifier: Modifi
     ExpressiveCard(onClick = onClick, modifier = modifier) {
         Column {
             Box(modifier = Modifier.fillMaxWidth().aspectRatio(16f / 9f).clip(shapes.thumbShape)) {
-                // FollowRow carries no stream thumbnail (only avatarUrl), so the art is
-                // the deterministic duotone fallback rather than an invented image.
-                CoverImage(imageUrl = null, seed = row.login, contentDescription = row.displayName, modifier = Modifier.fillMaxSize())
+                CoverImage(
+                    imageUrl = row.thumbnailUrl.streamThumb(440, 248),
+                    seed = row.login,
+                    contentDescription = row.displayName,
+                    modifier = Modifier.fillMaxSize(),
+                )
                 Box(Modifier.fillMaxSize().background(c.bottomScrim))
                 LivePill(modifier = Modifier.align(Alignment.TopStart).padding(8.dp))
                 Text(
@@ -293,7 +296,12 @@ private fun LiveListRow(row: FollowRow, onClick: () -> Unit) {
             .padding(horizontal = 12.dp, vertical = 10.dp),
     ) {
         Box(modifier = Modifier.size(width = 120.dp, height = 68.dp).clip(shapes.thumbShape)) {
-            CoverImage(imageUrl = null, seed = row.login, contentDescription = row.displayName, modifier = Modifier.fillMaxSize())
+            CoverImage(
+                imageUrl = row.thumbnailUrl.streamThumb(240, 135),
+                seed = row.login,
+                contentDescription = row.displayName,
+                modifier = Modifier.fillMaxSize(),
+            )
             Box(Modifier.fillMaxSize().background(c.bottomScrim))
             LivePill(modifier = Modifier.align(Alignment.TopStart).padding(6.dp), height = 22.dp)
         }
@@ -364,3 +372,10 @@ private fun OfflineRow(row: FollowRow, onClick: () -> Unit) {
         )
     }
 }
+
+/**
+ * Twitch hands back thumbnail URLs with `{width}`/`{height}` placeholders. Blank
+ * for an offline channel, which CoverImage turns into its duotone fallback.
+ */
+private fun String.streamThumb(width: Int, height: Int): String? =
+    takeIf { it.isNotBlank() }?.replace("{width}", "$width")?.replace("{height}", "$height")

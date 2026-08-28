@@ -160,8 +160,8 @@ fun StreamContent(koin: Koin, channelLogin: String, onBack: () -> Unit, onReques
     val vlcPlayer = remember { koin.get<DesktopPlayer>() }
     // The live screen never reads positionMs/durationMs, yet the backend emits a new
     // PlayerStatus on every time tick (VLC ~4Hz, mpv several Hz). Collecting the raw
-    // flow here would recompose the ENTIRE screen — including the 200-row chat
-    // LazyColumn — on every tick (the dominant playback-stutter cause). Project away
+    // flow here would recompose the ENTIRE screen, including the 200-row chat
+    // LazyColumn, on every tick (the dominant playback-stutter cause). Project away
     // the volatile position fields and de-dup, so this screen recomposes only on a
     // change it actually shows (play/buffer/volume/mute/error).
     val playerStatus by remember(vlcPlayer) {
@@ -223,8 +223,8 @@ fun StreamContent(koin: Koin, channelLogin: String, onBack: () -> Unit, onReques
     // trapped in fullscreen with F/Esc dead (the "stuck fullscreen" bug). A
     // KeyEventDispatcher sees every key the focused window receives regardless of
     // whether Compose or the Canvas currently holds focus, so the shortcuts can
-    // never die. We skip it while the chat input is focused so typing — including
-    // spaces and the letters f/t/c — still reaches the chat box.
+    // never die. We skip it while the chat input is focused so typing, including
+    // spaces and the letters f/t/c, still reaches the chat box.
     var chatInputFocused by remember { mutableStateOf(false) }
     val latestMode = rememberUpdatedState(mode)
     val latestChatFocused = rememberUpdatedState(chatInputFocused)
@@ -239,7 +239,7 @@ fun StreamContent(koin: Koin, channelLogin: String, onBack: () -> Unit, onReques
         val dispatcher = KeyEventDispatcher { e ->
             if (latestChatFocused.value) return@KeyEventDispatcher false
             // Hold-to-compare (X): preview Off while held, restore the saved mode on
-            // release — instant live A/B of the upscaler. Handled before the
+            // release: instant live A/B of the upscaler. Handled before the
             // KEY_PRESSED gate so we also see KEY_RELEASED. (Windows AWT doesn't
             // interleave KEY_RELEASED with key auto-repeat, so a held X stays Off
             // without flicker; preview does NOT persist, so the saved mode is intact.)
@@ -321,7 +321,7 @@ fun StreamContent(koin: Koin, channelLogin: String, onBack: () -> Unit, onReques
                 modifier = Modifier.weight(1f).fillMaxHeight(),
                 verticalArrangement = Arrangement.spacedBy(groundPad),
             ) {
-                // Top bar — always in DEFAULT, slides up when idle in THEATER/FULLSCREEN
+                // Top bar: always in DEFAULT, slides up when idle in THEATER/FULLSCREEN
                 AnimatedVisibility(
                     visible = controlsVisible || mode == PlayerMode.DEFAULT,
                     enter = slideInVertically { -it } + fadeIn(),
@@ -343,11 +343,11 @@ fun StreamContent(koin: Koin, channelLogin: String, onBack: () -> Unit, onReques
 
                 // Video panel + playback settings menu, grouped as ONE child of the
                 // outer spacedBy so the gap above/below this pair stays a single
-                // groundPad regardless of whether the settings menu is mounted —
-                // nesting it here (rather than as a sibling of top/controls bars)
+                // groundPad regardless of whether the settings menu is mounted.
+                // Nesting it here (rather than as a sibling of top/controls bars)
                 // avoids a phantom extra gap around its zero-height collapsed state.
                 Column(modifier = Modifier.weight(1f).fillMaxWidth()) {
-                    // Player surface — never unmounted (see VlcPlayerView docs). The
+                    // Player surface: never unmounted (see VlcPlayerView docs). The
                     // heavyweight AWT Canvas paints above Compose and ignores any
                     // clip Compose applies, so this box stays square-cornered: a
                     // rounded clip here would be cosmetic on the Compose layer only
@@ -361,7 +361,7 @@ fun StreamContent(koin: Koin, channelLogin: String, onBack: () -> Unit, onReques
                     ) {
                         when {
                             // A stream-level fatal error (e.g. the local proxy port is in use)
-                            // takes priority — the player never even got a URL, so show the
+                            // takes priority: the player never even got a URL, so show the
                             // explanation instead of an endless "Loading…".
                             state.fatalError != null -> Text(
                                 state.fatalError!!,
@@ -369,8 +369,8 @@ fun StreamContent(koin: Koin, channelLogin: String, onBack: () -> Unit, onReques
                                 style = MaterialTheme.typography.bodyLarge,
                                 modifier = Modifier.padding(24.dp),
                             )
-                            // Surface a player error whenever nothing is actively playing —
-                            // covers an unavailable engine (e.g. "switch back to VLC"), an
+                            // Surface a player error whenever nothing is actively playing.
+                            // Covers an unavailable engine (e.g. "switch back to VLC"), an
                             // mpv init failure, and a failed stream start (bad URL). The
                             // error self-clears on recovery (playing/file-loaded sets error=null).
                             playerStatus.error != null && !playerStatus.isPlaying && !playerStatus.isBuffering -> Text(
@@ -383,7 +383,7 @@ fun StreamContent(koin: Koin, channelLogin: String, onBack: () -> Unit, onReques
                                 vlcPlayer = vlcPlayer,
                                 modifier = Modifier.fillMaxSize(),
                                 // The heavyweight video surface eats mouse events; bridge
-                                // them back so moving the mouse reveals the controls —
+                                // them back so moving the mouse reveals the controls,
                                 // including in fullscreen, where the surface covers all.
                                 onUserActivity = { resetControls() },
                             )
@@ -395,7 +395,7 @@ fun StreamContent(koin: Koin, channelLogin: String, onBack: () -> Unit, onReques
                         }
                     }
 
-                    // Playback menu — lives in the Column (NOT over the video; the
+                    // Playback menu: lives in the Column (NOT over the video; the
                     // heavyweight Canvas paints above Compose), between video and controls.
                     // Opening it pushes the video up, the same way the controls bar does.
                     AnimatedVisibility(
@@ -415,7 +415,7 @@ fun StreamContent(koin: Koin, channelLogin: String, onBack: () -> Unit, onReques
                     }
                 }
 
-                // Controls bar — always in DEFAULT, slides down when idle in THEATER/FULLSCREEN
+                // Controls bar: always in DEFAULT, slides down when idle in THEATER/FULLSCREEN
                 AnimatedVisibility(
                     visible = controlsVisible || mode == PlayerMode.DEFAULT,
                     enter = slideInVertically { it } + fadeIn(),
@@ -746,7 +746,7 @@ private fun ConnectedControlsGroup(
             .clip(RoundedCornerShape(28.dp))
             .background(c.surfaceHigh),
     ) {
-        // No dedicated quick-quality flow exists in the ViewModel — resolution lives
+        // No dedicated quick-quality flow exists in the ViewModel: resolution lives
         // inside the same combined playback menu the gear opens, so this is a second
         // entry point into that one menu rather than a distinct feature.
         ControlsGroupButton(ExpressiveIcons.Quality, "Quality", onToggleSettings)
@@ -995,8 +995,8 @@ private fun ChatInputBar(
 ) {
     val c = PureTvTheme.colors
 
-    // Anonymous (read-only) viewers get a tappable prompt instead of a composer —
-    // sending requires a token + the token-owner's login (see StreamViewModel).
+    // Anonymous (read-only) viewers get a tappable prompt instead of a composer.
+    // Sending requires a token + the token-owner's login (see StreamViewModel).
     if (!canChat) {
         Box(
             modifier = Modifier
@@ -1049,7 +1049,7 @@ private fun ChatInputBar(
     }
 
     Column(modifier = Modifier.fillMaxWidth()) {
-        // Reply context bar — shows who we're replying to, with a dismiss button.
+        // Reply context bar, shows who we're replying to, with a dismiss button.
         if (replyingTo != null) {
             Row(
                 modifier = Modifier
@@ -1088,7 +1088,7 @@ private fun ChatInputBar(
             Spacer(Modifier.height(8.dp))
         }
 
-        // Autocomplete chip strip — only while typing a recognised partial.
+        // Autocomplete chip strip, only while typing a recognised partial.
         if (suggestions.isNotEmpty() && fieldFocused) {
             Row(
                 modifier = Modifier
@@ -1122,7 +1122,7 @@ private fun ChatInputBar(
             Spacer(Modifier.height(8.dp))
         }
 
-        // Composer panel — the mockup's surfaceContainer card holding the one input row.
+        // Composer panel, the mockup's surfaceContainer card holding the one input row.
         Box(
             modifier = Modifier
                 .fillMaxWidth()

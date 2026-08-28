@@ -16,6 +16,10 @@ data class FollowRow(
     val isLive: Boolean,
     val viewerCount: Int,
     val gameName: String,
+    /** Live stream title and thumbnail. Blank for offline channels. Defaulted so
+     *  callers that only care about who is live stay unchanged. */
+    val title: String = "",
+    val thumbnailUrl: String = "",
 )
 
 /** The followed rail split into live (viewers desc) and offline (name asc). */
@@ -47,6 +51,8 @@ fun buildFollowedList(
             isLive = stream != null,
             viewerCount = stream?.viewerCount ?: 0,
             gameName = stream?.gameName ?: "",
+            title = stream?.title.orEmpty(),
+            thumbnailUrl = stream?.thumbnailUrl.orEmpty(),
         )
     }
 
