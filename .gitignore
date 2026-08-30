@@ -60,3 +60,7 @@ Thumbs.db
 
 # Kotlin compiler session markers, written on every build.
 .kotlin/
+
+# Upstream ad-block reference userscript. Not part of any build; see
+# docs/ADBLOCK-REFERENCE.md for the pinned upstream URL and sha256.
+vaft.user.js

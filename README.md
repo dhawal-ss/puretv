@@ -131,6 +131,8 @@ Kotlin Multiplatform. A shared `core` module holds the API client, sign-in, ad-b
 
 Full setup, signing and release instructions live in **[docs/DEVELOPING.md](docs/DEVELOPING.md)**.
 
+The ad-block engine is a Kotlin port of [pixeltris/TwitchAdSolutions](https://github.com/pixeltris/TwitchAdSolutions) (`vaft`). The upstream version and hash it tracks are pinned in **[docs/ADBLOCK-REFERENCE.md](docs/ADBLOCK-REFERENCE.md)**; no third-party script is vendored, bundled or executed by any build.
+
 <br>
 
 ## License
