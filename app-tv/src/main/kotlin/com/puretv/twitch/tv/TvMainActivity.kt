@@ -2,17 +2,26 @@ package com.puretv.twitch.tv
 
 import android.content.Intent
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.runtime.mutableStateOf
 import androidx.media3.common.util.UnstableApi
-import com.puretv.twitch.tv.ui.PureTvTvNavHost
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import com.puretv.twitch.core.model.AppSettings
 import com.puretv.twitch.tv.data.AppSettingsStore
-import com.puretv.twitch.tv.ui.theme.ThemeVariant
-import org.koin.compose.koinInject
+import com.puretv.twitch.tv.ui.PureTvTvNavHost
 import com.puretv.twitch.tv.ui.theme.PureTvTvTheme
+import com.puretv.twitch.tv.ui.theme.ThemeVariant
+import kotlinx.coroutines.CoroutineExceptionHandler
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import org.koin.android.ext.android.getKoin
 
 /**
  * SECTION 07.1 / 07.2 [CRITICAL] — single-Activity host for the TV Navigation
@@ -28,24 +37,58 @@ import com.puretv.twitch.tv.ui.theme.PureTvTvTheme
  *  2. Nothing else needs platform-activity wiring: D-pad/remote input is
  *     handled declaratively by Compose's focus system inside each screen
  *     (Section 7.3) — no `dispatchKeyEvent` override required at this layer.
+ *
+ * ## Why the theme is not read from inside composition
+ *
+ * The palette is a user setting, so it comes from [AppSettingsStore]. Resolving
+ * that store is not free: its construction forces the encrypted token prefs
+ * open, which builds a Keystore master key, and on a first run that is hundreds
+ * of milliseconds of work that [PureTvTvApp] deliberately does off the main
+ * thread. Resolving it inside `setContent` would drag all of it back onto the
+ * main thread and into the first frame, where a slow SoC turns it into a
+ * startup stall and any failure in it takes the Activity down before the app
+ * has drawn anything. So the store is resolved on IO and the variant arrives as
+ * plain Compose state, defaulting to the standard palette until it does.
  */
 @UnstableApi
 class TvMainActivity : ComponentActivity() {
 
+    /** Drives the palette. Read in composition; only ever written from IO. */
+    private val themeVariant = mutableStateOf(ThemeVariant.VIOLET_DUSK)
+
+    // A settings read is never worth losing the Activity for, so failures land
+    // in the log and the default palette stays.
+    private val uiScope = CoroutineScope(
+        SupervisorJob() + Dispatchers.Main.immediate +
+            CoroutineExceptionHandler { _, e -> Log.w(TAG, "Theme observer stopped", e) },
+    )
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         handleAuthRedirect(intent)
+        observeTheme()
 
         setContent {
-            // The palette is a user setting, so the theme is driven from the
-            // store rather than from the default. Collected at the root so
-            // changing it re-tones the whole tree at once.
-            val settingsStore: AppSettingsStore = koinInject()
-            val settings by settingsStore.flow.collectAsState(initial = AppSettings())
-
-            PureTvTvTheme(variant = ThemeVariant.fromKey(settings.theme)) {
+            PureTvTvTheme(variant = themeVariant.value) {
                 PureTvTvNavHost()
             }
+        }
+    }
+
+    override fun onDestroy() {
+        uiScope.cancel()
+        super.onDestroy()
+    }
+
+    /** Collected at the root so changing the palette re-tones the whole tree at once. */
+    private fun observeTheme() {
+        uiScope.launch {
+            val store = withContext(Dispatchers.IO) { getKoin().get<AppSettingsStore>() }
+            store.flow
+                .map { ThemeVariant.fromKey(it.theme) }
+                .distinctUntilChanged()
+                .catch { e -> Log.w(TAG, "Theme setting unreadable, keeping the default", e) }
+                .collect { themeVariant.value = it }
         }
     }
 
@@ -65,6 +108,10 @@ class TvMainActivity : ComponentActivity() {
         if (code != null && state != null) {
             AuthRedirectBus.emit(code, state)
         }
+    }
+
+    private companion object {
+        const val TAG = "TvMainActivity"
     }
 }
 

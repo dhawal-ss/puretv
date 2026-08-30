@@ -1,8 +1,11 @@
 package com.puretv.twitch.tv.data
 
 import android.content.Context
+import android.util.Log
+import androidx.datastore.core.handlers.ReplaceFileCorruptionHandler
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -10,10 +13,21 @@ import com.puretv.twitch.core.di.TokenHolder
 import com.puretv.twitch.core.model.AppSettings
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 
-private val Context.dataStore by preferencesDataStore(name = "puretv_tv_settings")
+// A half-written preferences file (a process killed mid-write, and the in-app
+// updater kills this one by definition) otherwise makes DataStore throw on
+// every read for the rest of the install's life. That read happens during
+// startup, so the app stops launching and stays that way, since reinstalling
+// over the top leaves app data alone. Falling back to defaults is safe here:
+// none of this is sensitive, and the viewer just gets factory settings back.
+// Mirrors the phone app's delegate.
+private val Context.dataStore by preferencesDataStore(
+    name = "puretv_tv_settings",
+    corruptionHandler = ReplaceFileCorruptionHandler { emptyPreferences() },
+)
 
 /**
  * SECTION 09.2 — TV counterpart of the phone app's `AppSettingsStore`.
@@ -80,6 +94,22 @@ class AppSettingsStore(
             userId = token.userId,
         )
     }
+        // The corruption handler above covers a file DataStore can parse but not
+        // trust. It does not cover the file being unreadable outright, and this
+        // flow is collected from composition, where a thrown read takes the
+        // Activity with it. Settings are not worth that: fall back to factory
+        // values, keeping the session, which lives in memory and is still good.
+        .catch { e ->
+            Log.w(TAG, "Settings unreadable, falling back to defaults", e)
+            val token = tokenState.value
+            emit(
+                AppSettings(
+                    accessToken = token.accessToken,
+                    username = token.username,
+                    userId = token.userId,
+                ),
+            )
+        }
 
     suspend fun update(transform: (AppSettings) -> AppSettings) {
         val current = flow.first()
@@ -116,4 +146,8 @@ class AppSettingsStore(
     }
 
     fun currentRefreshToken(): String? = secureTokenStore.refreshToken()
+
+    private companion object {
+        const val TAG = "AppSettingsStore"
+    }
 }

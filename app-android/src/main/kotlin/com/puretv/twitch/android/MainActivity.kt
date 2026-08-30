@@ -4,6 +4,7 @@ import android.app.PictureInPictureParams
 import android.content.res.Configuration
 import android.os.Build
 import android.os.Bundle
+import android.util.Log
 import android.util.Rational
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
@@ -21,11 +22,16 @@ import com.puretv.twitch.android.ui.Routes
 import com.puretv.twitch.android.data.AppSettingsStore
 import com.puretv.twitch.android.ui.theme.ShapeIntensity
 import com.puretv.twitch.android.ui.theme.ThemeVariant
-import com.puretv.twitch.core.model.AppSettings
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import org.koin.compose.koinInject
 import com.puretv.twitch.android.ui.theme.PureTvTheme
+import kotlinx.coroutines.CoroutineExceptionHandler
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import org.koin.android.ext.android.getKoin
 import org.koin.android.ext.android.inject
 
 /**
@@ -49,6 +55,17 @@ class MainActivity : ComponentActivity() {
 
     private var currentRouteIsStream: Boolean = false
     private val isInPipState = mutableStateOf(false)
+
+    /** Drives the theme. Read in composition; only ever written from IO. */
+    private val themeVariant = mutableStateOf(ThemeVariant.VIOLET_DUSK)
+    private val shapeIntensity = mutableStateOf(ShapeIntensity.EXPRESSIVE)
+
+    // A settings read is never worth losing the Activity for, so failures land
+    // in the log and the default theme stays.
+    private val uiScope = CoroutineScope(
+        SupervisorJob() + Dispatchers.Main.immediate +
+            CoroutineExceptionHandler { _, e -> Log.w(TAG, "Theme observer stopped", e) },
+    )
 
     // App-wide singleton; released in onDestroy when the task is genuinely
     // finishing so codec/audio resources are not held for the process lifetime.
@@ -86,6 +103,8 @@ class MainActivity : ComponentActivity() {
             }
         }
 
+        observeTheme()
+
         setContent {
             val navController = rememberNavController()
 
@@ -95,20 +114,40 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
-            // The palette and shape intensity are user settings, so the theme has
-            // to be driven from the store rather than from defaults. Collected
-            // here at the root so a change re-tones the whole tree at once.
-            val settingsStore: AppSettingsStore = koinInject()
-            val settings by settingsStore.flow.collectAsState(initial = AppSettings())
-
             CompositionLocalProvider(LocalIsInPip provides isInPipState.value) {
                 PureTvTheme(
-                    variant = ThemeVariant.fromKey(settings.theme),
-                    shapeIntensity = ShapeIntensity.fromKey(settings.shapeIntensity),
+                    variant = themeVariant.value,
+                    shapeIntensity = shapeIntensity.value,
                 ) {
                     RootScreen(navController = navController)
                 }
             }
+        }
+    }
+
+    /**
+     * The palette and shape intensity are user settings, so the theme is driven
+     * from [AppSettingsStore] rather than from defaults, and collected at the
+     * root so a change re-tones the whole tree at once.
+     *
+     * Resolved on IO rather than with `koinInject()` inside `setContent`.
+     * Constructing that store forces the encrypted token prefs open, which
+     * builds a Keystore master key, and on a first run that is hundreds of
+     * milliseconds of work [PureTvApp] deliberately keeps off the main thread.
+     * Resolving it in composition drags all of it into the first frame, and any
+     * failure in it takes the Activity down before the app has drawn. The
+     * variant arrives as plain Compose state instead, with the standard palette
+     * showing until it does.
+     */
+    private fun observeTheme() {
+        uiScope.launch {
+            val store = withContext(Dispatchers.IO) { getKoin().get<AppSettingsStore>() }
+            store.flow
+                .catch { e -> Log.w(TAG, "Theme setting unreadable, keeping the default", e) }
+                .collect { settings ->
+                    themeVariant.value = ThemeVariant.fromKey(settings.theme)
+                    shapeIntensity.value = ShapeIntensity.fromKey(settings.shapeIntensity)
+                }
         }
     }
 
@@ -132,6 +171,7 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
+        uiScope.cancel()
         // Free the shared player only on a real finish (not a config-change teardown;
         // the manifest's configChanges already blocks rotation recreation). If the
         // process survives and the user reopens, TwitchPlayer rebuilds a fresh player.
@@ -146,5 +186,9 @@ class MainActivity : ComponentActivity() {
         // Surface PiP state into Compose so StreamScreen collapses to video only
         // (no back button, pills, ad badge, live badge, or chat) in the small window.
         isInPipState.value = isInPictureInPictureMode
+    }
+
+    private companion object {
+        const val TAG = "MainActivity"
     }
 }

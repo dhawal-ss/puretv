@@ -1,6 +1,7 @@
 package com.puretv.twitch.android.data
 
 import android.content.Context
+import android.util.Log
 import androidx.datastore.core.handlers.ReplaceFileCorruptionHandler
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
@@ -14,6 +15,7 @@ import com.puretv.twitch.core.session.SessionState
 import com.puretv.twitch.core.session.deriveSessionState
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -115,6 +117,22 @@ class AppSettingsStore(
             userId = token.userId,
         )
     }
+        // The corruption handler on the delegate covers a file DataStore can
+        // parse but not trust. It does not cover the file being unreadable
+        // outright, and this flow is collected from the Activity, where a thrown
+        // read takes it down. Settings are not worth that: fall back to factory
+        // values and keep the session, which is held in memory and still good.
+        .catch { e ->
+            Log.w(TAG, "Settings unreadable, falling back to defaults", e)
+            val token = tokenState.value
+            emit(
+                AppSettings(
+                    accessToken = token.accessToken,
+                    username = token.username,
+                    userId = token.userId,
+                ),
+            )
+        }
 
     /** Applies a transform to the *non-token* preference fields only. */
     suspend fun update(transform: (AppSettings) -> AppSettings) {
@@ -156,4 +174,8 @@ class AppSettingsStore(
     }
 
     fun currentRefreshToken(): String? = secureTokenStore.refreshToken()
+
+    private companion object {
+        const val TAG = "AppSettingsStore"
+    }
 }

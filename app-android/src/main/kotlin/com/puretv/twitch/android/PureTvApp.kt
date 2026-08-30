@@ -7,6 +7,8 @@ import com.puretv.twitch.android.di.androidModule
 import com.puretv.twitch.android.update.AndroidUpdateManager
 import com.puretv.twitch.core.adblock.AdBlockEngine
 import com.puretv.twitch.core.di.coreModule
+import android.util.Log
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -25,7 +27,15 @@ class PureTvApp : Application() {
 
     // Process-lifetime scope for one-shot startup work. SupervisorJob so one
     // failure never tears down the others.
-    private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    // A handler, because a SupervisorJob alone does not make this fail-soft: an
+    // exception with nowhere to go reaches the thread's default handler and the
+    // process dies before the first frame. Every job below is best-effort
+    // priming, so none of them is worth a launch failure. The viewer sees a
+    // signed-out app or a stale setting instead, which they can act on.
+    private val startupFailures = CoroutineExceptionHandler { _, e ->
+        Log.e(TAG, "Startup priming failed, continuing without it", e)
+    }
+    private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO + startupFailures)
 
     override fun onCreate() {
         super.onCreate()
@@ -69,5 +79,9 @@ class PureTvApp : Application() {
                 .distinctUntilChanged()
                 .collect { engine.setEnabled(it) }
         }
+    }
+
+    private companion object {
+        const val TAG = "PureTvApp"
     }
 }
