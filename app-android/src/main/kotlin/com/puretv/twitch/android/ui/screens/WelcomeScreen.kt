@@ -12,6 +12,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -100,9 +102,13 @@ fun WelcomeScreen(
         }
         Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.55f)))
 
+        // Same reason as LoginScreen: the card grows by a code plate, a button row
+        // and a progress line once sign-in starts, and a landscape or split-screen
+        // window is shorter than the result. Scroll keeps the code reachable.
         Column(
             modifier = Modifier
                 .align(Alignment.Center)
+                .verticalScroll(rememberScrollState())
                 .fillMaxWidth()
                 .widthIn(max = 440.dp)
                 .padding(28.dp)

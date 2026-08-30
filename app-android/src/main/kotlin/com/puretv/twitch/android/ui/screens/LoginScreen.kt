@@ -10,6 +10,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
@@ -79,7 +81,19 @@ fun LoginScreen(onLoggedIn: () -> Unit, onBack: () -> Unit) {
         },
         containerColor = c.surfaceLowest,
     ) { padding ->
-        Box(modifier = Modifier.fillMaxSize().padding(padding).padding(24.dp), contentAlignment = Alignment.Center) {
+        // Scrollable, because this card is taller than a landscape phone and taller
+        // again than a split-screen window, and once Twitch answers it grows by the
+        // activation code and its buttons. Without this the code is the part that
+        // falls off the bottom, which is the one thing on the screen the viewer
+        // has to be able to read (issue #20 was the television version of this).
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .verticalScroll(rememberScrollState())
+                .padding(24.dp),
+            contentAlignment = Alignment.Center,
+        ) {
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 modifier = Modifier
