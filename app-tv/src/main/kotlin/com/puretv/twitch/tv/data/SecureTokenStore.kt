@@ -138,7 +138,17 @@ class SecureTokenStore(context: Context) {
         prefs?.edit()?.clear()?.apply()
     }
 
-    private fun read(key: String): String? = prefs?.getString(key, null) ?: memory[key]
+    /**
+     * Branches on which store exists, exactly as [save] does. Writing this as
+     * `prefs?.getString(...) ?: memory[key]` would read the wrong thing: elvis
+     * fires on a null *result*, so a signed-out viewer with a perfectly healthy
+     * encrypted store would fall through to [memory], and the two would stop
+     * being alternatives to each other.
+     */
+    private fun read(key: String): String? {
+        val store = prefs ?: return memory[key]
+        return store.getString(key, null)
+    }
 
     private companion object {
         const val TAG = "SecureTokenStore"
