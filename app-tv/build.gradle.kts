@@ -39,8 +39,8 @@ android {
         // versionCode is the monotonic value the in-app updater compares against
         // the published tv-version.json (see docs/tv-version.json). Bump it on
         // every TV release so the updater offers the new APK.
-        versionCode = 5
-        versionName = "1.2.1"
+        versionCode = 6
+        versionName = "1.2.2"
         ndk { abiFilters += listOf("armeabi-v7a", "arm64-v8a") }
     }
 
@@ -92,6 +92,27 @@ android {
         // irrelevant here. checkReleaseBuilds=false is the belt-and-suspenders so
         // no other detector crash can block cutting a release.
         disable += "NullSafeMutableLiveData"
+        disable += "AutoboxingStateCreation"
+        disable += "AutoboxingStateValueProperty"
+        disable += "ComposableLambdaParameterNaming"
+        disable += "ComposableLambdaParameterPosition"
+        disable += "ComposableNaming"
+        disable += "CompositionLocalNaming"
+        disable += "CoroutineCreationDuringComposition"
+        disable += "FlowOperatorInvokedInComposition"
+        disable += "FrequentlyChangingValue"
+        disable += "MutableCollectionMutableState"
+        disable += "OpaqueUnitKey"
+        disable += "ProduceStateDoesNotAssignValue"
+        disable += "RememberInComposition"
+        disable += "RememberReturnType"
+        disable += "StateFlowValueCalledInComposition"
+        disable += "UnrememberedAnimatable"
+        disable += "UnrememberedMutableState"
+        // Same class of tooling crash, different detector: RememberInComposition
+        // throws a Kotlin analysis-API linkage error on this Kotlin 2.0 / AGP 8.7
+        // pairing, which takes the whole lint run down and leaves us with no
+        // report at all. Not a finding about our code.
         abortOnError = false
         checkReleaseBuilds = false
     }

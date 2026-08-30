@@ -62,26 +62,28 @@ There is no CI workflow watching `android-v*` or `tv-v*`. Cut these by hand.
    `app-tv/build.gradle.kts`, and the matching `versionCode`, `versionName` and
    `notes` in `docs/android-version.json` or `docs/tv-version.json`.
 
-2. Build the signed release APK.
+2. Build the signed release APK. Both are signed by the build now, so neither
+   needs a manual signing pass.
 
-   `./gradlew :app-tv:assembleRelease` is wired to `keystore.properties` and
-   produces a signed APK directly.
+   `./gradlew :app-tv:assembleRelease` is wired to `keystore.properties`.
 
-   `./gradlew :app-android:assembleRelease` does **not** (the `signingConfig`
-   line in `app-android/build.gradle.kts` is commented out), so it produces an
-   unsigned APK you have to sign yourself.
+   `./gradlew :app-android:assembleRelease` is wired to this machine's
+   `~/.android/debug.keystore` (alias `androiddebugkey`, password `android`).
+   That is not a mistake: every Android release published so far was signed with
+   that key rather than a dedicated release key, and Android identifies an app by
+   its signing certificate, so a build signed with anything else will not install
+   over an existing copy. People would have to uninstall and lose their session
+   first. Changing the Android key is a one-way door, and this is why it stays.
 
-3. **Match the signing key.** Every Android release published so far was signed
-   with this machine's local `~/.android/debug.keystore` (alias
-   `androiddebugkey`, password `android`), not a dedicated release key. A build
-   signed with anything else will not install as an update over an existing
-   install: people would have to uninstall first. Check before you upload:
+3. **Check the signing key anyway**, because getting it wrong is unrecoverable
+   for anyone already running the app:
 
    ```bash
    apksigner verify --print-certs new.apk
    ```
 
    must match the same command run against the currently published APK.
+   Android is `CN=Android Debug`; TV is `CN=PureTV for Twitch`.
 
 4. Upload in this order. Create the versioned tag as a **pre-release**, then
    update the moving `android-latest` or `tv-latest` release: APK first, verify

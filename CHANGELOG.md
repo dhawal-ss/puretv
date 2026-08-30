@@ -11,6 +11,32 @@ release notes automatically.
 
 ---
 
+## Android 1.1.2 and Android TV 1.2.2 - 2026-08-30
+
+Sign-in fixes and a sturdier start-up, on the phone and TV apps. Windows is
+unchanged and stays on 1.11.1.
+
+### Fixed
+- **Signing in on the TV works again.** The QR code and the activation code sat
+  below the bottom edge of the screen, and a remote had no way to scroll down to
+  them, so there was no way to finish signing in. The screen is now laid out
+  across instead of down, and it shrinks to fit whatever size your television
+  reports. Thanks to Nyarlathoteddy for the report.
+- **twitch.tv/activate is easy to read on the TV again**, next to the QR code,
+  for when it is easier to type the code than to scan.
+- **The QR code stays sharp** at any screen size, so phone cameras pick it up
+  more reliably.
+- **The sign-in screens scroll on Android.** In landscape, or in a split-screen
+  window, the activation code could sit below the bottom of the screen with no
+  way to reach it.
+
+### Improved
+- **Start-up is sturdier on both apps.** The theme is no longer loaded during
+  the first frame, which is work that could stall a slower device before it drew
+  anything. If the stored settings or the saved sign-in ever become unreadable,
+  the app now clears them and carries on, where before it could fail to start at
+  all. Background start-up work can no longer take the app down with it.
+
 ## 1.11.1 - 2026-08-28
 
 Bug fixes across all three apps.

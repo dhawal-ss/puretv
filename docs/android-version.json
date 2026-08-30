@@ -1,6 +1,6 @@
 {
-  "versionCode": 5,
-  "versionName": "1.1.1",
+  "versionCode": 6,
+  "versionName": "1.1.2",
   "apkUrl": "https://github.com/dhawal-ss/puretv/releases/download/android-latest/PureTV-for-Twitch-Android.apk",
-  "notes": "Bug fixes. Signing in no longer sends you to Twitch's pre-filled activate page, which often failed to load: PureTV opens the plain twitch.tv/activate and shows the code separately, with Copy code as the main button. Fixed the gap that could stick to one edge after using fullscreen, and the dead space between the content and the navigation buttons."
+  "notes": "The sign-in screens scroll now, so the activation code stays reachable in landscape and in split-screen instead of sitting below the bottom of the window. Start-up is sturdier: the theme no longer loads during the first frame, and unreadable settings or a lost sign-in are now cleared and recovered from instead of stopping the app."
 }

@@ -1,6 +1,6 @@
 {
-  "versionCode": 5,
-  "versionName": "1.2.1",
+  "versionCode": 6,
+  "versionName": "1.2.2",
   "apkUrl": "https://github.com/dhawal-ss/puretv/releases/download/tv-latest/PureTV-FireTV-AndroidTV.apk",
-  "notes": "Bug fixes. Signing in no longer points the QR code at Twitch's pre-filled activate page, which often failed to load: it now points at the plain twitch.tv/activate and the code is shown beside it, so the QR appears immediately. The screensaver no longer interrupts a stream while it is playing (thanks to xexuu)."
+  "notes": "Signing in works again. The QR code and activation code sat below the bottom edge of the screen with no way to scroll to them, so sign-in could not be completed; the screen is now laid out across instead of down and shrinks to fit any television. twitch.tv/activate is easy to read next to the QR code again, and the QR stays sharp at any size. Start-up is sturdier: the theme no longer loads during the first frame, and unreadable settings or a lost sign-in are now cleared and recovered from instead of stopping the app."
 }
