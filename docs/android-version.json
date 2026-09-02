@@ -1,6 +1,6 @@
 {
-  "versionCode": 6,
-  "versionName": "1.1.2",
+  "versionCode": 7,
+  "versionName": "1.1.3",
   "apkUrl": "https://github.com/dhawal-ss/puretv/releases/download/android-latest/PureTV-for-Twitch-Android.apk",
-  "notes": "The sign-in screens scroll now, so the activation code stays reachable in landscape and in split-screen instead of sitting below the bottom of the window. Start-up is sturdier: the theme no longer loads during the first frame, and unreadable settings or a lost sign-in are now cleared and recovered from instead of stopping the app."
+  "notes": "Updating is fixed. The app used to start downloading an update and only then ask Android for permission to install it, which interrupted the update part-way through and could leave the app unable to open afterwards. Permission is now asked for first, before anything is downloaded, and once you allow it the update carries on by itself. Unfinished update attempts are also cleared away instead of piling up."
 }
