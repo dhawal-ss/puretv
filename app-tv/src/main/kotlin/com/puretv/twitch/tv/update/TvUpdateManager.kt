@@ -6,6 +6,10 @@ import android.content.Intent
 import android.content.pm.PackageInstaller
 import android.net.Uri
 import android.os.Build
+import android.provider.Settings
+import android.util.Log
+import com.puretv.twitch.core.update.UpdateGate
+import com.puretv.twitch.core.update.updateGate
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -61,6 +65,18 @@ class TvUpdateManager(private val context: Context) {
     private fun packageInfo() = context.packageManager.getPackageInfo(context.packageName, 0)
 
     init {
+        // Anything still open belongs to an update that did not finish: a
+        // successful one replaces this process, so a surviving session by
+        // definition did not succeed. They are never resumed, and the OS caps how
+        // many an installer may hold, so sweeping at start-up is what keeps a
+        // string of interrupted updates from eventually making createSession fail.
+        //
+        // On `scope` (IO) rather than inline: this singleton can first be resolved
+        // from the Activity's onResume, on the main thread, and mySessions and
+        // abandonSession are binder calls. Construction stays cheap wherever it
+        // happens, which is the same rule the rest of start-up follows.
+        scope.launch { abandonOrphanedSessions() }
+
         // Surface a failed system-side install (the user cancelled the confirm
         // dialog, signature mismatch, etc.) back into our UI. Success replaces the
         // running app, so there's nothing to show for it.
@@ -94,17 +110,36 @@ class TvUpdateManager(private val context: Context) {
         }
     }
 
-    /** Downloads [info]'s APK and launches the system installer. */
+    /**
+     * Downloads [info]'s APK and launches the system installer, but only once
+     * the OS has agreed to let us install at all.
+     *
+     * The consent check happens HERE, before the download and before any
+     * session exists, and that ordering is the fix for a reported dead app
+     * rather than a tidiness preference. A sideloaded app has no "install
+     * unknown apps" consent until the viewer grants it, and granting it means
+     * leaving for system Settings. Committing a session first meant that detour
+     * started with an APK on disk and a live installer session, and the app did
+     * not reliably come back from it. Asking first means the viewer leaves while
+     * this app holds nothing at all.
+     */
     fun downloadAndInstall(info: TvUpdateInfo) {
         when (_state.value) {
             is TvUpdateState.Downloading, TvUpdateState.Installing -> return
             else -> Unit
         }
-        // Anti-downgrade: never install something that isn't strictly newer, even
-        // if the manifest was edited to point at an older APK.
-        if (info.versionCode <= currentVersionCode) {
-            _state.value = TvUpdateState.UpToDate
-            return
+        // Anti-downgrade before consent: someone already on the newest build must
+        // never be sent to Settings for an install that would then be refused.
+        when (updateGate(info.versionCode, currentVersionCode, hasInstallConsent())) {
+            UpdateGate.ALREADY_CURRENT -> {
+                _state.value = TvUpdateState.UpToDate
+                return
+            }
+            UpdateGate.NEEDS_INSTALL_CONSENT -> {
+                _state.value = TvUpdateState.NeedsInstallConsent(info, canOpenInstallSettings())
+                return
+            }
+            UpdateGate.READY_TO_INSTALL -> Unit
         }
         scope.launch {
             runCatching {
@@ -121,9 +156,77 @@ class TvUpdateManager(private val context: Context) {
     /** Reset a terminal error / "up to date" back to idle (e.g. dismiss a banner). */
     fun dismiss() {
         when (_state.value) {
-            is TvUpdateState.Error, TvUpdateState.UpToDate -> _state.value = TvUpdateState.Idle
+            is TvUpdateState.Error, TvUpdateState.UpToDate, is TvUpdateState.NeedsInstallConsent ->
+                _state.value = TvUpdateState.Idle
             else -> Unit
         }
+    }
+
+    /**
+     * Re-evaluates consent and resumes on its own if it has since been granted.
+     *
+     * Call this whenever the app comes back to the foreground. The viewer who
+     * grants consent in Settings and returns must not land back on the same
+     * "grant permission" screen they just satisfied, which is indistinguishable
+     * from the app having ignored them. Two returns are possible and this covers
+     * both: if the process survived the detour, the state is still
+     * [TvUpdateState.NeedsInstallConsent] and we continue from it; if it did not,
+     * start-up's own [checkForUpdates] finds the update again and the install
+     * proceeds with consent already in hand.
+     */
+    fun refreshInstallConsent() {
+        val pending = _state.value as? TvUpdateState.NeedsInstallConsent ?: return
+        // canRequestPackageInstalls is a binder call and this runs on onResume,
+        // so it does not belong on the main thread.
+        scope.launch { if (hasInstallConsent()) downloadAndInstall(pending.info) }
+    }
+
+    /** Whether the OS will let us commit an install session for our own package. */
+    private fun hasInstallConsent(): Boolean =
+        runCatching { context.packageManager.canRequestPackageInstalls() }.getOrDefault(false)
+
+    /**
+     * The per-app "install unknown apps" screen. Present on stock Android and
+     * Google TV; absent on Fire OS, which keeps the equivalent toggle under
+     * Developer options and does not publish this Intent at all.
+     */
+    private fun installSettingsIntent(): Intent =
+        Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:${context.packageName}"))
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+
+    /**
+     * Resolved rather than attempted, so the UI can offer written directions on
+     * a set where the screen does not exist instead of a button that does
+     * nothing. queryIntentActivities (not resolveActivity) because it stays
+     * accurate under API 30+ package visibility.
+     */
+    private fun canOpenInstallSettings(): Boolean = runCatching {
+        context.packageManager.queryIntentActivities(installSettingsIntent(), 0).isNotEmpty()
+    }.getOrDefault(false)
+
+    /**
+     * Sends the viewer to the consent screen. Returns false when there was
+     * nowhere to send them, which the caller shows as instructions.
+     */
+    fun openInstallSettings(): Boolean = runCatching {
+        context.startActivity(installSettingsIntent())
+        true
+    }.getOrDefault(false)
+
+    /**
+     * Drops every install session this app owns. Deliberately not filtered by
+     * `appPackageName`: a session abandoned before it was fully configured
+     * reports that field as null, and those are precisely the orphans worth
+     * clearing. `mySessions` is already scoped to this installer.
+     */
+    private fun abandonOrphanedSessions() {
+        runCatching {
+            val installer = context.packageManager.packageInstaller
+            installer.mySessions.forEach { session ->
+                runCatching { installer.abandonSession(session.sessionId) }
+                    .onFailure { Log.w(TAG, "Could not abandon stale install session ${session.sessionId}", it) }
+            }
+        }.onFailure { Log.w(TAG, "Could not enumerate install sessions", it) }
     }
 
     private fun fetchLatest(): TvUpdateInfo? {
@@ -213,6 +316,7 @@ class TvUpdateManager(private val context: Context) {
     }
 
     private companion object {
+        const val TAG = "TvUpdateManager"
         const val VERSION_MANIFEST_URL =
             "https://github.com/dhawal-ss/puretv/releases/download/tv-latest/tv-version.json"
     }
@@ -235,6 +339,21 @@ sealed interface TvUpdateState {
     data class Downloading(val progress: Float) : TvUpdateState
     data object Installing : TvUpdateState
     data class Error(val message: String) : TvUpdateState
+
+    /**
+     * A newer build is ready but the OS will not install it until the viewer
+     * grants "install unknown apps". Reached before anything is downloaded, so
+     * leaving for Settings from here costs nothing if the process does not
+     * survive the trip.
+     *
+     * [settingsResolvable] is false on sets that do not publish the per-app
+     * consent screen (Fire OS keeps it under Developer options), where the UI
+     * must print directions instead of offering a button that goes nowhere.
+     */
+    data class NeedsInstallConsent(
+        val info: TvUpdateInfo,
+        val settingsResolvable: Boolean,
+    ) : TvUpdateState
 }
 
 /**

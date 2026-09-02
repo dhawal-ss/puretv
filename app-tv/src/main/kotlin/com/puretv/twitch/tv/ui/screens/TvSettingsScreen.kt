@@ -133,6 +133,7 @@ fun TvSettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = koinView
                 state = updateState,
                 onCheck = { updateManager.checkForUpdates(force = true) },
                 onInstall = { info -> updateManager.downloadAndInstall(info) },
+                onGrantConsent = { updateManager.openInstallSettings() },
             )
         }
     }
@@ -319,6 +320,7 @@ private fun SoftwareUpdateSection(
     state: TvUpdateState,
     onCheck: () -> Unit,
     onInstall: (com.puretv.twitch.tv.update.TvUpdateInfo) -> Unit,
+    onGrantConsent: () -> Unit,
 ) {
     val c = PureTvTvTheme.colors
     Column {
@@ -356,6 +358,39 @@ private fun SoftwareUpdateSection(
                 Text(state.message, style = MaterialTheme.typography.bodyLarge, color = c.error)
                 Spacer(Modifier.height(16.dp))
                 TvExpressiveButton(text = "Try again", onClick = onCheck, style = TvButtonStyle.Outlined, icon = ExpressiveIcons.Refresh)
+            }
+            is TvUpdateState.NeedsInstallConsent -> {
+                Text(
+                    "Update ${state.info.versionName} is ready to install.",
+                    style = PureTvTvType.data,
+                    color = c.primary,
+                )
+                Spacer(Modifier.height(8.dp))
+                if (state.settingsResolvable) {
+                    // Nothing has been downloaded yet, so leaving for Settings
+                    // here costs nothing even if this app is stopped on the way.
+                    // Coming back re-checks consent and continues on its own.
+                    Text(
+                        "Android needs your permission before PureTV can install it. " +
+                            "Choose Allow on the next screen, then come back and the update will continue.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = c.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(16.dp))
+                    TvExpressiveButton(text = "Allow and continue", onClick = onGrantConsent, icon = ExpressiveIcons.Download)
+                } else {
+                    // Fire OS publishes no per-app consent screen, so a button
+                    // would go nowhere. Directions are the only honest option.
+                    Text(
+                        "This device has no in-app permission screen. Open Settings, " +
+                            "then My Fire TV, then Developer options, and turn on " +
+                            "Install unknown apps for PureTV. Then come back and press Check for updates.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = c.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(16.dp))
+                    TvExpressiveButton(text = "Check for updates", onClick = onCheck, style = TvButtonStyle.Outlined, icon = ExpressiveIcons.Refresh)
+                }
             }
             TvUpdateState.Idle ->
                 TvExpressiveButton(text = "Check for updates", onClick = onCheck, style = TvButtonStyle.Outlined, icon = ExpressiveIcons.Refresh)
