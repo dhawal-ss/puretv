@@ -5,8 +5,11 @@ import android.content.Context
 import android.content.ContextWrapper
 import android.view.WindowManager
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -31,6 +34,10 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.ui.PlayerView
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import androidx.tv.material3.MaterialTheme
+import androidx.tv.material3.Text
 import com.puretv.twitch.core.model.StreamQuality
 import com.puretv.twitch.tv.player.TvPlayer
 import com.puretv.twitch.tv.ui.StreamViewModel
@@ -179,8 +186,14 @@ fun TvStreamScreen(
                         if (chatVisible) { chatVisible = false; true } else false
                     }
                     Key.DirectionCenter, Key.Enter, Key.NumPadEnter, Key.MediaPlayPause -> {
-                        tvPlayer.togglePlayPause()
-                        isPlaying = tvPlayer.exoPlayer.isPlaying
+                        // With no playable URL there is nothing to pause, so OK
+                        // becomes the retry affordance the error panel advertises.
+                        if (state.playbackError != null) {
+                            viewModel.retry()
+                        } else {
+                            tvPlayer.togglePlayPause()
+                            isPlaying = tvPlayer.exoPlayer.isPlaying
+                        }
                         true
                     }
                     Key.MediaFastForward -> {
@@ -223,6 +236,30 @@ fun TvStreamScreen(
                 },
                 update = { view -> view.player = tvPlayer.exoPlayer },
             )
+        }
+
+        // Resolution failed: say so instead of leaving a black rectangle. Not
+        // tied to `controlsVisible` — the auto-hide timer must never take the
+        // only explanation of the failure away with it.
+        if (state.playbackError != null) {
+            Column(
+                modifier = Modifier.fillMaxSize().padding(48.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterVertically),
+            ) {
+                Text(
+                    text = state.playbackError!!,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = PureTvTvTheme.colors.onSurface,
+                    textAlign = TextAlign.Center,
+                )
+                Text(
+                    text = "Press OK to try again, or BACK to choose another channel.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = PureTvTvTheme.colors.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
+                )
+            }
         }
 
         TvControlsOverlay(
