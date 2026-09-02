@@ -64,3 +64,8 @@ Thumbs.db
 # Upstream ad-block reference userscript. Not part of any build; see
 # docs/ADBLOCK-REFERENCE.md for the pinned upstream URL and sha256.
 vaft.user.js
+
+# Release APKs staged at the repo root for upload (the release process copies
+# the signed build here under the exact asset name the in-app updater expects).
+# Build output, never source: a 6.4MB binary that must not land in history.
+/*.apk
