@@ -11,6 +11,30 @@ release notes automatically.
 
 ---
 
+## Android 1.1.3 and Android TV 1.2.4 - 2026-09-01
+
+Updating itself is the fix, on both the phone and TV apps. Windows is unchanged.
+
+### Fixed
+- **Updating no longer strands the app.** The app used to start downloading an
+  update and only then ask Android for permission to install it, so the trip to
+  the system permission screen happened part-way through, with a downloaded file
+  and a half-open install already in progress. Some televisions did not come back
+  from that, leaving an app that would not open at all. Permission is now asked
+  for first, before anything is downloaded, so there is nothing in progress to
+  lose.
+- **Allowing it is only asked for once.** Coming back from the permission screen
+  used to land you right back on the screen asking for the permission you had
+  just given. The app now sees that it has been granted and gets on with the
+  update, at most asking you to press install one more time.
+- **The permission screen is found on more devices.** Some televisions list it
+  per-app and some only have a general one, and only the first was looked for.
+  Both are now, and on sets that have neither the app prints the exact menu path
+  instead of offering a button that does nothing.
+- **Unfinished updates are cleared away.** Every interrupted attempt used to
+  leave something behind, and enough of them would eventually stop new updates
+  from starting at all.
+
 ## Android TV 1.2.3 - 2026-09-01
 
 A black screen now explains itself. Android and Windows are unchanged.

@@ -17,6 +17,7 @@ import androidx.core.view.WindowCompat
 import androidx.media3.common.util.UnstableApi
 import androidx.navigation.compose.rememberNavController
 import com.puretv.twitch.android.player.TwitchPlayer
+import com.puretv.twitch.android.update.AndroidUpdateManager
 import com.puretv.twitch.android.ui.RootScreen
 import com.puretv.twitch.android.ui.Routes
 import com.puretv.twitch.android.data.AppSettingsStore
@@ -149,6 +150,18 @@ class MainActivity : ComponentActivity() {
                     shapeIntensity.value = ShapeIntensity.fromKey(settings.shapeIntensity)
                 }
         }
+    }
+
+    /**
+     * Picks the update back up after the viewer has been to system Settings to
+     * grant "install unknown apps". Nothing was downloaded before they left, by
+     * design, so this only re-reads consent and starts the deferred install.
+     * Best-effort, and never worth taking the Activity down for.
+     */
+    override fun onResume() {
+        super.onResume()
+        runCatching { getKoin().get<AndroidUpdateManager>().refreshInstallConsent() }
+            .onFailure { Log.w(TAG, "Could not re-check install consent", it) }
     }
 
     /**

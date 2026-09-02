@@ -12,6 +12,17 @@
          consent the first time; this permission is what lets us ask. -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
+    <!-- Package visibility (API 30+): the updater resolves the "install unknown
+         apps" consent screen before offering a button for it, and resolution is
+         filtered like any other cross-package lookup. Without this the match can
+         come back empty on some builds and a device that HAS the screen gets the
+         written directions instead. -->
+    <queries>
+        <intent>
+            <action android:name="android.settings.MANAGE_UNKNOWN_APP_SOURCES" />
+        </intent>
+    </queries>
+
     <application
         android:name=".PureTvApp"
         android:allowBackup="false"

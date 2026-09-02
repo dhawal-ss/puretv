@@ -8,6 +8,7 @@ import androidx.activity.compose.setContent
 import androidx.compose.runtime.mutableStateOf
 import androidx.media3.common.util.UnstableApi
 import com.puretv.twitch.tv.data.AppSettingsStore
+import com.puretv.twitch.tv.update.TvUpdateManager
 import com.puretv.twitch.tv.ui.PureTvTvNavHost
 import com.puretv.twitch.tv.ui.theme.PureTvTvTheme
 import com.puretv.twitch.tv.ui.theme.ThemeVariant
@@ -73,6 +74,23 @@ class TvMainActivity : ComponentActivity() {
                 PureTvTvNavHost()
             }
         }
+    }
+
+    /**
+     * Picks the update back up after the viewer has been to system Settings to
+     * grant "install unknown apps".
+     *
+     * Nothing was downloaded before they left, by design, so there is no
+     * in-flight work to resume: this only re-reads consent and, if it is now
+     * granted, starts the install that was deferred. Without it the viewer
+     * returns to the very screen asking for the permission they just gave,
+     * which reads as the app having ignored them. Best-effort, and never worth
+     * taking the Activity down for.
+     */
+    override fun onResume() {
+        super.onResume()
+        runCatching { getKoin().get<TvUpdateManager>().refreshInstallConsent() }
+            .onFailure { Log.w(TAG, "Could not re-check install consent", it) }
     }
 
     override fun onDestroy() {

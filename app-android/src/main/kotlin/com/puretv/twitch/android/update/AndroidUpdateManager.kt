@@ -6,6 +6,10 @@ import android.content.Intent
 import android.content.pm.PackageInstaller
 import android.net.Uri
 import android.os.Build
+import android.provider.Settings
+import android.util.Log
+import com.puretv.twitch.core.update.UpdateGate
+import com.puretv.twitch.core.update.updateGate
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -19,6 +23,7 @@ import okhttp3.Request
 import org.json.JSONObject
 import java.io.File
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * SECTION 09, in-app updater for the sideloaded phone/tablet APK, over GitHub
@@ -44,6 +49,20 @@ class AndroidUpdateManager(private val context: Context) {
         .readTimeout(60, TimeUnit.SECONDS)
         .build()
 
+    /**
+     * Claims the install path exactly once.
+     *
+     * The state check below is read-then-write and therefore racy, and this
+     * change made the race reachable: [refreshInstallConsent] fires from
+     * onResume, which can run more than once in quick succession, and a TV
+     * remote's OK button is easy to press twice. Two callers could both read
+     * a non-installing state before either wrote [AndroidUpdateState.Downloading],
+     * and the loser used to go on to a second download and a second committed
+     * session. Sessions that overlap like that are precisely what this change
+     * exists to stop leaving behind.
+     */
+    private val installInFlight = AtomicBoolean(false)
+
     private val _state = MutableStateFlow<AndroidUpdateState>(AndroidUpdateState.Idle)
     val state: StateFlow<AndroidUpdateState> = _state.asStateFlow()
 
@@ -60,6 +79,18 @@ class AndroidUpdateManager(private val context: Context) {
     private fun packageInfo() = context.packageManager.getPackageInfo(context.packageName, 0)
 
     init {
+        // Anything still open belongs to an update that did not finish: a
+        // successful one replaces this process, so a surviving session by
+        // definition did not succeed. They are never resumed, and the OS caps how
+        // many an installer may hold, so sweeping at start-up is what keeps a
+        // string of interrupted updates from eventually making createSession fail.
+        //
+        // On `scope` (IO) rather than inline: this singleton can first be resolved
+        // from the Activity's onResume, on the main thread, and mySessions and
+        // abandonSession are binder calls. Construction stays cheap wherever it
+        // happens, which is the same rule the rest of start-up follows.
+        scope.launch { abandonOrphanedSessions() }
+
         // Surface a failed system-side install (the user cancelled the confirm
         // dialog, signature mismatch, etc.) back into our UI. Success replaces the
         // running app, so there's nothing to show for it.
@@ -93,26 +124,62 @@ class AndroidUpdateManager(private val context: Context) {
         }
     }
 
-    /** Downloads [info]'s APK and launches the system installer. */
+    /**
+     * Downloads [info]'s APK and launches the system installer, but only once
+     * the OS has agreed to let us install at all.
+     *
+     * The consent check happens HERE, before the download and before any
+     * session exists. A sideloaded app has no "install unknown apps" consent
+     * until the viewer grants it, and granting it means leaving for system
+     * Settings. Committing a session first meant that detour started with an APK
+     * on disk and a live installer session, and the app did not reliably come
+     * back from it (reported on TV, same code shape here). Asking first means the
+     * viewer leaves while this app holds nothing at all.
+     */
     fun downloadAndInstall(info: AndroidUpdateInfo) {
-        when (_state.value) {
-            is AndroidUpdateState.Downloading, AndroidUpdateState.Installing -> return
-            else -> Unit
-        }
-        // Anti-downgrade: never install something that isn't strictly newer, even
-        // if the manifest was edited to point at an older APK.
-        if (info.versionCode <= currentVersionCode) {
-            _state.value = AndroidUpdateState.UpToDate
-            return
-        }
+        // Claimed before anything else, so a second caller cannot slip between
+        // the gate and the first state write.
+        if (!installInFlight.compareAndSet(false, true)) return
         scope.launch {
-            runCatching {
-                _state.value = AndroidUpdateState.Downloading(0f)
-                val apk = downloadApk(info)
-                _state.value = AndroidUpdateState.Installing
-                installApk(apk)
-            }.onFailure { e ->
-                _state.value = AndroidUpdateState.Error(e.message ?: "Update failed.")
+            try {
+                when (_state.value) {
+                    is AndroidUpdateState.Downloading, AndroidUpdateState.Installing -> return@launch
+                    else -> Unit
+                }
+                // The gate itself runs here rather than on the caller's thread.
+                // Every branch of it reads the package manager (getPackageInfo,
+                // canRequestPackageInstalls, and up to two queryIntentActivities),
+                // and the caller is a button press on the main thread. Those are
+                // binder round-trips and this is the primary user-initiated path,
+                // which is exactly where they must not block the frame.
+                //
+                // Anti-downgrade before consent: someone already on the newest
+                // build must never be sent to Settings for an install that would
+                // then be refused.
+                when (updateGate(info.versionCode, currentVersionCode, hasInstallConsent())) {
+                    UpdateGate.ALREADY_CURRENT -> {
+                        _state.value = AndroidUpdateState.UpToDate
+                        return@launch
+                    }
+                    UpdateGate.NEEDS_INSTALL_CONSENT -> {
+                        _state.value = AndroidUpdateState.NeedsInstallConsent(info, canOpenInstallSettings())
+                        return@launch
+                    }
+                    UpdateGate.READY_TO_INSTALL -> Unit
+                }
+                runCatching {
+                    _state.value = AndroidUpdateState.Downloading(0f)
+                    val apk = downloadApk(info)
+                    _state.value = AndroidUpdateState.Installing
+                    installApk(apk)
+                }.onFailure { e ->
+                    _state.value = AndroidUpdateState.Error(e.message ?: "Update failed.")
+                }
+            } finally {
+                // By here the state is Installing (the system confirm dialog is
+                // up, and the ordinary guard blocks re-entry) or Error (a retry
+                // is exactly what should be allowed), so releasing is safe.
+                installInFlight.set(false)
             }
         }
     }
@@ -120,9 +187,126 @@ class AndroidUpdateManager(private val context: Context) {
     /** Reset a terminal error / "up to date" back to idle (e.g. dismiss a banner). */
     fun dismiss() {
         when (_state.value) {
-            is AndroidUpdateState.Error, AndroidUpdateState.UpToDate -> _state.value = AndroidUpdateState.Idle
+            is AndroidUpdateState.Error, AndroidUpdateState.UpToDate, is AndroidUpdateState.NeedsInstallConsent ->
+                _state.value = AndroidUpdateState.Idle
             else -> Unit
         }
+    }
+
+    /**
+     * Re-evaluates consent and resumes if it has since been granted. Call from
+     * the Activity's onResume: the viewer who grants consent and comes back must
+     * not land on the screen asking for what they just gave.
+     *
+     * Auto-continues only when the process survived the detour. If it did not,
+     * start-up re-surfaces the update and the next press passes the consent gate
+     * rather than dead-ending at the installer.
+     */
+    fun refreshInstallConsent() {
+        // All of this touches the package manager, and onResume is the main
+        // thread, so none of it is done here.
+        scope.launch {
+            // A confirm dialog whose result never reached the receiver leaves
+            // Installing set for the rest of the process, and every other entry
+            // point declines to leave that state, so the Settings screen would
+            // show a spinner forever. Being foregrounded again with none of our
+            // own sessions still open is good evidence it is over, however it
+            // ended.
+            if (_state.value == AndroidUpdateState.Installing && !hasOpenSession()) {
+                _state.value = AndroidUpdateState.Idle
+            }
+            val pending = _state.value as? AndroidUpdateState.NeedsInstallConsent ?: return@launch
+            if (hasInstallConsent()) downloadAndInstall(pending.info)
+        }
+    }
+
+    /** Whether any install session of ours is still open. */
+    private fun hasOpenSession(): Boolean = runCatching {
+        context.packageManager.packageInstaller.mySessions.isNotEmpty()
+    }.getOrDefault(false)
+
+    /** Whether the OS will let us commit an install session for our own package. */
+    private fun hasInstallConsent(): Boolean =
+        runCatching { context.packageManager.canRequestPackageInstalls() }.getOrDefault(false)
+
+    /** The per-app "install unknown apps" screen. Absent on some OEM builds. */
+    private fun packageScopedInstallSettings(): Intent =
+        Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:" + context.packageName))
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+
+    private fun bareInstallSettings(): Intent =
+        Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+
+    /**
+     * The first of the two forms this device actually resolves, or null when it
+     * publishes neither.
+     *
+     * Both are probed because intent resolution only matches a filter that
+     * declares a `<data>` scheme when the Intent carries a URI. A build whose
+     * Settings activity declares the action without `scheme="package"` resolves
+     * the bare form and NOT the package-scoped one, which would otherwise be
+     * read as "this device has no consent screen" and downgrade a working set to
+     * the written directions. Package-scoped is tried first because it lands
+     * directly on this app's row instead of a list to hunt through.
+     */
+    private fun resolvableInstallSettings(): Intent? = runCatching {
+        listOf(packageScopedInstallSettings(), bareInstallSettings())
+            .firstOrNull { context.packageManager.queryIntentActivities(it, 0).isNotEmpty() }
+    }.getOrNull()
+
+    /**
+     * Resolved rather than attempted, so the UI can print directions where the
+     * screen does not exist instead of offering a button that does nothing.
+     * Package-visibility filtering applies to this the same way it applies to
+     * resolveActivity, so the manifest declares a <queries> entry for the action;
+     * without it an OEM build could filter the match and downgrade a capable
+     * device to the directions text.
+     */
+    private fun canOpenInstallSettings(): Boolean = resolvableInstallSettings() != null
+
+    /**
+     * Sends the viewer to the consent screen.
+     *
+     * When there is nowhere to send them, or the launch is refused, the state
+     * drops to the written-directions variant rather than leaving a button that
+     * silently does nothing. settingsResolvable was decided at gate time and the
+     * launch can still fail after it, so this is the only place to catch that.
+     */
+    fun openInstallSettings() {
+        scope.launch {
+            val intent = resolvableInstallSettings()
+            val launched = intent != null &&
+                runCatching { context.startActivity(intent); true }.getOrDefault(false)
+            if (launched) return@launch
+            val pending = _state.value as? AndroidUpdateState.NeedsInstallConsent ?: return@launch
+            _state.value = pending.copy(settingsResolvable = false)
+        }
+    }
+
+    /**
+     * Drops every install session this app owns. Deliberately not filtered by
+     * `appPackageName`: a session abandoned before it was fully configured
+     * reports that field as null, and those are precisely the orphans worth
+     * clearing. `mySessions` is already scoped to this installer.
+     */
+    private fun abandonOrphanedSessions() {
+        runCatching {
+            val installer = context.packageManager.packageInstaller
+            installer.mySessions.forEach { session ->
+                // A committed session is waiting on the system confirm dialog,
+                // which outlives this process. Abandoning that would cancel an
+                // install the viewer is being asked about right now, so only
+                // sessions still open for writing are swept. isCommitted arrived
+                // in API 29; below it the distinction is not observable, and
+                // there the leak is the worse of the two problems.
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && session.isCommitted) {
+                    return@forEach
+                }
+                runCatching { installer.abandonSession(session.sessionId) }
+                    .onFailure { Log.w(TAG, "Could not abandon stale install session " + session.sessionId, it) }
+            }
+        }.onFailure { Log.w(TAG, "Could not enumerate install sessions", it) }
     }
 
     private fun fetchLatest(): AndroidUpdateInfo? {
@@ -212,6 +396,7 @@ class AndroidUpdateManager(private val context: Context) {
     }
 
     private companion object {
+        const val TAG = "AndroidUpdateManager"
         const val VERSION_MANIFEST_URL =
             "https://github.com/dhawal-ss/puretv/releases/download/android-latest/android-version.json"
     }
@@ -234,6 +419,18 @@ sealed interface AndroidUpdateState {
     data class Downloading(val progress: Float) : AndroidUpdateState
     data object Installing : AndroidUpdateState
     data class Error(val message: String) : AndroidUpdateState
+
+    /**
+     * A newer build is ready but the OS will not install it until the viewer
+     * grants "install unknown apps". Reached before anything is downloaded, so
+     * leaving for Settings from here costs nothing if the process does not
+     * survive the trip. [settingsResolvable] is false where the per-app consent
+     * screen does not exist and the UI must print directions instead.
+     */
+    data class NeedsInstallConsent(
+        val info: AndroidUpdateInfo,
+        val settingsResolvable: Boolean,
+    ) : AndroidUpdateState
 }
 
 /**

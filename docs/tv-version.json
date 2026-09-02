@@ -1,6 +1,6 @@
 {
-  "versionCode": 7,
-  "versionName": "1.2.3",
+  "versionCode": 8,
+  "versionName": "1.2.4",
   "apkUrl": "https://github.com/dhawal-ss/puretv/releases/download/tv-latest/PureTV-FireTV-AndroidTV.apk",
-  "notes": "When a stream cannot be loaded, the app now says why instead of showing a black screen. It also catches a case where Twitch refused the stream but the app treated the refusal as success, which left the player with nothing to play and no way to report it. Press OK to try again."
+  "notes": "Updating is fixed. The app used to start downloading an update and only then ask Android for permission to install it, which interrupted the update part-way through and could leave the app unable to open afterwards. Permission is now asked for first, before anything is downloaded, and once you allow it the update carries on by itself. Unfinished update attempts are also cleared away instead of piling up."
 }

@@ -145,6 +145,7 @@ fun SettingsScreen(onBack: () -> Unit) {
             state = updateState,
             onCheck = { updateManager.checkForUpdates(force = true) },
             onInstall = { info -> updateManager.downloadAndInstall(info) },
+            onGrantConsent = { updateManager.openInstallSettings() },
         )
         Spacer(Modifier.height(24.dp))
     }
@@ -433,6 +434,7 @@ private fun AboutPanel(
     state: AndroidUpdateState,
     onCheck: () -> Unit,
     onInstall: (AndroidUpdateInfo) -> Unit,
+    onGrantConsent: () -> Unit,
 ) {
     val c = PureTvTheme.colors
     ExpressivePanel {
@@ -498,6 +500,39 @@ private fun AboutPanel(
                     Text(state.message, style = MaterialTheme.typography.bodyMedium, color = c.error)
                     Spacer(Modifier.height(12.dp))
                     ExpressiveButton(text = "Try again", onClick = onCheck, style = ExpressiveButtonStyle.Outlined)
+                }
+                is AndroidUpdateState.NeedsInstallConsent -> {
+                    Spacer(Modifier.height(20.dp))
+                    ExpressiveDivider()
+                    Spacer(Modifier.height(20.dp))
+                    Text(
+                        "Update ${state.info.versionName} is ready to install.",
+                        style = PureTvType.data,
+                        color = c.primary,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    if (state.settingsResolvable) {
+                        // Nothing is downloaded yet, so leaving for Settings costs
+                        // nothing even if this app is stopped on the way back.
+                        Text(
+                            "Android needs your permission before PureTV can install it. " +
+                                "Choose Allow on the next screen, then come back and the update will continue.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = c.onSurfaceVariant,
+                        )
+                        Spacer(Modifier.height(12.dp))
+                        ExpressiveButton(text = "Allow and continue", onClick = onGrantConsent)
+                    } else {
+                        Text(
+                            "This device has no in-app permission screen. Open Settings, find Apps, " +
+                                "then Special app access, then Install unknown apps, and turn it on for " +
+                                "PureTV. Then come back and press Check for updates.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = c.onSurfaceVariant,
+                        )
+                        Spacer(Modifier.height(12.dp))
+                        ExpressiveButton(text = "Check for updates", onClick = onCheck, style = ExpressiveButtonStyle.Outlined)
+                    }
                 }
                 AndroidUpdateState.Idle -> {
                     Spacer(Modifier.height(20.dp))

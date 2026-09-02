@@ -178,10 +178,15 @@ fun TvHomeScreen(
             verticalArrangement = Arrangement.spacedBy(32.dp),
         ) {
             // Quality-of-life: a newer TV APK is available — one click jumps to
-            // Settings where the download & install lives. Only shows when the
-            // launch/Settings check actually found a newer build.
-            (updateState as? TvUpdateState.Available)?.let { available ->
-                UpdateBanner(available = available, onOpenSettings = onOpenSettings)
+            // Settings where the download & install lives. NeedsInstallConsent
+            // counts too: that is the state where the update is furthest along
+            // and most easily forgotten, since it is waiting on the viewer.
+            when (val u = updateState) {
+                is TvUpdateState.Available -> u.info.versionName
+                is TvUpdateState.NeedsInstallConsent -> u.info.versionName
+                else -> null
+            }?.let { versionName ->
+                UpdateBanner(versionName = versionName, onOpenSettings = onOpenSettings)
             }
 
             hero?.let { h ->
@@ -325,7 +330,7 @@ private fun heroMetaLine(stream: StreamInfo, followedLive: Boolean): String = bu
 
 /** Update-available banner: tertiary tonal strip, jumps to Settings to install. */
 @Composable
-private fun UpdateBanner(available: TvUpdateState.Available, onOpenSettings: () -> Unit) {
+private fun UpdateBanner(versionName: String, onOpenSettings: () -> Unit) {
     val c = PureTvTvTheme.colors
     Row(
         modifier = Modifier
@@ -337,7 +342,7 @@ private fun UpdateBanner(available: TvUpdateState.Available, onOpenSettings: () 
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
         Text(
-            "Update available: ${available.info.versionName}",
+            "Update available: $versionName",
             style = MaterialTheme.typography.titleMedium,
             color = c.onTertiaryContainer,
         )
