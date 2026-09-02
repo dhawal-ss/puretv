@@ -11,6 +11,17 @@ release notes automatically.
 
 ---
 
+## 1.11.2 - 2026-09-01
+
+Windows catches up with a fix the phone and TV apps already shipped. Nothing
+else changed on the desktop app.
+
+### Fixed
+- **A stream Twitch refuses no longer pretends to load.** When Twitch turned
+  down a request for a stream, the app took the refusal for the stream itself
+  and handed the player an address that could never produce video, so the
+  window simply sat there. Those refusals are now recognised and reported.
+
 ## Android 1.1.3 and Android TV 1.2.4 - 2026-09-01
 
 Updating itself is the fix, on both the phone and TV apps. Windows is unchanged.
