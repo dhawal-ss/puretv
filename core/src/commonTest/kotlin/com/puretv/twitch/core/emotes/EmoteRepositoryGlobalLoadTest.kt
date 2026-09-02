@@ -1,5 +1,6 @@
 package com.puretv.twitch.core.emotes
 
+import com.puretv.twitch.core.CallCounter
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
@@ -19,13 +20,15 @@ class EmoteRepositoryGlobalLoadTest {
     private val bttvGlobal = """[{"id":"b1","code":"FeelsGood","imageType":"png"}]"""
 
     @Test fun transientBttvFailureDoesNotPoisonTheSession() = runTest {
-        var bttvCalls = 0
+        // EmoteRepository loads its providers with async, so this handler runs on
+        // more than one thread. incrementAndGet reads back the value it just
+        // stored, which is what the first-call branch below needs.
+        val bttvCalls = CallCounter()
         val engine = MockEngine { request ->
             val url = request.url.toString()
             when {
                 "betterttv" in url -> {
-                    bttvCalls++
-                    if (bttvCalls == 1) respond("err", HttpStatusCode.InternalServerError)
+                    if (bttvCalls.incrementAndGet() == 1) respond("err", HttpStatusCode.InternalServerError)
                     else respond(bttvGlobal, HttpStatusCode.OK, jsonHeaders)
                 }
                 "7tv.io" in url -> respond(sevenTvGlobal, HttpStatusCode.OK, jsonHeaders)

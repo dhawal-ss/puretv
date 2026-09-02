@@ -1,5 +1,6 @@
 package com.puretv.twitch.core.follows
 
+import com.puretv.twitch.core.CallCounter
 import com.puretv.twitch.core.api.TwitchApiClient
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
@@ -45,8 +46,10 @@ class FollowedChannelsServiceTest {
     }
 
     @Test fun paginatesFollowsChunksLiveAndProfilesThenMerges() = runTest {
-        var streamCalls = 0
-        var userCalls = 0
+        // Counted under a lock: the service fetches these chunks with async, so
+        // the handler below runs on more than one thread.
+        val streamCalls = CallCounter()
+        val userCalls = CallCounter()
         val engine = MockEngine { request ->
             val url = request.url
             when {
@@ -56,11 +59,11 @@ class FollowedChannelsServiceTest {
                     else respond(followsPage(followLogins.drop(100), null), HttpStatusCode.OK, jsonHeaders)
                 }
                 url.encodedPath.endsWith("/streams") -> {
-                    streamCalls++
+                    streamCalls.incrementAndGet()
                     respond(streamsFor(url.parameters.getAll("user_login").orEmpty()), HttpStatusCode.OK, jsonHeaders)
                 }
                 url.encodedPath.endsWith("/users") -> {
-                    userCalls++
+                    userCalls.incrementAndGet()
                     respond(usersFor(url.parameters.getAll("id").orEmpty()), HttpStatusCode.OK, jsonHeaders)
                 }
                 else -> respond("", HttpStatusCode.NotFound)
@@ -75,8 +78,8 @@ class FollowedChannelsServiceTest {
 
         assertEquals(3, result.live.size, "3 followed channels are live")
         assertEquals(117, result.offline.size, "the rest are offline")
-        assertEquals(2, streamCalls, "120 logins must be chunked into 2 /streams calls (100 + 20)")
-        assertEquals(2, userCalls, "120 ids must be chunked into 2 /users calls (100 + 20)")
+        assertEquals(2, streamCalls.get(), "120 logins must be chunked into 2 /streams calls (100 + 20)")
+        assertEquals(2, userCalls.get(), "120 ids must be chunked into 2 /users calls (100 + 20)")
         // Live sorted by viewers desc: c2 (102) > c1 (101) > c0 (100)
         assertEquals(listOf("c2", "c1", "c0"), result.live.map { it.login })
         assertEquals("http://a/c2.png", result.live.first().avatarUrl)
@@ -173,14 +176,14 @@ class FollowedChannelsServiceTest {
     }
 
     @Test fun secondLoadReusesCachedProfilesAndSkipsUsersCall() = runTest {
-        var userCalls = 0
+        val userCalls = CallCounter()
         val engine = MockEngine { request ->
             val url = request.url
             when {
                 url.encodedPath.endsWith("/channels/followed") -> respond(followsPage(listOf("c0", "c1"), null), HttpStatusCode.OK, jsonHeaders)
                 url.encodedPath.endsWith("/streams") -> respond(streamsFor(url.parameters.getAll("user_login").orEmpty()), HttpStatusCode.OK, jsonHeaders)
                 url.encodedPath.endsWith("/users") -> {
-                    userCalls++
+                    userCalls.incrementAndGet()
                     respond(usersFor(url.parameters.getAll("id").orEmpty()), HttpStatusCode.OK, jsonHeaders)
                 }
                 else -> respond("", HttpStatusCode.NotFound)
@@ -194,7 +197,7 @@ class FollowedChannelsServiceTest {
         service.load("user123", localPins = emptyList()) {}          // first load populates the profile cache
         val second = service.load("user123", localPins = emptyList()) {}
 
-        assertEquals(1, userCalls, "profiles are cached: the second load must not re-fetch /users")
+        assertEquals(1, userCalls.get(), "profiles are cached: the second load must not re-fetch /users")
         // The cached profile is still applied on the second pass.
         assertEquals("http://a/c0.png", (second.live + second.offline).first { it.login == "c0" }.avatarUrl)
     }
