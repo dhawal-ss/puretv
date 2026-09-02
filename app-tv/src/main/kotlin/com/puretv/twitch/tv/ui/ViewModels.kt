@@ -1,5 +1,6 @@
 package com.puretv.twitch.tv.ui
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.puretv.twitch.core.adblock.AdBlockEngine
@@ -342,6 +343,15 @@ data class StreamUiState(
     val adBlockStatus: AdBlockStatus = AdBlockStatus.UNKNOWN,
     val chatMessages: List<ChatMessage> = emptyList(),
     val isLoading: Boolean = true,
+    /**
+     * Why playback could not start, or null while it is fine. Stream resolution
+     * is the ONLY path that produces [playableUrl], so when it fails the screen
+     * has nothing to render: without this the viewer gets a black rectangle with
+     * no audio and no explanation, and chat keeps scrolling beside it (it is a
+     * separate coroutine), which reads as "the app works, the stream is gone".
+     * Mirrors the phone app's `StreamUiState.playbackError`.
+     */
+    val playbackError: String? = null,
 )
 
 class StreamViewModel(
@@ -364,10 +374,7 @@ class StreamViewModel(
             }.getOrNull()
             _state.update { it.copy(channel = channel, streamInfo = liveInfo, isLoading = false) }
 
-            runCatching { streamRepository.resolvePlayableStream(channelLogin) }
-                .onSuccess { playable ->
-                    _state.update { it.copy(playableUrl = playable.masterUrl) }
-                }
+            resolvePlayable()
 
             runCatching { emoteRepository.loadGlobalEmotes() }
             channel?.let { runCatching { emoteRepository.loadChannelEmotes(it.id, it.login) } }
@@ -393,6 +400,37 @@ class StreamViewModel(
         }
     }
 
+    /**
+     * Resolve the signed master-playlist URL the player consumes.
+     *
+     * The failure branch is the point of this function. `runCatching { }` with
+     * only an `onSuccess` swallows every cause — a GQL schema change, a blocked
+     * usher host, an offline channel, a dead network — and leaves [playableUrl]
+     * null, which the screen renders as an indistinguishable black frame. Every
+     * one of those needs a different fix, so the message is surfaced verbatim
+     * and logged under [TAG] for `adb logcat`.
+     */
+    private suspend fun resolvePlayable() {
+        _state.update { it.copy(playbackError = null) }
+        runCatching { streamRepository.resolvePlayableStream(channelLogin) }
+            .onSuccess { playable ->
+                _state.update { it.copy(playableUrl = playable.masterUrl, playbackError = null) }
+            }
+            .onFailure { e ->
+                Log.w(TAG, "Stream resolution failed for $channelLogin", e)
+                val detail = e.message?.takeIf { it.isNotBlank() } ?: e::class.simpleName.orEmpty()
+                _state.update {
+                    it.copy(
+                        playbackError = "Could not load this stream. It may be offline." +
+                            if (detail.isBlank()) "" else "\n\n$detail",
+                    )
+                }
+            }
+    }
+
+    /** Re-run resolution after a failure (OK on the remote). */
+    fun retry() = viewModelScope.launch { resolvePlayable() }
+
     fun sendChatMessage(text: String) = viewModelScope.launch {
         chatClient.sendMessage(channelLogin, text)
     }
@@ -400,6 +438,10 @@ class StreamViewModel(
     override fun onCleared() {
         super.onCleared()
         chatClient.disconnect()
+    }
+
+    private companion object {
+        const val TAG = "StreamViewModel"
     }
 }
 

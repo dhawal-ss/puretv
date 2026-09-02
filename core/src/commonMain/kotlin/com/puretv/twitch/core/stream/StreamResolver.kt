@@ -8,6 +8,7 @@ import io.ktor.client.HttpClient
 import io.ktor.client.request.get
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.encodeURLParameter
+import io.ktor.http.isSuccess
 import kotlin.random.Random
 
 /**
@@ -51,7 +52,24 @@ class StreamResolver(
             "&transcode_mode=cbr_v1"
     }
 
-    /** One-shot: token -> master URL -> raw master playlist text. */
+    /**
+     * One-shot: token -> master URL -> raw master playlist text.
+     *
+     * The usher fetch is VALIDATED before the result is handed back. The shared
+     * Ktor client does not do it for us: `expectSuccess` defaults to false and
+     * `CoreModule`'s `HttpResponseValidator` is deliberately scoped to Helix, so
+     * a usher rejection arrives as an ordinary response whose body is a JSON
+     * error array rather than a playlist (live capture, 2026-09-01:
+     * `403 [{"url":"…","error":"Signature is invalid"}]`).
+     *
+     * Without these checks that body was returned as a SUCCESS — `parseVariants`
+     * simply found no `#EXT-X-STREAM-INF` and produced an empty ladder, while
+     * `masterUrl` pointed at a URL that can never produce media. The caller then
+     * stored it as the playable URL and the player failed on it with nothing to
+     * report, which is a black screen with no audio, no error, and a working
+     * chat beside it. Fail here instead, naming the status, so the cause reaches
+     * the UI and the log.
+     */
     suspend fun resolveMasterPlaylist(
         channelLogin: String,
         oauthToken: String? = null,
@@ -59,7 +77,24 @@ class StreamResolver(
     ): MasterPlaylistResult {
         val token = fetchToken(channelLogin, oauthToken, playerType)
         val url = buildMasterUrl(channelLogin, token)
-        val raw = httpClient.get(url).bodyAsText()
+        val response = httpClient.get(url)
+        val raw = response.bodyAsText()
+
+        if (!response.status.isSuccess()) {
+            throw UsherPlaylistException(
+                "usher refused the master playlist for \"$channelLogin\" (playerType=$playerType): " +
+                    "HTTP ${response.status.value} ${response.status.description}. ${raw.summarize()}",
+            )
+        }
+        // A 200 is not proof of a playlist: usher answers some rejections with a
+        // JSON body and a success status.
+        if (!raw.trimStart().startsWith("#EXTM3U")) {
+            throw UsherPlaylistException(
+                "usher returned HTTP ${response.status.value} for \"$channelLogin\" but the body is not an " +
+                    "HLS playlist. ${raw.summarize()}",
+            )
+        }
+
         return MasterPlaylistResult(masterUrl = url, rawContent = raw, variants = parseVariants(raw))
     }
 
@@ -180,6 +215,20 @@ object HlsMasterParser {
         flush()
         return map
     }
+}
+
+/**
+ * The playback token minted, but usher would not hand back a master playlist —
+ * a rejected/expired signature, a geo- or subscriber-blackout, or a channel that
+ * went offline between the mint and the fetch. Distinct from
+ * [GqlPlaybackTokenException], which means the token itself was never issued.
+ */
+class UsherPlaylistException(message: String) : Exception(message)
+
+/** First line of a response body, bounded, for putting in an error message. */
+private fun String.summarize(limit: Int = 180): String {
+    val firstLine = lineSequence().firstOrNull { it.isNotBlank() }?.trim().orEmpty()
+    return if (firstLine.length <= limit) firstLine else firstLine.take(limit) + "…"
 }
 
 data class MasterPlaylistResult(
