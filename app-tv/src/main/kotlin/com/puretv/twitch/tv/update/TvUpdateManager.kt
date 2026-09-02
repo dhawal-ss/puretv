@@ -23,6 +23,7 @@ import okhttp3.Request
 import org.json.JSONObject
 import java.io.File
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * SECTION 09 — in-app updater for the sideloaded TV APK, over GitHub Releases.
@@ -48,6 +49,20 @@ class TvUpdateManager(private val context: Context) {
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(60, TimeUnit.SECONDS)
         .build()
+
+    /**
+     * Claims the install path exactly once.
+     *
+     * The state check below is read-then-write and therefore racy, and this
+     * change made the race reachable: [refreshInstallConsent] fires from
+     * onResume, which can run more than once in quick succession, and a TV
+     * remote's OK button is easy to press twice. Two callers could both read
+     * a non-installing state before either wrote [TvUpdateState.Downloading],
+     * and the loser used to go on to a second download and a second committed
+     * session. Sessions that overlap like that are precisely what this change
+     * exists to stop leaving behind.
+     */
+    private val installInFlight = AtomicBoolean(false)
 
     private val _state = MutableStateFlow<TvUpdateState>(TvUpdateState.Idle)
     val state: StateFlow<TvUpdateState> = _state.asStateFlow()
@@ -141,14 +156,24 @@ class TvUpdateManager(private val context: Context) {
             }
             UpdateGate.READY_TO_INSTALL -> Unit
         }
+        // Claimed before the coroutine starts, so a second caller cannot slip
+        // between the gate above and the first state write inside it.
+        if (!installInFlight.compareAndSet(false, true)) return
         scope.launch {
-            runCatching {
-                _state.value = TvUpdateState.Downloading(0f)
-                val apk = downloadApk(info)
-                _state.value = TvUpdateState.Installing
-                installApk(apk)
-            }.onFailure { e ->
-                _state.value = TvUpdateState.Error(e.message ?: "Update failed.")
+            try {
+                runCatching {
+                    _state.value = TvUpdateState.Downloading(0f)
+                    val apk = downloadApk(info)
+                    _state.value = TvUpdateState.Installing
+                    installApk(apk)
+                }.onFailure { e ->
+                    _state.value = TvUpdateState.Error(e.message ?: "Update failed.")
+                }
+            } finally {
+                // By here the state is Installing (the system confirm dialog is
+                // up, and the ordinary guard blocks re-entry) or Error (a retry
+                // is exactly what should be allowed), so releasing is safe.
+                installInFlight.set(false)
             }
         }
     }
