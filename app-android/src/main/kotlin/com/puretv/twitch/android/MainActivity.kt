@@ -153,11 +153,6 @@ class MainActivity : ComponentActivity() {
     }
 
     /**
-     * Section 6.5 — entering PiP when the user navigates away (home button,
-     * recents) while watching a stream keeps playback visible in a floating
-     * window. The 16:9 aspect ratio matches Twitch's source video shape.
-     */
-    /**
      * Picks the update back up after the viewer has been to system Settings to
      * grant "install unknown apps". Nothing was downloaded before they left, by
      * design, so this only re-reads consent and starts the deferred install.
@@ -169,6 +164,11 @@ class MainActivity : ComponentActivity() {
             .onFailure { Log.w(TAG, "Could not re-check install consent", it) }
     }
 
+    /**
+     * Section 6.5 — entering PiP when the user navigates away (home button,
+     * recents) while watching a stream keeps playback visible in a floating
+     * window. The 16:9 aspect ratio matches Twitch's source video shape.
+     */
     override fun onUserLeaveHint() {
         super.onUserLeaveHint()
         // Only float a PiP window when a stream is actually playing. Entering PiP

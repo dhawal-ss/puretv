@@ -139,28 +139,36 @@ class TvUpdateManager(private val context: Context) {
      * this app holds nothing at all.
      */
     fun downloadAndInstall(info: TvUpdateInfo) {
-        when (_state.value) {
-            is TvUpdateState.Downloading, TvUpdateState.Installing -> return
-            else -> Unit
-        }
-        // Anti-downgrade before consent: someone already on the newest build must
-        // never be sent to Settings for an install that would then be refused.
-        when (updateGate(info.versionCode, currentVersionCode, hasInstallConsent())) {
-            UpdateGate.ALREADY_CURRENT -> {
-                _state.value = TvUpdateState.UpToDate
-                return
-            }
-            UpdateGate.NEEDS_INSTALL_CONSENT -> {
-                _state.value = TvUpdateState.NeedsInstallConsent(info, canOpenInstallSettings())
-                return
-            }
-            UpdateGate.READY_TO_INSTALL -> Unit
-        }
-        // Claimed before the coroutine starts, so a second caller cannot slip
-        // between the gate above and the first state write inside it.
+        // Claimed before anything else, so a second caller cannot slip between
+        // the gate and the first state write.
         if (!installInFlight.compareAndSet(false, true)) return
         scope.launch {
             try {
+                when (_state.value) {
+                    is TvUpdateState.Downloading, TvUpdateState.Installing -> return@launch
+                    else -> Unit
+                }
+                // The gate itself runs here rather than on the caller's thread.
+                // Every branch of it reads the package manager (getPackageInfo,
+                // canRequestPackageInstalls, and up to two queryIntentActivities),
+                // and the caller is a button press on the main thread. Those are
+                // binder round-trips and this is the primary user-initiated path,
+                // which is exactly where they must not block the frame.
+                //
+                // Anti-downgrade before consent: someone already on the newest
+                // build must never be sent to Settings for an install that would
+                // then be refused.
+                when (updateGate(info.versionCode, currentVersionCode, hasInstallConsent())) {
+                    UpdateGate.ALREADY_CURRENT -> {
+                        _state.value = TvUpdateState.UpToDate
+                        return@launch
+                    }
+                    UpdateGate.NEEDS_INSTALL_CONSENT -> {
+                        _state.value = TvUpdateState.NeedsInstallConsent(info, canOpenInstallSettings())
+                        return@launch
+                    }
+                    UpdateGate.READY_TO_INSTALL -> Unit
+                }
                 runCatching {
                     _state.value = TvUpdateState.Downloading(0f)
                     val apk = downloadApk(info)
@@ -203,11 +211,27 @@ class TvUpdateManager(private val context: Context) {
      * broken. Either way they never land back on the consent screen.
      */
     fun refreshInstallConsent() {
-        val pending = _state.value as? TvUpdateState.NeedsInstallConsent ?: return
-        // canRequestPackageInstalls is a binder call and this runs on onResume,
-        // so it does not belong on the main thread.
-        scope.launch { if (hasInstallConsent()) downloadAndInstall(pending.info) }
+        // All of this touches the package manager, and onResume is the main
+        // thread, so none of it is done here.
+        scope.launch {
+            // A confirm dialog whose result never reached the receiver leaves
+            // Installing set for the rest of the process, and every other entry
+            // point declines to leave that state, so the Settings screen would
+            // show a spinner forever. Being foregrounded again with none of our
+            // own sessions still open is good evidence it is over, however it
+            // ended.
+            if (_state.value == TvUpdateState.Installing && !hasOpenSession()) {
+                _state.value = TvUpdateState.Idle
+            }
+            val pending = _state.value as? TvUpdateState.NeedsInstallConsent ?: return@launch
+            if (hasInstallConsent()) downloadAndInstall(pending.info)
+        }
     }
+
+    /** Whether any install session of ours is still open. */
+    private fun hasOpenSession(): Boolean = runCatching {
+        context.packageManager.packageInstaller.mySessions.isNotEmpty()
+    }.getOrDefault(false)
 
     /** Whether the OS will let us commit an install session for our own package. */
     private fun hasInstallConsent(): Boolean =
@@ -246,18 +270,31 @@ class TvUpdateManager(private val context: Context) {
     /**
      * Resolved rather than attempted, so the UI can offer written directions on
      * a set where the screen does not exist instead of a button that does
-     * nothing. queryIntentActivities (not resolveActivity) because it stays
-     * accurate under API 30+ package visibility.
+     * nothing. Package-visibility filtering applies to this the same way it
+     * applies to resolveActivity, so the manifest declares a <queries> entry for
+     * the action; without it an OEM build could filter the match and downgrade a
+     * capable device to the directions text.
      */
     private fun canOpenInstallSettings(): Boolean = resolvableInstallSettings() != null
 
     /**
-     * Sends the viewer to the consent screen. Returns false when there was
-     * nowhere to send them, which the caller shows as instructions.
+     * Sends the viewer to the consent screen.
+     *
+     * When there is nowhere to send them, or the launch is refused, the state
+     * drops to the written-directions variant rather than leaving a button that
+     * silently does nothing on the one screen this whole change exists to serve.
+     * settingsResolvable was decided at gate time and the launch can still fail
+     * after it, so this is the only place that failure can be caught.
      */
-    fun openInstallSettings(): Boolean {
-        val intent = resolvableInstallSettings() ?: return false
-        return runCatching { context.startActivity(intent); true }.getOrDefault(false)
+    fun openInstallSettings() {
+        scope.launch {
+            val intent = resolvableInstallSettings()
+            val launched = intent != null &&
+                runCatching { context.startActivity(intent); true }.getOrDefault(false)
+            if (launched) return@launch
+            val pending = _state.value as? TvUpdateState.NeedsInstallConsent ?: return@launch
+            _state.value = pending.copy(settingsResolvable = false)
+        }
     }
 
     /**
@@ -270,6 +307,15 @@ class TvUpdateManager(private val context: Context) {
         runCatching {
             val installer = context.packageManager.packageInstaller
             installer.mySessions.forEach { session ->
+                // A committed session is waiting on the system confirm dialog,
+                // which outlives this process. Abandoning that would cancel an
+                // install the viewer is being asked about right now, so only
+                // sessions still open for writing are swept. isCommitted arrived
+                // in API 29; below it the distinction is not observable, and
+                // there the leak is the worse of the two problems.
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && session.isCommitted) {
+                    return@forEach
+                }
                 runCatching { installer.abandonSession(session.sessionId) }
                     .onFailure { Log.w(TAG, "Could not abandon stale install session ${session.sessionId}", it) }
             }

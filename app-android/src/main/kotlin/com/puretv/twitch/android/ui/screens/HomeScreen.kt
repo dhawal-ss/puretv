@@ -150,8 +150,15 @@ fun HomeScreen(
                 contentPadding = PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
-                (updateState as? AndroidUpdateState.Available)?.let { available ->
-                    item { UpdateAvailableBanner(versionName = available.info.versionName, onClick = onOpenSettings) }
+                // NeedsInstallConsent counts too: that is the state where the
+                // update is furthest along and most easily forgotten, since it
+                // is waiting on the viewer rather than on us.
+                when (val u = updateState) {
+                    is AndroidUpdateState.Available -> u.info.versionName
+                    is AndroidUpdateState.NeedsInstallConsent -> u.info.versionName
+                    else -> null
+                }?.let { versionName ->
+                    item { UpdateAvailableBanner(versionName = versionName, onClick = onOpenSettings) }
                 }
 
                 val hero = featuredStream(state.followedLive, state.topStreams)
