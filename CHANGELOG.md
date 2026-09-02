@@ -11,6 +11,20 @@ release notes automatically.
 
 ---
 
+## Android TV 1.2.3 - 2026-09-01
+
+A black screen now explains itself. Android and Windows are unchanged.
+
+### Fixed
+- **A stream that will not load now tells you why.** If the stream could not be
+  started, the player showed a black screen with no sound and no message, while
+  chat carried on scrolling beside it. The reason is now on screen, and OK tries
+  again.
+- **A refused stream is no longer treated as a working one.** When Twitch turned
+  down a request for a stream, the app accepted the refusal as if it were the
+  stream itself and handed the player something it could never play. Those
+  refusals are now recognised and reported.
+
 ## Android 1.1.2 and Android TV 1.2.2 - 2026-08-30
 
 Sign-in fixes and a sturdier start-up, on the phone and TV apps. Windows is
