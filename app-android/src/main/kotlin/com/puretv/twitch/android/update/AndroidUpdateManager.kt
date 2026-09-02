@@ -161,9 +161,13 @@ class AndroidUpdateManager(private val context: Context) {
     }
 
     /**
-     * Re-evaluates consent and resumes on its own if it has since been granted.
-     * Call from the Activity's onResume: the viewer who grants consent and comes
-     * back must not land on the screen asking for what they just gave.
+     * Re-evaluates consent and resumes if it has since been granted. Call from
+     * the Activity's onResume: the viewer who grants consent and comes back must
+     * not land on the screen asking for what they just gave.
+     *
+     * Auto-continues only when the process survived the detour. If it did not,
+     * start-up re-surfaces the update and the next press passes the consent gate
+     * rather than dead-ending at the installer.
      */
     fun refreshInstallConsent() {
         val pending = _state.value as? AndroidUpdateState.NeedsInstallConsent ?: return
@@ -177,24 +181,43 @@ class AndroidUpdateManager(private val context: Context) {
         runCatching { context.packageManager.canRequestPackageInstalls() }.getOrDefault(false)
 
     /** The per-app "install unknown apps" screen. Absent on some OEM builds. */
-    private fun installSettingsIntent(): Intent =
+    private fun packageScopedInstallSettings(): Intent =
         Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:" + context.packageName))
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+
+    private fun bareInstallSettings(): Intent =
+        Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+
+    /**
+     * The first of the two forms this device actually resolves, or null when it
+     * publishes neither.
+     *
+     * Both are probed because intent resolution only matches a filter that
+     * declares a `<data>` scheme when the Intent carries a URI. A build whose
+     * Settings activity declares the action without `scheme="package"` resolves
+     * the bare form and NOT the package-scoped one, which would otherwise be
+     * read as "this device has no consent screen" and downgrade a working set to
+     * the written directions. Package-scoped is tried first because it lands
+     * directly on this app's row instead of a list to hunt through.
+     */
+    private fun resolvableInstallSettings(): Intent? = runCatching {
+        listOf(packageScopedInstallSettings(), bareInstallSettings())
+            .firstOrNull { context.packageManager.queryIntentActivities(it, 0).isNotEmpty() }
+    }.getOrNull()
 
     /**
      * Resolved rather than attempted, so the UI can print directions where the
      * screen does not exist instead of offering a button that does nothing.
      * queryIntentActivities stays accurate under API 30+ package visibility.
      */
-    private fun canOpenInstallSettings(): Boolean = runCatching {
-        context.packageManager.queryIntentActivities(installSettingsIntent(), 0).isNotEmpty()
-    }.getOrDefault(false)
+    private fun canOpenInstallSettings(): Boolean = resolvableInstallSettings() != null
 
     /** Sends the viewer to the consent screen; false when there was nowhere to go. */
-    fun openInstallSettings(): Boolean = runCatching {
-        context.startActivity(installSettingsIntent())
-        true
-    }.getOrDefault(false)
+    fun openInstallSettings(): Boolean {
+        val intent = resolvableInstallSettings() ?: return false
+        return runCatching { context.startActivity(intent); true }.getOrDefault(false)
+    }
 
     /**
      * Drops every install session this app owns. Deliberately not filtered by

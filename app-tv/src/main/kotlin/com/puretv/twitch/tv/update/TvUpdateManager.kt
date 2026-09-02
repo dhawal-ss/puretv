@@ -168,11 +168,14 @@ class TvUpdateManager(private val context: Context) {
      * Call this whenever the app comes back to the foreground. The viewer who
      * grants consent in Settings and returns must not land back on the same
      * "grant permission" screen they just satisfied, which is indistinguishable
-     * from the app having ignored them. Two returns are possible and this covers
-     * both: if the process survived the detour, the state is still
-     * [TvUpdateState.NeedsInstallConsent] and we continue from it; if it did not,
-     * start-up's own [checkForUpdates] finds the update again and the install
-     * proceeds with consent already in hand.
+     * from the app having ignored them.
+     *
+     * This only auto-continues when the process survived the detour, since it
+     * needs the pending state to still be here. If the process was killed,
+     * start-up's own [checkForUpdates] surfaces the update again and the viewer
+     * presses install once more: that attempt then passes the consent gate
+     * instead of dead-ending at the installer, which is the part that was
+     * broken. Either way they never land back on the consent screen.
      */
     fun refreshInstallConsent() {
         val pending = _state.value as? TvUpdateState.NeedsInstallConsent ?: return
@@ -190,9 +193,30 @@ class TvUpdateManager(private val context: Context) {
      * Google TV; absent on Fire OS, which keeps the equivalent toggle under
      * Developer options and does not publish this Intent at all.
      */
-    private fun installSettingsIntent(): Intent =
-        Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:${context.packageName}"))
+    private fun packageScopedInstallSettings(): Intent =
+        Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:" + context.packageName))
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+
+    private fun bareInstallSettings(): Intent =
+        Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+
+    /**
+     * The first of the two forms this device actually resolves, or null when it
+     * publishes neither.
+     *
+     * Both are probed because intent resolution only matches a filter that
+     * declares a `<data>` scheme when the Intent carries a URI. A build whose
+     * Settings activity declares the action without `scheme="package"` resolves
+     * the bare form and NOT the package-scoped one, which would otherwise be
+     * read as "this device has no consent screen" and downgrade a working set to
+     * the written directions. Package-scoped is tried first because it lands
+     * directly on this app's row instead of a list to hunt through.
+     */
+    private fun resolvableInstallSettings(): Intent? = runCatching {
+        listOf(packageScopedInstallSettings(), bareInstallSettings())
+            .firstOrNull { context.packageManager.queryIntentActivities(it, 0).isNotEmpty() }
+    }.getOrNull()
 
     /**
      * Resolved rather than attempted, so the UI can offer written directions on
@@ -200,18 +224,16 @@ class TvUpdateManager(private val context: Context) {
      * nothing. queryIntentActivities (not resolveActivity) because it stays
      * accurate under API 30+ package visibility.
      */
-    private fun canOpenInstallSettings(): Boolean = runCatching {
-        context.packageManager.queryIntentActivities(installSettingsIntent(), 0).isNotEmpty()
-    }.getOrDefault(false)
+    private fun canOpenInstallSettings(): Boolean = resolvableInstallSettings() != null
 
     /**
      * Sends the viewer to the consent screen. Returns false when there was
      * nowhere to send them, which the caller shows as instructions.
      */
-    fun openInstallSettings(): Boolean = runCatching {
-        context.startActivity(installSettingsIntent())
-        true
-    }.getOrDefault(false)
+    fun openInstallSettings(): Boolean {
+        val intent = resolvableInstallSettings() ?: return false
+        return runCatching { context.startActivity(intent); true }.getOrDefault(false)
+    }
 
     /**
      * Drops every install session this app owns. Deliberately not filtered by
