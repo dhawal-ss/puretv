@@ -81,6 +81,7 @@ private enum class FollowingLayout(val label: String) { GRID("Grid"), LIST("List
 @Composable
 fun FollowingScreen(
     onOpenStream: (String) -> Unit,
+    onOpenChannel: (String) -> Unit,
     onOpenLogin: () -> Unit,
     viewModel: FollowingViewModel = koinViewModel(),
 ) {
@@ -184,7 +185,7 @@ fun FollowingScreen(
                                 Spacer(Modifier.height(28.dp))
                                 Text("Offline · ${state.offline.size}", style = MaterialTheme.typography.headlineMedium, color = c.onSurface)
                                 Spacer(Modifier.height(12.dp))
-                                OfflineList(state.offline, onOpenStream, alertSet, toggleAlerts)
+                                OfflineList(state.offline, onOpenStream, onOpenChannel, alertSet, toggleAlerts)
                             }
                         }
                     }
@@ -390,6 +391,7 @@ private fun LiveListRow(row: FollowRow, onClick: () -> Unit, alerts: Boolean, on
 @Composable
 private fun OfflineList(
     rows: List<FollowRow>,
+    onOpenStream: (String) -> Unit,
     onOpenChannel: (String) -> Unit,
     alertLogins: Set<String>,
     onToggleAlerts: (String) -> Unit,
@@ -404,7 +406,8 @@ private fun OfflineList(
         rows.forEach { row ->
             OfflineRow(
                 row,
-                onClick = { onOpenChannel(row.login) },
+                onClick = { onOpenStream(row.login) },
+                onViewChannel = { onOpenChannel(row.login) },
                 alerts = row.login.lowercase() in alertLogins,
                 onToggleAlerts = { onToggleAlerts(row.login) },
             )
@@ -419,7 +422,13 @@ private fun OfflineList(
  * go-live alerts on or off, like every other row.
  */
 @Composable
-private fun OfflineRow(row: FollowRow, onClick: () -> Unit, alerts: Boolean, onToggleAlerts: () -> Unit) {
+private fun OfflineRow(
+    row: FollowRow,
+    onClick: () -> Unit,
+    onViewChannel: () -> Unit,
+    alerts: Boolean,
+    onToggleAlerts: () -> Unit,
+) {
     val c = PureTvTheme.colors
     val interaction = remember { MutableInteractionSource() }
     var menuOpen by remember { mutableStateOf(false) }
@@ -447,65 +456,4 @@ private fun OfflineRow(row: FollowRow, onClick: () -> Unit, alerts: Boolean, onT
                 overflow = TextOverflow.Ellipsis,
             )
             if (alerts) AlertsLabel()
-            AlertsMenu(open = menuOpen, alerts = alerts, onDismiss = { menuOpen = false }, onToggle = onToggleAlerts)
-        }
-        ExpressiveButton(
-            text = "View channel",
-            onClick = onClick,
-            style = ExpressiveButtonStyle.Outlined,
-            size = ExpressiveButtonSize.Small,
-        )
-    }
-}
-
-/** The long-press menu on a follow: turn that channel's go-live alerts on or off. */
-@Composable
-private fun AlertsMenu(open: Boolean, alerts: Boolean, onDismiss: () -> Unit, onToggle: () -> Unit) {
-    val c = PureTvTheme.colors
-    DropdownMenu(expanded = open, onDismissRequest = onDismiss, containerColor = c.surfaceHigh) {
-        DropdownMenuItem(
-            text = {
-                Text(
-                    if (alerts) "Turn off go-live alerts" else "Tell me when they go live",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = c.onSurface,
-                )
-            },
-            onClick = {
-                onDismiss()
-                onToggle()
-            },
-        )
-    }
-}
-
-@Composable
-private fun AlertsLabel() {
-    Text("Go-live alerts on", style = MaterialTheme.typography.bodySmall, color = PureTvTheme.colors.onSurfaceVariant, maxLines = 1)
-}
-
-/** Circular avatar with an initial-letter fallback for a blank/unresolved [imageUrl]. */
-@Composable
-private fun FollowAvatar(displayName: String, imageUrl: String?, size: Dp) {
-    val c = PureTvTheme.colors
-    Box(
-        modifier = Modifier.size(size).clip(CircleShape).background(c.surfaceHigh),
-        contentAlignment = Alignment.Center,
-    ) {
-        if (!imageUrl.isNullOrBlank()) {
-            AsyncImage(
-                model = imageUrl,
-                contentDescription = displayName,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize().clip(CircleShape),
-            )
-        } else {
-            Text(
-                displayName.take(1).uppercase(),
-                style = MaterialTheme.typography.titleMedium,
-                color = c.onSurfaceVariant,
-                fontWeight = FontWeight.Bold,
-            )
-        }
-    }
-}
+            AlertsMenu(open = m
