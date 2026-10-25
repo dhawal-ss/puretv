@@ -1,0 +1,20 @@
+name: Build debug APK
+on:
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - name: Secrets file
+        run: '[ -f secrets.properties ] || cp secrets.properties.example secrets.properties'
+      - run: chmod +x gradlew
+      - run: ./gradlew :app-android:assembleDebug
+      - uses: actions/upload-artifact@v4
+        with:
+          name: puretv-android-debug
+          path: app-android/build/outputs/apk/debug/*.apk
