@@ -331,6 +331,7 @@ fun PureTvNavHost(navController: NavHostController, modifier: Modifier = Modifie
         composable(Routes.FOLLOWING) {
             FollowingScreen(
                 onOpenStream = { navController.go(Routes.stream(it)) },
+                onOpenChannel = { navController.go(Routes.channel(it)) },
                 onOpenLogin = { navController.go(Routes.LOGIN) },
             )
         }
