@@ -456,4 +456,65 @@ private fun OfflineRow(
                 overflow = TextOverflow.Ellipsis,
             )
             if (alerts) AlertsLabel()
-            AlertsMenu(open = m
+                        AlertsMenu(open = menuOpen, alerts = alerts, onDismiss = { menuOpen = false }, onToggle = onToggleAlerts)
+        }
+        ExpressiveButton(
+            text = "View channel",
+            onClick = onViewChannel,
+            style = ExpressiveButtonStyle.Outlined,
+            size = ExpressiveButtonSize.Small,
+        )
+    }
+}
+
+/** The long-press menu on a follow: turn that channel's go-live alerts on or off. */
+@Composable
+private fun AlertsMenu(open: Boolean, alerts: Boolean, onDismiss: () -> Unit, onToggle: () -> Unit) {
+    val c = PureTvTheme.colors
+    DropdownMenu(expanded = open, onDismissRequest = onDismiss, containerColor = c.surfaceHigh) {
+        DropdownMenuItem(
+            text = {
+                Text(
+                    if (alerts) "Turn off go-live alerts" else "Tell me when they go live",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = c.onSurface,
+                )
+            },
+            onClick = {
+                onDismiss()
+                onToggle()
+            },
+        )
+    }
+}
+
+@Composable
+private fun AlertsLabel() {
+    Text("Go-live alerts on", style = MaterialTheme.typography.bodySmall, color = PureTvTheme.colors.onSurfaceVariant, maxLines = 1)
+}
+
+/** Circular avatar with an initial-letter fallback for a blank/unresolved [imageUrl]. */
+@Composable
+private fun FollowAvatar(displayName: String, imageUrl: String?, size: Dp) {
+    val c = PureTvTheme.colors
+    Box(
+        modifier = Modifier.size(size).clip(CircleShape).background(c.surfaceHigh),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (!imageUrl.isNullOrBlank()) {
+            AsyncImage(
+                model = imageUrl,
+                contentDescription = displayName,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize().clip(CircleShape),
+            )
+        } else {
+            Text(
+                displayName.take(1).uppercase(),
+                style = MaterialTheme.typography.titleMedium,
+                color = c.onSurfaceVariant,
+                fontWeight = FontWeight.Bold,
+            )
+        }
+    }
+}
