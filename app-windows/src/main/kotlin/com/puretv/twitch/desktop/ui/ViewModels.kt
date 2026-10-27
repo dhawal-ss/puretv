@@ -475,6 +475,10 @@ class StreamViewModel(
         claims.acquire(channelLogin)
         // Reported per channel, so another window's or tile's channel never moves this pill.
         adBlockEngine.resetForNewStream(channelLogin)
+        // Mint the playback token and fetch the playlist now, while the proxy starts and
+        // the video surface attaches, instead of when VLC first asks the proxy for them.
+        // Joins a resolution a hover already started; /stream then finds it ready.
+        playableStreamCache.prewarm(channelLogin)
         scope.launch {
             // SECTION 08.3 — VLC talks to our local proxy (port 7979), never
             // straight to Twitch's CDN: that's the choke point where every
@@ -572,8 +576,23 @@ class StreamViewModel(
             adBlockEngine.statusFor(channelLogin).collect { status -> _state.update { it.copy(adBlockStatus = status) } }
         }
         scope.launch {
-            vlcPlayer.status.first { it.isPlaying }
-            openTiming.mark("first_frame")
+            // The first picture: VLC opening its video output for this stream. Its
+            // "playing" event comes about half a second earlier, before any frame is
+            // drawn, so it stays a separate mark. A player that cannot tell (mpv)
+            // marks the first picture at "playing", as before.
+            val outputs = vlcPlayer.videoOutputs
+            if (outputs == null) {
+                vlcPlayer.status.first { it.isPlaying }
+                openTiming.mark("first_frame")
+            } else {
+                val before = outputs.value
+                launch {
+                    vlcPlayer.status.first { it.isPlaying }
+                    openTiming.mark("vlc_playing")
+                }
+                outputs.first { it > before }
+                openTiming.mark("first_frame")
+            }
         }
         scope.launch {
             // VLC reports every failure as the same generic fault. Ask the local
@@ -592,9 +611,13 @@ class StreamViewModel(
                     autoRetries < AUTO_RETRY_DELAYS_MS.size -> {
                         delay(AUTO_RETRY_DELAYS_MS[autoRetries])
                         autoRetries++
+                        // Read again after the pause: a quality picked meanwhile is the
+                        // one to retry, and a stream that recovered needs no restart.
+                        val latest = _state.value.playableUrl ?: return@collect
+                        if (vlcPlayer.status.value.isPlaying) return@collect
                         playableStreamCache.invalidate(channelLogin)
                         playbackStallWatchdog.reset()
-                        startPlayback(url)
+                        startPlayback(latest)
                     }
                     else -> _state.update {
                         it.copy(fatalError = (failure ?: Failure(FailureKind.UNKNOWN, error)).message())
@@ -630,7 +653,11 @@ class StreamViewModel(
             val saved = runCatching { settingsStore.loadTokens() }.getOrNull()
             selfLogin = saved?.login
             _state.update { it.copy(canChat = saved?.accessToken != null && saved.login != null, selfLogin = saved?.login) }
-            chatClient.connect(channelLogin, saved?.accessToken, saved?.login)
+            // Each redial reads the sign-in again: the token is refreshed about every 4 hours
+            // while a stream can stay open far longer.
+            chatClient.connect(channelLogin, saved?.accessToken, saved?.login) {
+                settingsStore.loadTokens()?.let { it.accessToken to it.login } ?: (null to null)
+            }
             // A busy chat arrives in batches (about ten a second), each applied in one
             // state update, so 30+ messages a second no longer recompose the stream
             // screen 30+ times. Core's ChatTimeline holds the chat rules every app

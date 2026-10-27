@@ -123,6 +123,8 @@ import com.puretv.twitch.desktop.ui.chat.ComposerKeyAction
 import com.puretv.twitch.desktop.ui.chat.composerKeyAction
 import com.puretv.twitch.desktop.ui.chat.nextFollowing
 import com.puretv.twitch.desktop.ui.chat.scrollAnchor
+import com.puretv.twitch.desktop.ui.components.LocalStreamPrewarm
+import com.puretv.twitch.desktop.ui.components.PlayerGate
 import com.puretv.twitch.desktop.ui.components.AdBlockPill
 import com.puretv.twitch.desktop.ui.components.RtxMenuState
 import com.puretv.twitch.desktop.ui.components.Avatar
@@ -204,6 +206,25 @@ fun StreamContent(
     sleep: SleepSession = remember { SleepSession() },
 ) {
     val windowPlayback = LocalWindowPlayback.current ?: remember { koin.get<WindowPlayback>() }
+    val prewarm = LocalStreamPrewarm.current
+    // Never wait for the player on the UI thread (see PlayerGate). While it starts, the
+    // stream itself is resolved (token and playlist), so the two do not run one after the other.
+    PlayerGate(windowPlayback, onBack, whileStarting = { prewarm?.invoke(channelLogin) }) {
+        StreamScreen(koin, channelLogin, windowPlayback, onBack, onRequestSignIn, onFlip, onOpenMultiView, sleep)
+    }
+}
+
+@Composable
+private fun StreamScreen(
+    koin: Koin,
+    channelLogin: String,
+    windowPlayback: WindowPlayback,
+    onBack: () -> Unit,
+    onRequestSignIn: () -> Unit,
+    onFlip: (String) -> Unit,
+    onOpenMultiView: () -> Unit,
+    sleep: SleepSession,
+) {
     val viewModel = rememberDesktopViewModel(channelLogin) {
         koin.get<StreamViewModel> { parametersOf(channelLogin, windowPlayback) }
     }
@@ -395,6 +416,9 @@ fun StreamContent(
             focusManager.clearFocus(force = true)
         }
     }
+    // A closed chat panel leaves composition (see the chat panel below), and its text field
+    // may not report losing focus as it goes: let the keys reach the player again.
+    LaunchedEffect(isChatOpen) { if (!isChatOpen) chatInputFocused = false }
     val miniDoubleClick = remember { DoubleClickDetector() }
     val latestHelpOpen = rememberUpdatedState(helpOpen)
     val latestVolume = rememberUpdatedState(playerStatus.volume)
@@ -702,18 +726,22 @@ fun StreamContent(
             // ── Chat panel ─────────────────────────────────────────────────────
             // Width is 0 or 392dp; the card slides and fades inside it. clipToBounds()
             // keeps the slide inside the panel.
+            // Outside the panel, so closing chat keeps the tab it was on.
+            var chatTab by remember { mutableStateOf(ChatTab.Chat) }
             Box(
                 modifier = Modifier
                     .width(chatWidth)
                     .fillMaxHeight()
                     .clipToBounds(),
             ) {
-                Column(
+                // Composed only while it can be seen. A closed chat (and the mini player)
+                // kept laying out new rows at zero width ten times a second, loading their
+                // images and animating their emotes. The view model keeps collecting, so
+                // chat is current the moment it reopens.
+                if (isChatOpen || chatReveal > 0f) Column(
                     modifier = Modifier.fillMaxSize().sidePanelReveal { chatReveal },
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    var chatTab by remember { mutableStateOf(ChatTab.Chat) }
-
                     ChatHeader(
                         selected = chatTab,
                         mentionCount = state.mentionMessages.size,

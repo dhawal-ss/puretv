@@ -39,15 +39,36 @@ class AnimatedEmoteFrames(
  * Zero/negative durations are floored to 100ms so a codec reporting 0 never
  * divides by zero or pins on frame 0.
  */
-fun frameIndexAt(elapsedMs: Long, durationsMs: List<Int>): Int {
-    if (durationsMs.size <= 1) return 0
-    val safe = durationsMs.map { if (it <= 0) 100 else it }
-    val total = safe.sum().toLong()
-    if (total <= 0) return 0
-    var t = elapsedMs % total
-    for (i in safe.indices) {
-        t -= safe[i]
-        if (t < 0) return i
+fun frameIndexAt(elapsedMs: Long, durationsMs: List<Int>): Int = FrameTimeline(durationsMs).indexAt(elapsedMs)
+
+/**
+ * [frameIndexAt] with the running totals worked out once, so finding the frame on every
+ * draw allocates nothing and is a binary search.
+ */
+class FrameTimeline(durationsMs: List<Int>) {
+    // ends[i] = when frame i stops showing, from the start of the loop.
+    private val ends = LongArray(durationsMs.size)
+    private val total: Long
+
+    init {
+        var sum = 0L
+        durationsMs.forEachIndexed { i, d ->
+            sum += if (d <= 0) 100 else d
+            ends[i] = sum
+        }
+        total = sum
     }
-    return safe.lastIndex
+
+    fun indexAt(elapsedMs: Long): Int {
+        if (ends.size <= 1 || total <= 0) return 0
+        val t = Math.floorMod(elapsedMs, total)
+        // The first frame that ends after t.
+        var lo = 0
+        var hi = ends.lastIndex
+        while (lo < hi) {
+            val mid = (lo + hi) ushr 1
+            if (ends[mid] > t) hi = mid else lo = mid + 1
+        }
+        return lo
+    }
 }

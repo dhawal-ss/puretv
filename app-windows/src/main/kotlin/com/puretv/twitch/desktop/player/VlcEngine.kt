@@ -1,11 +1,14 @@
 package com.puretv.twitch.desktop.player
 
+import com.puretv.twitch.core.perf.TimingLog
+
 import uk.co.caprica.vlcj.factory.MediaPlayerFactory
 import uk.co.caprica.vlcj.log.LogLevel
 import uk.co.caprica.vlcj.log.NativeLog
 import uk.co.caprica.vlcj.player.embedded.EmbeddedMediaPlayer
 import uk.co.caprica.vlcj.player.embedded.videosurface.VideoSurface
 import java.awt.Component
+import java.io.File
 import javax.swing.SwingUtilities
 
 /**
@@ -46,13 +49,26 @@ class VlcEngine(
 
     private val lazyFactory = lazy {
         // jna.library.path must be set before VLCJ's JNA binding loads libvlc.dll.
-        detectBundledVlc()
+        val bundled = detectBundledVlc()
+        // Writes the plugin cache when the bundle has none (see NativeLibs.vlcPluginCacheArgs).
+        val cache = NativeLibs.vlcPluginCacheArgs(bundled?.let(::File))
         val extra = extraArgs()
         val optional = optionalArgs()
         // An argument libVLC refuses makes it refuse to start at all; playing without
         // the optional arguments, then without the extras, beats not playing.
-        listOf(extra + optional, extra, emptyList()).distinct().firstNotNullOfOrNull { args ->
-            buildFactory(args)?.also {
+        listOf(extra + optional, extra, emptyList()).distinct().withIndex().firstNotNullOfOrNull { (attempt, args) ->
+            val started = System.nanoTime()
+            // The first try writes the cache; a retry reads it instead of scanning again.
+            val built = buildFactory(if (attempt == 0) cache + args else args)
+            // Every start is timed, so a slow one in timing.log shows which step took the time.
+            TimingLog.log(
+                "player.vlc_init",
+                (System.nanoTime() - started) / 1_000_000,
+                "try=${attempt + 1} ${if (built != null) "ok" else "refused"}" +
+                    (if (bundled == null) " vlc=system" else "") +
+                    (if (cache.isEmpty() || attempt > 0) "" else " cache=writing"),
+            )
+            built?.also {
                 optionalAccepted = optional.isEmpty() || args.containsAll(optional)
                 if (args.size < extra.size + optional.size) {
                     System.err.println("VLC rejected ${extra + optional}, started with $args")
@@ -99,9 +115,14 @@ class VlcEngine(
         return surfaces.newVideoSurface(component)
     }
 
-    /** Frees libVLC. Call once at shutdown, after every player made from it is released. */
+    // main() and the shutdown hook both release the engine; a second libvlc_release would
+    // free libVLC twice.
+    private val released = java.util.concurrent.atomic.AtomicBoolean(false)
+
+    /** Frees libVLC. Call at shutdown, after every player made from it is released. Runs once. */
     fun releaseIfBuilt() {
         if (!lazyFactory.isInitialized()) return
+        if (!released.compareAndSet(false, true)) return
         val f = lazyFactory.value ?: return
         SwingUtilities.invokeLater { runCatching { f.release() } }
     }

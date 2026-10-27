@@ -159,6 +159,20 @@ jobs:
           }
           echo "Client secret is present in $($jar.Name)."
 
+      - name: Verify the VLC plugin cache tool is bundled
+        # The installer runs it to write libVLC's plugin cache. Without the cache libVLC
+        # opens all of its plugin DLLs whenever the player starts, which is slow right
+        # after a boot. The app can write the cache itself on first start, so this guards
+        # a speed-up, but it must not disappear silently (VLC's .zip build lacks the tool).
+        shell: pwsh
+        run: |
+          $gen = "app-windows/build/compose/binaries/main-release/app/PureTV for Twitch/app/resources/vlc/vlc-cache-gen.exe"
+          if (-not (Test-Path $gen)) {
+            echo "::error::vlc-cache-gen.exe is missing from the app image. Install VLC with its installer (choco), not the .zip."
+            exit 1
+          }
+          echo "vlc-cache-gen.exe is bundled."
+
       # --- Code signing (disabled until a cert exists) ---
       # Once a cert is set up, sign the .exe files inside the app image and the
       # final installer below with signtool before upload.

@@ -89,7 +89,10 @@ class VlcPlayer(
             // libVLC opened (or closed) its video output: the evidence that video, not only
             // audio, is being drawn. Logged for diagnostics and the platform smoke tests.
             override fun videoOutput(mediaPlayer: MediaPlayer, newCount: Int) {
-                if (newCount > 0) TimingLog.log("player.video_output", 0, "outputs=$newCount")
+                if (newCount > 0) {
+                    TimingLog.log("player.video_output", 0, "outputs=$newCount")
+                    _videoOutputs.update { it + 1 }
+                }
                 // The video's size can arrive just after its output opens: look again shortly.
                 if (rtxChoice.any) SwingUtilities.invokeLater {
                     refreshRtxStatus()
@@ -159,8 +162,13 @@ class VlcPlayer(
     // change only on the UI thread (see [switchEngine]).
     // Before there is a window, assume the HDR display if there is one (the instance
     // RtxVlcEngines.warmUpLikely builds); attachToPanel corrects it for the real display.
-    @Volatile private var rtxChoice: RtxVideoChoice =
-        rtx?.let { it.choiceFor(displayHdr = it.wanted().hdr && DisplayHdr.anyOn()) } ?: RtxVideoChoice.NONE
+    // Timed: it waits for the GPU lookup and reads libVLC's version (see timing.log).
+    @Volatile private var rtxChoice: RtxVideoChoice = rtx?.let {
+        val started = System.nanoTime()
+        it.choiceFor(displayHdr = it.wanted().hdr && DisplayHdr.anyOn()).also { choice ->
+            TimingLog.log("player.rtx_check", (System.nanoTime() - started) / 1_000_000, "sr=${choice.superResolution} hdr=${choice.hdr}")
+        }
+    } ?: RtxVideoChoice.NONE
     @Volatile private var engine: VlcEngine = rtx?.engineFor(rtxChoice) ?: engine
 
     @Volatile private var mediaPlayer: EmbeddedMediaPlayer? = newMediaPlayer(this.engine)
@@ -204,6 +212,9 @@ class VlcPlayer(
         ) else PlayerStatus(),
     )
     override val status: StateFlow<PlayerStatus> = _status.asStateFlow()
+
+    private val _videoOutputs = MutableStateFlow(0)
+    override val videoOutputs: StateFlow<Int> = _videoOutputs.asStateFlow()
 
     override val isAvailable: Boolean get() = mediaPlayer != null
 

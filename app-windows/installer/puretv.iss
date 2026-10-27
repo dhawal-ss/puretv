@@ -50,6 +50,10 @@ Source: "..\build\compose\binaries\main-release\app\PureTV for Twitch\app\PureTV
 Name: "{group}\PureTV"; Filename: "{app}\{#MyAppExe}"
 Name: "{autodesktop}\PureTV"; Filename: "{app}\{#MyAppExe}"
 
+[UninstallDelete]
+; Written after install (see BuildVlcPluginCache), so Setup does not know it.
+Type: files; Name: "{app}\app\resources\vlc\plugins\plugins.dat"
+
 [Registry]
 ; "Start PureTV with Windows" (Settings > Notifications) writes this value itself;
 ; the installer never creates it, only removes it on uninstall so nothing is left
@@ -151,12 +155,26 @@ begin
   Result := IsPureTVRunning() or IsFileLocked(Dest);
 end;
 
+// Every file this Setup installs (lowercase), so that once the install has succeeded
+// the VLC plugins an older version shipped and this one does not can be removed
+// (see PruneStaleVlcPlugins).
+var
+  InstalledFiles: TStringList;
+
+procedure NoteInstalled(const Dest: String);
+begin
+  if InstalledFiles = nil then
+    InstalledFiles := TStringList.Create;
+  InstalledFiles.Add(Lowercase(Dest));
+end;
+
 procedure ReleaseFileFromPureTV();
 var
   Dest: String;
   ResultCode, Waited: Integer;
 begin
   Dest := ExpandConstant(CurrentFileName);
+  NoteInstalled(Dest);
   if not PureTVInTheWay(Dest) then Exit;
   Log('PureTV running or file in use, closing PureTV before replacing: ' + Dest);
   Waited := 0;
@@ -171,6 +189,78 @@ begin
     Log('Released after ' + IntToStr(Waited) + ' ms');
 end;
 
+// Removes every file under Dir that this Setup did not install, and the folders left
+// empty. Setup only adds and replaces files, and libVLC opens every DLL in its plugins
+// folder when it starts: 52 plugins left by an older install were opened (and failed)
+// on every start of the app. Their old plugin cache goes too.
+procedure PruneFolder(const Dir: String);
+var
+  FindRec: TFindRec;
+  Path: String;
+begin
+  if not FindFirst(Dir + '\*', FindRec) then Exit;
+  try
+    repeat
+      if (FindRec.Name <> '.') and (FindRec.Name <> '..') then
+      begin
+        Path := Dir + '\' + FindRec.Name;
+        if FindRec.Attributes and FILE_ATTRIBUTE_DIRECTORY <> 0 then
+        begin
+          PruneFolder(Path);
+          RemoveDir(Path);
+        end
+        else if InstalledFiles.IndexOf(Lowercase(Path)) < 0 then
+        begin
+          if DeleteFile(Path) then
+            Log('Removed a file this version does not ship: ' + Path)
+          else
+            Log('Could not remove: ' + Path);
+        end;
+      end;
+    until not FindNext(FindRec);
+  finally
+    FindClose(FindRec);
+  end;
+end;
+
+// Only after a successful install (a rolled-back one never gets here, so the old app
+// keeps its plugins), and only when this Setup installed plugins itself.
+procedure PruneStaleVlcPlugins();
+var
+  Plugins: String;
+  I, Shipped: Integer;
+begin
+  if InstalledFiles = nil then Exit;
+  Plugins := ExpandConstant('{app}\app\resources\vlc\plugins');
+  Shipped := 0;
+  for I := 0 to InstalledFiles.Count - 1 do
+    if Pos(Lowercase(Plugins) + '\', InstalledFiles[I]) = 1 then Shipped := Shipped + 1;
+  if Shipped = 0 then Exit;
+  PruneFolder(Plugins);
+end;
+
+// Writes libVLC's plugin cache (plugins.dat) for the files just installed. Without it
+// libVLC opens all of its plugin DLLs (264) every time the app starts the player, which
+// is slow right after a boot, when each one is read from disk and scanned first. With
+// it, libVLC opens only what a stream uses. If this fails, the app writes the cache
+// itself on its first start (NativeLibs.vlcPluginCacheArgs).
+procedure BuildVlcPluginCache();
+var
+  Gen: String;
+  ResultCode: Integer;
+begin
+  Gen := ExpandConstant('{app}\app\resources\vlc\vlc-cache-gen.exe');
+  if not FileExists(Gen) then Exit;
+  // Takes 20 to 30 s on freshly written files: say so, or the progress window looks stuck
+  // at the end and people reopen PureTV mid-install (the in-app update runs /SILENT).
+  WizardForm.StatusLabel.Caption := 'Preparing the video player (this can take half a minute)...';
+  WizardForm.FilenameLabel.Caption := '';
+  if Exec(Gen, '"' + ExpandConstant('{app}\app\resources\vlc\plugins') + '"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
+    Log('vlc-cache-gen exit code ' + IntToStr(ResultCode))
+  else
+    Log('vlc-cache-gen did not start: ' + SysErrorMessage(ResultCode));
+end;
+
 // A successful installer must never leave a launcher without its config. Raise
 // an installer failure before the updater can relaunch if that invariant is not
 // satisfied. The detached updater also checks this file as a second barrier.
@@ -183,5 +273,7 @@ begin
     LauncherConfig := ExpandConstant('{app}\app\PureTV for Twitch.cfg');
     if not FileExists(LauncherConfig) then
       RaiseException('Installation validation failed: launcher configuration is missing.');
+    PruneStaleVlcPlugins();
+    BuildVlcPluginCache();
   end;
 end;

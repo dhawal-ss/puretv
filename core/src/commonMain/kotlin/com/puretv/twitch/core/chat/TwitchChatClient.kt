@@ -54,8 +54,18 @@ class TwitchChatClient(
      * `GET /users` (with the bearer token, no params) at login time and pass
      * it through here. When [token] is null, the value of [username] is
      * ignored and an anonymous `justinfanNNNN` identity is used instead.
+     *
+     * [credentials], when given, is asked for the token and login again before every
+     * redial, so a connection that outlives a token refresh (about every 4 hours) logs
+     * in with the new token instead of the one it started with. [token] and [username]
+     * are used when it is null or fails.
      */
-    suspend fun connect(channel: String, token: String?, username: String? = null) {
+    suspend fun connect(
+        channel: String,
+        token: String?,
+        username: String? = null,
+        credentials: (suspend () -> Pair<String?, String?>)? = null,
+    ) {
         val newChannel = channel.lowercase()
         val channelChanged = currentChannel != null && currentChannel != newChannel
         currentChannel = newChannel
@@ -65,19 +75,24 @@ class TwitchChatClient(
         if (channelChanged) { while (outbox.tryReceive().isSuccess) { /* drain */ } }
         connectionJob = scope.launch {
             var backoffMs = INITIAL_BACKOFF_MS
+            // The token Twitch last refused, so it is not offered again (see ChatLogin).
+            var rejectedToken: String? = null
             // Reconnect loop (audit P0-6): Twitch routinely drops idle/long-lived
             // connections and issues RECONNECT. Without this, a dropped socket
             // silently ended chat for the rest of the channel session.
             while (isActive) {
+                val (latestToken, latestUser) = credentials?.let { ask -> runCatching { ask() }.getOrNull() } ?: (token to username)
+                val login = ChatLogin.choose(latestToken, latestUser, rejectedToken)
+                var welcomed = false
+                var loginRejected = false
                 try {
                     httpClient.webSocket(TwitchConfig.IRC_ENDPOINT) {
-                        backoffMs = INITIAL_BACKOFF_MS // a healthy connect resets the backoff
                         _events.emit(ChatEvent.ConnectionState(connected = true))
 
                         send(Frame.Text("CAP REQ :twitch.tv/tags twitch.tv/commands twitch.tv/membership"))
-                        if (!token.isNullOrBlank() && !username.isNullOrBlank()) {
-                            send(Frame.Text("PASS oauth:$token"))
-                            send(Frame.Text("NICK ${username.lowercase()}"))
+                        if (login != null) {
+                            send(Frame.Text("PASS oauth:${login.first}"))
+                            send(Frame.Text("NICK ${login.second.lowercase()}"))
                         } else {
                             // Anonymous read-only — works even when token is present
                             // but username hasn't been resolved yet.
@@ -92,6 +107,25 @@ class TwitchChatClient(
                                 send(Frame.Text(raw))
                             }
                         }
+                        // Our own PING, so a healthy socket always has something to read:
+                        // after sleep/resume or a network change a dead socket is noticed
+                        // within READ_IDLE_MS instead of Twitch's ~5 minute PING.
+                        val pinger = launch {
+                            while (isActive) {
+                                delay(CLIENT_PING_MS)
+                                send(Frame.Text("PING :tmi.twitch.tv"))
+                                // Reading anonymously because Twitch refused the token: once a
+                                // newer one is on file (the background refresh), redial so chat
+                                // is signed in again instead of staying read-only for hours.
+                                if (login == null && rejectedToken != null && credentials != null) {
+                                    val (t, u) = runCatching { credentials() }.getOrNull() ?: continue
+                                    if (ChatLogin.choose(t, u, rejectedToken) != null) {
+                                        close()
+                                        break
+                                    }
+                                }
+                            }
+                        }
 
                         try {
                             while (isActive) {
@@ -102,12 +136,19 @@ class TwitchChatClient(
                                     incoming.receiveCatching().getOrNull()
                                 } ?: break
                                 if (frame is Frame.Text) {
-                                    val reconnectRequested = handleRawIrcChunk(frame.readText()) { send(Frame.Text(it)) }
+                                    val text = frame.readText()
+                                    if (ChatLogin.isWelcome(text)) welcomed = true
+                                    if (ChatLogin.isRejected(text)) {
+                                        loginRejected = true
+                                        break
+                                    }
+                                    val reconnectRequested = handleRawIrcChunk(text) { send(Frame.Text(it)) }
                                     if (reconnectRequested) break
                                 }
                             }
                         } finally {
                             sender.cancel()
+                            pinger.cancel()
                         }
                     }
                 } catch (e: CancellationException) {
@@ -116,6 +157,15 @@ class TwitchChatClient(
                     _events.emit(ChatEvent.ConnectionState(connected = false, reason = e.message))
                 }
                 if (!isActive) break
+                if (loginRejected) {
+                    // An expired or revoked token: the next dial takes a newer one if
+                    // there is one by then, and reads anonymously otherwise.
+                    rejectedToken = login?.first
+                    _events.emit(ChatEvent.ConnectionState(connected = false, reason = "login rejected"))
+                }
+                // Only a connection Twitch accepted resets the backoff. Resetting when the
+                // socket opened made a refused login redial about once a second, forever.
+                if (welcomed) backoffMs = INITIAL_BACKOFF_MS
                 // Socket dropped (clean close, RECONNECT, idle, or error) — back off and redial.
                 _events.emit(ChatEvent.ConnectionState(connected = false, reason = "reconnecting"))
                 delay(backoffMs + Random.nextLong(0, BACKOFF_JITTER_MS))
@@ -187,10 +237,31 @@ class TwitchChatClient(
         const val INITIAL_BACKOFF_MS = 1_000L
         const val MAX_BACKOFF_MS = 30_000L
         const val BACKOFF_JITTER_MS = 500L
-        // > Twitch's ~5min server PING cadence, so a quiet-but-healthy channel
-        // isn't mistaken for a dead socket.
-        const val READ_IDLE_MS = 360_000L
+        // We PING every CLIENT_PING_MS and Twitch answers at once, so a healthy socket is
+        // never this quiet; a dead one is redialled within this time.
+        const val CLIENT_PING_MS = 60_000L
+        const val READ_IDLE_MS = 90_000L
     }
+}
+
+/** How the chat client logs in, and what Twitch's answers to it mean. Pure, so it is tested. */
+internal object ChatLogin {
+    /**
+     * The token and login to send, or null to read anonymously: without both of them,
+     * or when [token] is the one Twitch last refused ([rejectedToken]).
+     */
+    fun choose(token: String?, username: String?, rejectedToken: String?): Pair<String, String>? =
+        if (token.isNullOrBlank() || username.isNullOrBlank() || token == rejectedToken) null else token to username
+
+    /** Twitch's welcome (`001`): the login was accepted, anonymous or not. */
+    fun isWelcome(chunk: String): Boolean = chunk.lineSequence().any { it.startsWith(":tmi.twitch.tv 001 ") }
+
+    /** Twitch refused the token (expired or revoked): it sends this and closes the socket. */
+    fun isRejected(chunk: String): Boolean =
+        chunk.lineSequence().any { line ->
+            line.startsWith(":tmi.twitch.tv NOTICE * :") &&
+                (line.contains("Login authentication failed") || line.contains("Improperly formatted auth"))
+        }
 }
 
 /** Twitch rejects chat messages longer than 500 characters outright. */

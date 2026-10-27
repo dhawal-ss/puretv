@@ -89,6 +89,13 @@ interface DesktopPlayer {
      */
     val rtxStatus: StateFlow<RtxVideoStatus> get() = RTX_VIDEO_OFF
 
+    /**
+     * How many times the player has opened a video output, so a stream screen can time
+     * its first picture (a stream's "playing" comes before any frame is drawn). Null for
+     * a player that cannot tell.
+     */
+    val videoOutputs: StateFlow<Int>? get() = null
+
     /** Whether this player can run NVIDIA RTX Video at all, so the menu offers it. */
     val supportsRtxVideo: Boolean get() = false
 
@@ -144,7 +151,12 @@ data class PlayerStatus(
  * free it.
  */
 class DesktopPlayerProvider(create: () -> DesktopPlayer) {
-    private val lazyPlayer = lazy(create)
+    private val lazyPlayer = lazy {
+        // -Dpuretv.diag.playerDelayMs=<ms>: a slow build on demand, to check that nothing
+        // waits for it on the UI thread (with -Dpuretv.diag.stalls=true).
+        Integer.getInteger("puretv.diag.playerDelayMs")?.let { Thread.sleep(it.toLong()) }
+        create()
+    }
 
     val player: DesktopPlayer get() = lazyPlayer.value
 
@@ -158,6 +170,14 @@ class DesktopPlayerProvider(create: () -> DesktopPlayer) {
             (System.nanoTime() - started) / 1_000_000,
             if (built.isAvailable) "ready" else "unavailable",
         )
+    }
+
+    /** Whether the player exists, so reading [player] costs nothing. */
+    val isBuilt: Boolean get() = lazyPlayer.isInitialized()
+
+    /** Builds the player if needed, or waits for the build already running. Call off the UI thread. */
+    fun awaitBuilt() {
+        lazyPlayer.value
     }
 
     fun releaseIfCreated() {

@@ -144,7 +144,10 @@ class MultiChatSession(
             coroutineScope {
                 var joined = false
                 launch { loadEmotes() }
-                chatClient.connect(login, saved?.accessToken, saved?.login)
+                // Each redial reads the sign-in again, so a refreshed token is picked up.
+                chatClient.connect(login, saved?.accessToken, saved?.login) {
+                    settingsStore.loadTokens()?.let { it.accessToken to it.login } ?: (null to null)
+                }
                 chatClient.events.batchedEvery().collect { batch ->
                     // The socket is shared across switches; a straggler from the previous
                     // room must never land in this one.

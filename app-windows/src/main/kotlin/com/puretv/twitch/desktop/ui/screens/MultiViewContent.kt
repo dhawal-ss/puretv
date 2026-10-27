@@ -410,7 +410,9 @@ fun MultiViewContent(
         // Chat for the active tile only; it follows the sound. Width goes to 0 when
         // closed, and the connection stays so reopening shows the room as it is.
         Box(Modifier.width(chatWidth).fillMaxHeight().clipToBounds().sidePanelReveal { chatReveal }) {
-            MultiChatColumn(
+            // Composed only while it can be seen (see StreamContent's chat panel): hidden,
+            // it still laid out every new row and animated its emotes.
+            if (chatOpen || chatReveal > 0f) MultiChatColumn(
                 viewModel = viewModel,
                 appSettings = appSettings,
                 channelName = layout.active?.let { state.info[it.id]?.displayName ?: it.login },

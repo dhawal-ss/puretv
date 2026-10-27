@@ -29,7 +29,9 @@ import io.ktor.server.routing.get
 import io.ktor.server.routing.routing
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import java.net.URLDecoder
+import io.ktor.client.plugins.timeout
+import io.ktor.http.isSuccess
+import kotlinx.coroutines.CancellationException
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.ConcurrentHashMap
@@ -68,6 +70,10 @@ class LocalStreamProxy(
     lowLatency: () -> Boolean = { false },
 ) {
     companion object {
+        // A playlist refresh normally takes 100 to 300 ms; see fetchVariant.
+        private const val VARIANT_TIMEOUT_MS = 3_000L
+        private const val VARIANT_ATTEMPTS = 2
+
         /** One attribute of an `#EXT-X-STREAM-INF` line (quotes removed), or "". */
         internal fun hlsAttr(line: String, name: String): String =
             Regex("(?:^|[,:])$name=([^,]+)").find(line)?.groupValues?.get(1)?.trim()?.trim('"').orEmpty()
@@ -208,6 +214,41 @@ class LocalStreamProxy(
     private val variantSequenceNormalizations = AtomicInteger(0)
     private val variantTimelineSegmentsTrimmed = AtomicInteger(0)
     private val variantFailures = AtomicInteger(0)
+    private val variantFallback = VariantFallback()
+
+    private sealed interface VariantFetch {
+        class Playlist(val body: String) : VariantFetch
+        class Failed(val status: HttpStatusCode, val reason: String) : VariantFetch
+    }
+
+    /**
+     * One media playlist refresh from Twitch. A status other than 2xx, or a body that is
+     * not a playlist, is a failure: it has no ad markers, so it used to pass for a clean
+     * playlist and reach VLC with a 200. Each try gets [VARIANT_TIMEOUT_MS] instead of the
+     * client's 15 s, since the buffer ahead of the picture is only a few seconds with low
+     * latency on; a timeout or a 5xx is tried once more (usually on a fresh connection).
+     */
+    private suspend fun fetchVariant(url: String): VariantFetch {
+        var outcome: VariantFetch = VariantFetch.Failed(HttpStatusCode.BadGateway, "not fetched")
+        repeat(VARIANT_ATTEMPTS) {
+            outcome = try {
+                val response = httpClient.get(url) { timeout { requestTimeoutMillis = VARIANT_TIMEOUT_MS } }
+                val body = response.bodyAsText()
+                when {
+                    !response.status.isSuccess() -> VariantFetch.Failed(response.status, "HTTP ${response.status.value}")
+                    !body.trimStart().startsWith("#EXTM3U") -> VariantFetch.Failed(HttpStatusCode.BadGateway, "not a playlist")
+                    else -> return VariantFetch.Playlist(body)
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                VariantFetch.Failed(HttpStatusCode.BadGateway, e.message ?: e::class.simpleName.orEmpty())
+            }
+            // A 4xx (an expired or ended session) answers the same on a retry.
+            if ((outcome as VariantFetch.Failed).status.value in 400..499) return outcome
+        }
+        return outcome
+    }
     private val lastSuccess = AtomicReference<FetchSnapshot?>(null)
     private val lastFailure = AtomicReference<FetchSnapshot?>(null)
     private val lastVariant = AtomicReference<FetchSnapshot?>(null)
@@ -386,8 +427,10 @@ class LocalStreamProxy(
                         call.respondText("Missing 'url' query parameter", status = HttpStatusCode.BadRequest)
                         return@get
                     }
-                    val originalUrl = runCatching { URLDecoder.decode(encoded, StandardCharsets.UTF_8) }.getOrNull()
-                    if (originalUrl.isNullOrBlank() || !originalUrl.startsWith("http")) {
+                    // Ktor already decoded the query parameter. Decoding it again turned any
+                    // '+' or '%xx' inside Twitch's URL into something else.
+                    val originalUrl = encoded
+                    if (!originalUrl.startsWith("http")) {
                         call.respondText("Invalid 'url' query parameter", status = HttpStatusCode.BadRequest)
                         return@get
                     }
@@ -401,9 +444,33 @@ class LocalStreamProxy(
                     val resolution = call.request.queryParameters["res"].orEmpty()
                     val frameRate = call.request.queryParameters["fps"]?.toDoubleOrNull() ?: 0.0
                     variantFetches.incrementAndGet()
-                    runCatching {
-                        httpClient.get(originalUrl).bodyAsText()
-                    }.onSuccess { raw ->
+                    val fetched = fetchVariant(originalUrl)
+                    if (fetched is VariantFetch.Failed) {
+                        variantFailures.incrementAndGet()
+                        val stale = variantFallback.fallback(originalUrl)
+                        lastVariant.set(
+                            FetchSnapshot(
+                                channel = channel.ifBlank { "(variant)" },
+                                strategy = if (stale != null) "LAST_GOOD" else "FAILED",
+                                contentLength = stale?.length ?: 0,
+                                containsStitchedAdMarker = false,
+                                sample = "",
+                                timestampMs = System.currentTimeMillis(),
+                                errorMessage = fetched.reason,
+                            ),
+                        )
+                        if (stale != null) {
+                            call.respondText(text = stale, contentType = ContentType.parse("application/vnd.apple.mpegurl"))
+                        } else {
+                            call.respondText(
+                                text = "# Variant fetch failed: ${fetched.reason}",
+                                contentType = ContentType.parse("application/vnd.apple.mpegurl"),
+                                status = fetched.status,
+                            )
+                        }
+                        return@get
+                    }
+                    (fetched as VariantFetch.Playlist).body.let { raw ->
                         // Backup swap, strip, and the timeline normalization that keeps
                         // VLC's view continuous across player-type sessions (a backup's
                         // MEDIA-SEQUENCE can differ by thousands from the primary's).
@@ -442,16 +509,10 @@ class LocalStreamProxy(
                                 errorMessage = null,
                             ),
                         )
+                        variantFallback.remember(originalUrl, deliveredText)
                         call.respondText(
                             text = deliveredText,
                             contentType = ContentType.parse("application/vnd.apple.mpegurl"),
-                        )
-                    }.onFailure { e ->
-                        variantFailures.incrementAndGet()
-                        call.respondText(
-                            text = "# Variant fetch failed: ${e.message}",
-                            contentType = ContentType.parse("application/vnd.apple.mpegurl"),
-                            status = HttpStatusCode.BadGateway,
                         )
                     }
                 }

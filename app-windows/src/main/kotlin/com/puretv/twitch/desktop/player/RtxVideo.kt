@@ -228,7 +228,9 @@ class RtxVlcEngines(
     fun wanted(): RtxVideoChoice = choice()
 
     /** The choice for a window on a display with Windows HDR on ([displayHdr]) or not, as VLC can take it. */
-    fun choiceFor(displayHdr: Boolean): RtxVideoChoice = choice().forVlc(displayHdr, vlcHdrSafe)
+    fun choiceFor(displayHdr: Boolean): RtxVideoChoice =
+        // libVLC's version is read only when HDR could be used: it loads libVLC directly.
+        choice().let { it.forVlc(displayHdr, vlcHdrSafe = it.hdr && displayHdr && vlcHdrSafe) }
 
     /**
      * Whether the bundled libVLC runs RTX Video HDR without crashing (see

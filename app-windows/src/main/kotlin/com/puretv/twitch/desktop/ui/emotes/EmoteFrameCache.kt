@@ -4,7 +4,11 @@ import coil3.disk.DiskCache
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.get
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
 import kotlinx.coroutines.withContext
 
 /**
@@ -68,11 +72,29 @@ class EmoteFrameCache(
         }
     }
 
+    // Loads in progress, by url. An emote spammed in chat appears in many rows at once, and
+    // each row asked for it: every one downloaded and decoded it again. Now they share one
+    // load, which runs on the cache's own scope so a row leaving the screen cannot cancel
+    // it for the others.
+    private val inFlight = HashMap<String, Deferred<AnimatedEmoteFrames?>>()
+    private val loadScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+
     /** Decoded frames for [url], or null if static / undecodable. Caches success + static. */
     suspend fun frames(url: String): AnimatedEmoteFrames? {
-        synchronized(lock) { if (cache.containsKey(url)) return cache[url] }
-        // Decode off the lock (and off the EDT). Two coroutines may race the same uncached
-        // url; the loser closes its duplicate below rather than leaking it.
+        var started: Deferred<AnimatedEmoteFrames?>? = null
+        val load = synchronized(lock) {
+            if (cache.containsKey(url)) return cache[url]
+            inFlight.getOrPut(url) { loadScope.async { load(url) }.also { started = it } }
+        }
+        // Registered once the load is in the map, so a load that is already finished still
+        // takes itself out (the handler then runs right here).
+        started?.let { mine -> mine.invokeOnCompletion { synchronized(lock) { if (inFlight[url] === mine) inFlight.remove(url) } } }
+        return load.await()
+    }
+
+    private suspend fun load(url: String): AnimatedEmoteFrames? {
+        // Decode off the lock (and off the EDT). A put for the same url can still race
+        // this one (putForTest); the loser closes its duplicate below rather than leaking it.
         //
         // Audit F12: a TRANSIENT fetch failure (timeout/503) must NOT be cached as a permanent
         // null — only cache a successful fetch, so the next request retries after connectivity

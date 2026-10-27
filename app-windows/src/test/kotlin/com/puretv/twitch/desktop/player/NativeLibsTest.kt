@@ -41,6 +41,25 @@ class NativeLibsTest {
     }
 
     @Test
+    fun `a windows bundle without a plugin cache asks libVLC to write one`() {
+        val res = resources("vlc/libvlc.dll", "vlc/plugins/codec/a.dll")
+        assertEquals(listOf("--reset-plugins-cache"), NativeLibs.vlcPluginCacheArgs(File(res, "vlc"), HostOs.WINDOWS))
+    }
+
+    @Test
+    fun `a windows bundle with its plugin cache uses it`() {
+        val res = resources("vlc/libvlc.dll", "vlc/plugins/plugins.dat")
+        assertEquals(emptyList(), NativeLibs.vlcPluginCacheArgs(File(res, "vlc"), HostOs.WINDOWS))
+    }
+
+    @Test
+    fun `the plugin cache is never written on macOS or for a system VLC`() {
+        val res = resources("vlc/lib/libvlc.dylib", "vlc/plugins/a.dylib")
+        assertEquals(emptyList(), NativeLibs.vlcPluginCacheArgs(File(res, "vlc/lib"), HostOs.MACOS))
+        assertEquals(emptyList(), NativeLibs.vlcPluginCacheArgs(null, HostOs.WINDOWS))
+    }
+
+    @Test
     fun `mpv is offered everywhere but macOS`() {
         assertTrue(NativeLibs.mpvSupported(HostOs.WINDOWS))
         assertTrue(NativeLibs.mpvSupported(HostOs.LINUX))

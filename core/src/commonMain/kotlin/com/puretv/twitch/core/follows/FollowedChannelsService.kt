@@ -63,7 +63,10 @@ class FollowedChannelsService(
     // alerts share one /streams/followed request instead of making one each.
     private val followedLive: suspend (userId: String) -> List<StreamInfo> = { api.getFollowedStreams(it) },
 ) : FollowedChannelsSource {
-    private val profileCache = mutableMapOf<String, Profile>()
+    // Several loaders run at once (the rail in each window, Following, the multi-stream
+    // picker), so the cache is an immutable map swapped whole: a reader never sees it
+    // mid-change. Two loaders saving at once can drop an entry, which is only refetched.
+    @Volatile private var profileCache: Map<String, Profile> = emptyMap()
 
     private class CachedFollows(val userId: String, val refs: List<FollowedRef>, val fetchedAt: TimeMark)
     @Volatile private var cachedFollows: CachedFollows? = null
@@ -104,19 +107,20 @@ class FollowedChannelsService(
         // cached. Remaining avatars fill in after enrichment below.
         val live: List<StreamInfo> = (liveFollows.orEmpty() + streamChunks.awaitAll().flatten())
             .distinctBy { it.userLogin.lowercase() }
-        onLive(buildFollowedList(refs, live, profileCache.toMap()))
+        onLive(buildFollowedList(refs, live, profileCache))
 
         // Best-effort enrichment. A failed /users chunk leaves that chunk's avatars as
         // initials; successful chunks still populate the cache.
-        userChunks.awaitAll().flatten().forEach { ch ->
-            profileCache[ch.login.lowercase()] = Profile(ch.displayName, ch.profileImageUrl)
+        val fetched = userChunks.awaitAll().flatten().associate { ch ->
+            ch.login.lowercase() to Profile(ch.displayName, ch.profileImageUrl)
         }
+        if (fetched.isNotEmpty()) profileCache = profileCache + fetched
 
-        buildFollowedList(refs, live, profileCache.toMap())
+        buildFollowedList(refs, live, profileCache)
     }
 
     override fun clear() {
-        profileCache.clear()
+        profileCache = emptyMap()
         cachedFollows = null
     }
 

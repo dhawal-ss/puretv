@@ -1,5 +1,6 @@
 package com.puretv.twitch.desktop.platform
 
+import com.puretv.twitch.core.perf.TimingLog
 import java.util.concurrent.TimeUnit
 
 /** One display adapter as Windows lists it. */
@@ -29,11 +30,12 @@ object RtxGpu {
     val adapters: List<GpuAdapter> by lazy {
         if (HostOs.current != HostOs.WINDOWS) emptyList()
         else runCatching {
+            val started = System.nanoTime()
             // Two small queries, merged by key in parse(). Either can fail on its own.
             val text = listOf("DriverDesc", "MatchingDeviceId").joinToString("\n") { value ->
                 regQuery(DISPLAY_CLASS_KEY, "/s", "/v", value).orEmpty()
             }
-            parse(text)
+            parse(text).also { TimingLog.log("app.gpu_lookup", (System.nanoTime() - started) / 1_000_000, "adapters=${it.size}") }
         }.getOrDefault(emptyList())
     }
 

@@ -206,6 +206,33 @@ class MediaPlaylistCleanerTest {
     }
 
     @Test
+    fun aBackupThatAnswersWithAnErrorIsNotServedAsAdFree() = runTest {
+        // An expired backup session answers 403 with a short error body: no ad markers,
+        // but not a playlist either. The ad window is stripped instead of swapped for it.
+        withContext(Dispatchers.Default) {
+            val http = client { request ->
+                val url = request.url.toString()
+                when {
+                    request.url.host.contains("gql") ->
+                        respond(TOKEN_JSON, HttpStatusCode.OK, headersOf(HttpHeaders.ContentType, "application/json"))
+                    "usher" in url -> respond(BACKUP_MASTER, HttpStatusCode.OK)
+                    "backup-720" in url -> respond("""[{"error":"Forbidden"}]""", HttpStatusCode.Forbidden)
+                    else -> respond("", HttpStatusCode.NotFound)
+                }
+            }
+            val result = cleaner(http, engine()).clean(
+                variantUrl,
+                PrerollWindowTest.REAL_PREROLL_WINDOW,
+                channelLogin = "somechannel",
+                quality = MediaPlaylistCleaner.VariantQuality("1280x720", 60.0),
+            )
+
+            assertEquals(MediaPlaylistCleaner.Strategy.STRIP, result.strategy)
+            assertTrue(result.content.trimStart().startsWith("#EXTM3U"), result.content)
+        }
+    }
+
+    @Test
     fun backupSessionNumberingIsMappedOntoTheLiveSequence() = runTest {
         // Real time: the backup timeout must not fire on runTest's virtual clock
         // while the mock engine answers on its own thread.

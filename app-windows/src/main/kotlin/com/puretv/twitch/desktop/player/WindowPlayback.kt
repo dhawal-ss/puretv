@@ -24,8 +24,18 @@ class WindowPlayback(
     val isolated: Boolean = false,
     val claims: ChannelClaims = ChannelClaims(),
     private val onRelease: () -> Unit = {},
+    // Whether [player] is already built, and the build itself. The main window's player is
+    // built in the background after startup; a window's own player before its screens exist.
+    private val built: () -> Boolean = { true },
+    private val build: () -> Unit = {},
 ) {
     val player: DesktopPlayer get() = source()
+
+    /** True when reading [player] costs nothing; until then it would build it, which can take seconds. */
+    val isReady: Boolean get() = built()
+
+    /** Builds [player] if it is not built yet. Blocking: call off the UI thread (see PlayerGate). */
+    fun prepare() = build()
 
     /** Frees what this window's player holds. Safe to call more than once. */
     fun release() = onRelease()
@@ -98,6 +108,7 @@ class ReleasablePlayer(private val inner: DesktopPlayer) : DesktopPlayer {
     override fun renderStatsOverlay(show: Boolean) { if (!gone.get()) inner.renderStatsOverlay(show) }
     override fun setUpscaling(mode: UpscalingMode) { if (!gone.get()) inner.setUpscaling(mode) }
     override fun setAudioNormalizer(enabled: Boolean) { if (!gone.get()) inner.setAudioNormalizer(enabled) }
+    override val videoOutputs get() = inner.videoOutputs
     override val rtxStatus get() = inner.rtxStatus
     override val supportsRtxVideo: Boolean get() = inner.supportsRtxVideo
     override val supportsRtxHdr: Boolean get() = inner.supportsRtxHdr

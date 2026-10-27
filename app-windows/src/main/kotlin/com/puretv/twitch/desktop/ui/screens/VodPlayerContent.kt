@@ -74,6 +74,7 @@ import com.puretv.twitch.desktop.ui.VodLaunch
 import com.puretv.twitch.desktop.ui.VodPlayerViewModel
 import com.puretv.twitch.desktop.ui.chat.nextFollowing
 import com.puretv.twitch.desktop.ui.chat.scrollAnchor
+import com.puretv.twitch.desktop.ui.components.PlayerGate
 import com.puretv.twitch.desktop.ui.components.ChatMessageRow
 import com.puretv.twitch.desktop.ui.components.ExpressiveButton
 import com.puretv.twitch.desktop.ui.components.ExpressiveButtonSize
@@ -123,6 +124,12 @@ private const val SeekStepLargeMs = 30_000L
 @Composable
 fun VodPlayerContent(koin: Koin, launch: VodLaunch, onBack: () -> Unit) {
     val windowPlayback = LocalWindowPlayback.current ?: remember { koin.get<WindowPlayback>() }
+    // Never wait for the player on the UI thread (see PlayerGate).
+    PlayerGate(windowPlayback, onBack) { VodPlayerScreen(koin, launch, windowPlayback, onBack) }
+}
+
+@Composable
+private fun VodPlayerScreen(koin: Koin, launch: VodLaunch, windowPlayback: WindowPlayback, onBack: () -> Unit) {
     val viewModel = rememberDesktopViewModel(launch.vodId) { koin.get<VodPlayerViewModel> { parametersOf(launch, windowPlayback) } }
     val state by viewModel.state.collectAsState()
     // Only the error branch below reads `status` at this level; the position slider

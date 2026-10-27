@@ -71,6 +71,8 @@ import com.puretv.twitch.desktop.ui.components.LocalStreamPrewarm
 import com.puretv.twitch.desktop.ui.emotes.EmoteFrameCache
 import com.puretv.twitch.desktop.ui.emotes.LocalEmoteAnimation
 import com.puretv.twitch.desktop.ui.emotes.LocalEmoteFrameCache
+import com.puretv.twitch.desktop.ui.emotes.LocalEmoteClock
+import com.puretv.twitch.desktop.ui.emotes.rememberEmoteClock
 import com.puretv.twitch.desktop.platform.WindowsNative
 import com.puretv.twitch.desktop.platform.openInBrowser
 import com.puretv.twitch.desktop.platform.SystemAnimations
@@ -231,6 +233,8 @@ fun App(
     }
     PureTvDesktopTheme(variant = themeVariant, shapeIntensity = shapeIntensity) {
         val emoteFrameCache = remember { koin.get<EmoteFrameCache>() }
+        // One clock for every animated emote in this window (see EmoteClock).
+        val emoteClock = rememberEmoteClock()
         val streamPrewarm = remember {
             val cache = koin.get<PlayableStreamCache>()
             val prewarm: (String) -> Unit = { login -> cache.prewarm(login) }
@@ -242,6 +246,7 @@ fun App(
             LocalWindowPlayback provides playback,
             LocalEmoteAnimation provides settings.animateEmotes,
             LocalEmoteFrameCache provides emoteFrameCache,
+            LocalEmoteClock provides emoteClock,
             LocalStreamPrewarm provides streamPrewarm,
             // Decoration that loops (the LIVE pulse) stops while a video is playing.
             LocalQuietMotion provides (route is Route.Stream || route is Route.Multi || route is Route.Vod),

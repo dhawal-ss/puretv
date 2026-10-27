@@ -34,6 +34,24 @@ object NativeLibs {
         HostOs.LINUX -> null
     }
 
+    /**
+     * Extra libVLC arguments for the plugin cache of the bundled VLC in [libDir].
+     *
+     * Without `plugins/plugins.dat`, libVLC opens every plugin DLL on each start (264 in
+     * the Windows bundle) just to learn what it offers. Right after a boot each of those
+     * is read from disk and checked by the antivirus first. With the cache it opens none
+     * until a stream needs it. The installer writes the cache (vlc-cache-gen, see
+     * puretv.iss); when it is missing anyway, the first start asks libVLC to write it.
+     * Windows only: on macOS writing into the signed app bundle would break its signature,
+     * and Linux uses the distro's VLC, whose package keeps its own cache.
+     */
+    fun vlcPluginCacheArgs(libDir: File?, os: HostOs = HostOs.current): List<String> =
+        if (os == HostOs.WINDOWS && libDir != null && !File(libDir, "plugins/plugins.dat").isFile) {
+            listOf("--reset-plugins-cache")
+        } else {
+            emptyList()
+        }
+
     /** The libmpv file a bundled copy (or `MPV_DIR` in development) must contain. */
     fun mpvFileName(os: HostOs = HostOs.current): String = when (os) {
         HostOs.WINDOWS -> "libmpv-2.dll"

@@ -4,6 +4,7 @@ import com.puretv.twitch.core.stream.StreamResolver
 import io.ktor.client.HttpClient
 import io.ktor.client.request.get
 import io.ktor.client.statement.bodyAsText
+import io.ktor.http.isSuccess
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
@@ -85,7 +86,12 @@ class BackupStreamResolver(
             val master = cachedOrFetchMaster(channelLogin, playerType, oauthToken, nowMs) ?: continue
             val variantUrl = streamResolver.selectVariantUrl(master, targetResolution, targetFrameRate) ?: continue
 
-            val media = runCatching { httpClient.get(variantUrl).bodyAsText() }.getOrNull()
+            // An error answer (a 403 from an expired session, a 404 after a restart) has
+            // no ad markers either, so it must not pass for an ad-free playlist.
+            val media = runCatching {
+                val response = httpClient.get(variantUrl)
+                response.bodyAsText().takeIf { response.status.isSuccess() && it.trimStart().startsWith("#EXTM3U") }
+            }.getOrNull()
             if (media == null) {
                 // The cached master/token is probably stale (stream restarted or
                 // token expired) — drop it so the next attempt re-mints.

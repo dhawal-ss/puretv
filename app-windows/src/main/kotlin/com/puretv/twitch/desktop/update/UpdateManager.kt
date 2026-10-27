@@ -40,7 +40,10 @@ class UpdateManager {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val json = Json { ignoreUnknownKeys = true }
-    private val http = HttpClient.newBuilder()
+    // Built on first use (a check runs in the background): building the JDK client cost
+    // 106 to 170 ms on the UI thread while the first window was being shown.
+    private val http by lazy {
+        HttpClient.newBuilder()
         .connectTimeout(Duration.ofSeconds(10))
         // Force HTTP/1.1. The JDK client defaults to HTTP/2, and GitHub's API +
         // asset CDN recycle h2 connections aggressively (GOAWAY). The client will
@@ -58,6 +61,7 @@ class UpdateManager {
         // while still refusing any HTTPS->HTTP downgrade.
         .followRedirects(HttpClient.Redirect.NORMAL)
         .build()
+    }
 
     private val _state = MutableStateFlow<UpdateState>(UpdateState.Idle)
     val state: StateFlow<UpdateState> = _state.asStateFlow()

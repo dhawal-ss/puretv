@@ -347,9 +347,15 @@ fun main(args: Array<String>) {
                 if (!windowVisible || shownOnce) return@LaunchedEffect
                 shownOnce = true
                 TimingLog.log("app.first_window", TimingFileSink.sinceProcessStartMs())
+                // Logged once the UI thread is free again, after the first frame's work.
+                SwingUtilities.invokeLater { TimingLog.log("app.ui_ready", TimingFileSink.sinceProcessStartMs()) }
                 // The window is up: now build the player in the background, so the
                 // first stream open finds it ready without having delayed startup.
                 launch(Dispatchers.IO) { runCatching { playerProvider.warmUp() } }
+                // And the local stream proxy, which the first stream otherwise waited on
+                // (Netty start, 180 to 300 ms). Idempotent: the stream screen's own start
+                // is then a no-op, and still reports a port conflict if this one failed.
+                launch(Dispatchers.IO) { runCatching { localStreamProxy.start() } }
                 if (!WindowsNative.enableBorderlessSnap(window)) {
                     SwingUtilities.invokeLater { WindowsNative.enableBorderlessSnap(window) }
                 }

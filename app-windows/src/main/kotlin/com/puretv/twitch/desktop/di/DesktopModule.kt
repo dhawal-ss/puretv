@@ -209,7 +209,14 @@ val desktopModule = module {
     // and ticket: the app-wide ones. Other windows pass their own WindowPlayback as a second
     // parameter of the player view models below.
     single { ChannelClaims() }
-    single { WindowPlayback(get(), { get<DesktopPlayerProvider>().player }, isolated = false, claims = get()) }
+    single {
+        val players = get<DesktopPlayerProvider>()
+        WindowPlayback(
+            get(), { players.player }, isolated = false, claims = get(),
+            // Screens wait for the build off the UI thread (PlayerGate), never on it.
+            built = { players.isBuilt }, build = { players.awaitBuilt() },
+        )
+    }
     factory { params ->
         val playback = params.getOrNull<WindowPlayback>() ?: get<WindowPlayback>()
         StreamViewModel(

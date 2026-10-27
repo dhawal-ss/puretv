@@ -160,8 +160,9 @@ val bundleVlc by tasks.registering(Sync::class) {
      .firstOrNull { it.exists() && File(it, "libvlc.dll").exists() }
 
     if (vlcDir != null) {
-        // Core DLLs
-        from(vlcDir) { include("libvlc.dll", "libvlccore.dll") }
+        // Core DLLs, and the tool the installer runs to write libVLC's plugin cache
+        // (puretv.iss): without the cache libVLC opens every plugin DLL on each start.
+        from(vlcDir) { include("libvlc.dll", "libvlccore.dll", "vlc-cache-gen.exe") }
         // Only the plugin categories needed for HLS live-stream playback on Windows.
         // Excluded: gui (skins), stream_out, visualization, meta_engine,
         // services_discovery, access_output, mux, keystore, logger, video_splitter.
