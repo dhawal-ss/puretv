@@ -103,6 +103,23 @@ class TwitchGqlDirectoryClient(
         return if (liveOnly) results.filter { it.is_live } else results
     }
 
+    /**
+     * Category search ranked the way twitch.tv ranks it (`searchFor` on the game
+     * index), mapped to the Helix `/search/categories` shape. Works anonymously
+     * (live check, 2026-11-02).
+     */
+    suspend fun searchCategories(query: String, first: Int = 20): List<GameInfo> {
+        if (query.isBlank()) return emptyList()
+        val data: GqlSearchData = execute(
+            SEARCH_CATEGORIES_QUERY,
+            buildJsonObject {
+                put("query", query)
+                put("limit", first.coerceIn(1, MAX_PAGE))
+            },
+        )
+        return data.searchFor?.games?.edges.orEmpty().mapNotNull { it?.item?.toGameInfo() }
+    }
+
     /** A channel's profile, or null when no such login exists. */
     suspend fun user(login: String): ChannelInfo? {
         if (login.isBlank()) return null
@@ -256,6 +273,10 @@ internal const val SEARCH_QUERY =
     "query(\$query: String!, \$limit: Int) { searchFor(userQuery: \$query, platform: \"web\", target: {index: CHANNEL, limit: \$limit}) " +
         "{ channels { edges { item { ... on User { id login displayName profileImageURL(width: 300) " +
         "broadcastSettings { title game { name displayName } } stream { id title game { name displayName } } } } } } } }"
+
+internal const val SEARCH_CATEGORIES_QUERY =
+    "query(\$query: String!, \$limit: Int) { searchFor(userQuery: \$query, platform: \"web\", target: {index: GAME, limit: \$limit}) " +
+        "{ games { edges { item { ... on Game { id name displayName boxArtURL(width: 144, height: 192) } } } } } }"
 
 internal const val USER_QUERY =
     "query(\$login: String!) { user(login: \$login) { id login displayName description " +

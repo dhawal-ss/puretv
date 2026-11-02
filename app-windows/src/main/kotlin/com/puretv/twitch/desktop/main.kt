@@ -200,7 +200,7 @@ fun main(args: Array<String>) {
 
         // The window's close (title bar X, Alt+F4) always quits, hidden or not (a close
         // that arrives while hidden is Windows signing out or an installer). Minimizing
-        // is what goes to the tray, see the minimize watcher below.
+        // goes to the tray only when chosen in Settings, see the minimize watcher below.
         // The updater and the tray's Quit never come through here: they call
         // exitApplication directly, so an update always really exits.
         // Every real exit stops answering a second launch first: application{} only
@@ -226,9 +226,11 @@ fun main(args: Array<String>) {
         // Where the window last sat in a normal state, so a minimize that makes Windows
         // report a parked position (-32000) cannot become the place it comes back to.
         val lastNormalPosition = remember { arrayOfNulls<java.awt.Point>(1) }
-        // Minimizing the main window sends PureTV to the tray: the window is put back to
-        // normal at once (so it comes back un-iconified) and then everything hides, the
-        // same way as any hide: each window stops what it plays and leaves mini/fullscreen.
+        // Minimizing is the ordinary taskbar minimize and the stream keeps playing (issue #40).
+        // Only with "Minimize to tray" turned on does minimizing the main window send PureTV
+        // to the tray: the window is put back to normal at once (so it comes back un-iconified)
+        // and then everything hides, the same way as any hide: each window stops what it plays
+        // and leaves mini/fullscreen, and the main window picks its stream back up when shown.
         // Our own restore flips isMinimized back to false, which this ignores, so there is
         // no loop; the show path also clears it. Without a tray it stays a taskbar minimize.
         // Fullscreen, mini and theater leave through App, which exits them as soon as the
@@ -240,7 +242,8 @@ fun main(args: Array<String>) {
             snapshotFlow { windowState.isMinimized }.collect { minimized ->
                 if (!minimized) return@collect
                 val updating = updateManager.state.value is UpdateState.Downloading
-                if (registry.minimizeAction(WindowRegistry.PRIMARY_ID, windowVisible, trayIconPresent(), updating) != MinimizeAction.HIDE_ALL) return@collect
+                val trayChosen = settingsStore.settings.value.minimizeToTray
+                if (registry.minimizeAction(WindowRegistry.PRIMARY_ID, windowVisible, trayIconPresent(), updating, trayChosen) != MinimizeAction.HIDE_ALL) return@collect
                 windowState.isMinimized = false
                 rescuePosition(windowState, lastNormalPosition[0])
                 windowVisible = false
@@ -281,8 +284,8 @@ fun main(args: Array<String>) {
             }
         }
 
-        // The tray icon is there for as long as PureTV runs: minimizing hides the window
-        // to it, and it is also where go-live alerts arrive.
+        // The tray icon is there for as long as PureTV runs: go-live alerts arrive from it,
+        // and with "Minimize to tray" on, minimizing hides the window to it.
         if (isTraySupported) {
             // The icon is added to the system tray as Tray enters composition; this runs
             // right after, so a go-live toast that had nowhere to go yet appears now.

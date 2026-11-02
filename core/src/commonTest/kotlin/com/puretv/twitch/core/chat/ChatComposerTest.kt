@@ -237,4 +237,70 @@ class ChatComposerTest {
         val s = composerSuggestions("@小", all, chatters)
         assertEquals(listOf("@xiaoming"), s.map { it.completion })
     }
+
+    // ── ":" emote search (issue #35) ────────────────────────────────────────────
+
+    @Test fun colonPrefixSuggestsOnlyEmotes() {
+        val people = listOf(Chatter("pogfan", "pogfan", "#fff"))
+        val s = composerSuggestions(":pog", all, people)
+        assertEquals(listOf("PogChamp", "pogU"), s.map { it.completion })
+        assertTrue(s.all { it is ComposerSuggestion.Emote })
+    }
+
+    @Test fun colonSearchPutsStartsBeforeContains() {
+        val emotes = listOf(emote("OMEGAKEK"), emote("KEKW"), emote("kekLaugh"))
+        assertEquals(listOf("KEKW", "kekLaugh", "OMEGAKEK"), composerSuggestions(":kek", emotes, emptyList()).map { it.completion })
+    }
+
+    @Test fun colonNeedsTwoLetters() {
+        assertEquals(emptyList(), composerSuggestions(":", all, emptyList()))
+        assertEquals(emptyList(), composerSuggestions(":k", all, emptyList()))
+    }
+
+    @Test fun colonCompletionReplacesTheColonToo() {
+        assertEquals("hi PogChamp " to 12, completeWord("hi :pog", 7, "PogChamp"))
+    }
+
+    // ── Tab cycling (issue #35) ─────────────────────────────────────────────────
+
+    @Test fun firstTabFillsTheFirstOption() {
+        val r = tabComplete("hi pog", 6, listOf("PogChamp", "pogU"), previous = null)!!
+        assertEquals("hi PogChamp ", r.text)
+        assertEquals(12, r.cursor)
+        assertEquals(0, r.state.index)
+    }
+
+    @Test fun nextTabSwapsInTheNextOptionAndWraps() {
+        val opts = listOf("PogChamp", "pogU")
+        val first = tabComplete("hi pog there", 6, opts, previous = null)!!
+        assertEquals("hi PogChamp  there", first.text)
+        // The strip's own options are gone once the word is complete: the cycle carries them.
+        val second = tabComplete(first.text, first.cursor, emptyList(), first.state)!!
+        assertEquals("hi pogU  there", second.text)
+        assertEquals(8, second.cursor)
+        val third = tabComplete(second.text, second.cursor, emptyList(), second.state)!!
+        assertEquals("hi PogChamp  there", third.text)
+    }
+
+    @Test fun shiftTabGoesBackwards() {
+        val opts = listOf("a1", "a2", "a3")
+        val first = tabComplete("aa", 2, opts, previous = null, backwards = true)!!
+        assertEquals("a3 ", first.text)
+        val second = tabComplete(first.text, first.cursor, emptyList(), first.state, backwards = true)!!
+        assertEquals("a2 ", second.text)
+    }
+
+    @Test fun typingEndsTheCycle() {
+        val first = tabComplete("pog", 3, listOf("PogChamp", "pogU"), previous = null)!!
+        assertTrue(first.state.isCurrent(first.text, first.cursor))
+        val typed = first.text + "lu"
+        assertTrue(!first.state.isCurrent(typed, typed.length))
+        // A fresh word starts a fresh cycle from its own options.
+        val r = tabComplete(typed, typed.length, listOf("LUL"), first.state)!!
+        assertEquals("PogChamp LUL ", r.text)
+    }
+
+    @Test fun nothingToCompleteIsNull() {
+        assertEquals(null, tabComplete("hello", 5, emptyList(), previous = null))
+    }
 }

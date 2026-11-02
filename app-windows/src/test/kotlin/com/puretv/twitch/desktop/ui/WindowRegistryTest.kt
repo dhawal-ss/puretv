@@ -79,15 +79,22 @@ class WindowRegistryTest {
     @Test fun minimizeRuleOfThePrimaryAndSecondaryWindows() {
         val r = WindowRegistry()
         val s = opened(r.open(WindowDestination.Home))
-        assertEquals(MinimizeAction.HIDE_ALL, r.minimizeAction(0, visible = true, trayAvailable = true))
-        assertEquals(MinimizeAction.MINIMIZE_ONLY, r.minimizeAction(0, visible = true, trayAvailable = false))
+        assertEquals(MinimizeAction.HIDE_ALL, r.minimizeAction(0, visible = true, trayAvailable = true, trayChosen = true))
+        assertEquals(MinimizeAction.MINIMIZE_ONLY, r.minimizeAction(0, visible = true, trayAvailable = false, trayChosen = true))
         // An update is downloading: stay in the taskbar.
-        assertEquals(MinimizeAction.MINIMIZE_ONLY, r.minimizeAction(0, visible = true, trayAvailable = true, updating = true))
+        assertEquals(MinimizeAction.MINIMIZE_ONLY, r.minimizeAction(0, visible = true, trayAvailable = true, updating = true, trayChosen = true))
         // Already hidden in the tray: nothing more to hide.
-        assertEquals(MinimizeAction.MINIMIZE_ONLY, r.minimizeAction(0, visible = false, trayAvailable = true))
+        assertEquals(MinimizeAction.MINIMIZE_ONLY, r.minimizeAction(0, visible = false, trayAvailable = true, trayChosen = true))
         // Other windows minimize on their own.
-        assertEquals(MinimizeAction.MINIMIZE_ONLY, r.minimizeAction(s, visible = true, trayAvailable = true))
-        assertEquals(MinimizeAction.MINIMIZE_ONLY, r.minimizeAction(99, visible = true, trayAvailable = true))
+        assertEquals(MinimizeAction.MINIMIZE_ONLY, r.minimizeAction(s, visible = true, trayAvailable = true, trayChosen = true))
+        assertEquals(MinimizeAction.MINIMIZE_ONLY, r.minimizeAction(99, visible = true, trayAvailable = true, trayChosen = true))
+    }
+
+    @Test fun minimizeStaysInTheTaskbarUnlessTheTrayWasChosen() {
+        // Issue #40: minimizing hid PureTV in the tray and dropped the stream. It is opt-in now.
+        val r = WindowRegistry()
+        assertEquals(MinimizeAction.MINIMIZE_ONLY, r.minimizeAction(0, visible = true, trayAvailable = true))
+        assertEquals(MinimizeAction.MINIMIZE_ONLY, r.minimizeAction(0, visible = true, trayAvailable = true, trayChosen = false))
     }
 
     @Test fun focusTrackingFallsBackWhenTheLastUsedWindowCloses() {

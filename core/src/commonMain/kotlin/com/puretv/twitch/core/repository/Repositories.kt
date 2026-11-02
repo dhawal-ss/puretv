@@ -1,6 +1,7 @@
 package com.puretv.twitch.core.repository
 
 import com.puretv.twitch.core.api.ChannelSearchResult
+import com.puretv.twitch.core.api.GamesPage
 import com.puretv.twitch.core.api.TwitchApiClient
 import com.puretv.twitch.core.model.ChannelInfo
 import com.puretv.twitch.core.model.GameInfo
@@ -128,6 +129,26 @@ class ChannelRepository(
     suspend fun topGames(): List<GameInfo> {
         val anonymous = signedOutDirectory()
         return if (anonymous != null) anonymous.topGames() else apiClient.getTopGames()
+    }
+
+    /**
+     * Categories for Browse, [first] at a time from [after]. Signed in, Helix pages
+     * through every live category. Signed out there is exactly one page: anonymous
+     * GQL refuses every `after` cursor ("failed integrity check"), so the 100 most
+     * watched categories come back with no cursor.
+     */
+    suspend fun topGamesPage(after: String? = null, first: Int = 100): GamesPage {
+        val anonymous = signedOutDirectory()
+        if (anonymous != null) {
+            return if (after == null) GamesPage(anonymous.topGames(first), null) else GamesPage(emptyList(), null)
+        }
+        return apiClient.getTopGamesPage(first, after)
+    }
+
+    /** Categories matching [query], for Search (issue #41). */
+    suspend fun searchCategories(query: String, first: Int = 20): List<GameInfo> {
+        val anonymous = signedOutDirectory()
+        return if (anonymous != null) anonymous.searchCategories(query, first) else apiClient.searchCategories(query, first)
     }
 }
 

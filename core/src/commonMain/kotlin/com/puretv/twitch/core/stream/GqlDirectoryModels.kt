@@ -130,7 +130,13 @@ internal data class GqlSearchEdge(val item: GqlSearchUser? = null)
 internal data class GqlSearchChannels(val edges: List<GqlSearchEdge?> = emptyList())
 
 @Serializable
-internal data class GqlSearchFor(val channels: GqlSearchChannels? = null)
+internal data class GqlSearchFor(val channels: GqlSearchChannels? = null, val games: GqlSearchGames? = null)
+
+@Serializable
+internal data class GqlSearchGameEdge(val item: GqlGame? = null)
+
+@Serializable
+internal data class GqlSearchGames(val edges: List<GqlSearchGameEdge?> = emptyList())
 
 @Serializable
 internal data class GqlSearchData(val searchFor: GqlSearchFor? = null)

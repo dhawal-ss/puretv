@@ -177,6 +177,8 @@ class DesktopSettingsStore(
         val startWithWindows: Boolean = false,
         val trayHintShown: Boolean = false,
         val trayNoticeShown: Boolean = false,
+        // Missing from older files, which then load with it off: minimize goes to the taskbar.
+        val minimizeToTray: Boolean = false,
         val showSevenTvPaints: Boolean = true,
         // Audio normalizer (Wave 4). Missing from older files, which then load with it off.
         val audioNormalizer: Boolean = false,
@@ -214,6 +216,7 @@ class DesktopSettingsStore(
         startWithWindows = startWithWindows,
         trayHintShown = trayHintShown,
         trayNoticeShown = trayNoticeShown,
+        minimizeToTray = minimizeToTray,
         showSevenTvPaints = showSevenTvPaints,
         audioNormalizer = audioNormalizer,
         rtxSuperResolution = rtxSuperResolution,
@@ -249,6 +252,7 @@ class DesktopSettingsStore(
         startWithWindows = startWithWindows,
         trayHintShown = trayHintShown,
         trayNoticeShown = trayNoticeShown,
+        minimizeToTray = minimizeToTray,
         showSevenTvPaints = showSevenTvPaints,
         audioNormalizer = audioNormalizer,
         rtxSuperResolution = rtxSuperResolution,

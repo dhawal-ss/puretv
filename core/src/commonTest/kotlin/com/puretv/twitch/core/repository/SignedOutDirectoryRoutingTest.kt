@@ -156,4 +156,22 @@ class SignedOutDirectoryRoutingTest {
         assertEquals(emptyList(), ChannelRepository(api).topGames())
         assertEquals(1, helix.get())
     }
+
+    // Issue #41: Browse showed only 20 categories and Search found no categories.
+    @Test fun browsePagesAndCategorySearchFollowTheToken() = runTest {
+        val out = harness { null }
+        val page = out.channels.topGamesPage()
+        assertEquals(null, page.cursor, "anonymous GQL refuses cursors, so signed out is one page")
+        assertEquals(emptyList(), out.channels.topGamesPage(after = "anything").games)
+        out.channels.searchCategories("battlefield")
+        assertEquals(0, out.helixCalls.get())
+        assertEquals(2, out.gqlCalls.get(), "a cursor page signed out makes no request")
+
+        val signedIn = harness { "user-token" }
+        signedIn.channels.topGamesPage()
+        signedIn.channels.topGamesPage(after = "c1")
+        signedIn.channels.searchCategories("battlefield")
+        assertEquals(0, signedIn.gqlCalls.get())
+        assertEquals(3, signedIn.helixCalls.get())
+    }
 }

@@ -25,6 +25,20 @@ fun matchEmotes(word: String, all: List<PickableEmote>, limit: Int = 8): List<Pi
     return all.asSequence().filter { it.code.lowercase().startsWith(w) }.take(limit).toList()
 }
 
+/**
+ * Emotes for a Chatterino-style `:` search ([query] is what follows the colon). Codes
+ * that start with it come first, then codes that merely contain it, so ":kek" finds
+ * KEKW before OMEGAKEK. Empty below 2 letters.
+ */
+fun matchEmotesByColon(query: String, all: List<PickableEmote>, limit: Int = 8): List<PickableEmote> {
+    if (query.length < 2) return emptyList()
+    val q = query.lowercase()
+    val starts = all.filter { it.code.lowercase().startsWith(q) }
+    if (starts.size >= limit) return starts.take(limit)
+    val contains = all.filter { val c = it.code.lowercase(); !c.startsWith(q) && c.contains(q) }
+    return (starts + contains).take(limit)
+}
+
 /** Replace the word ending at [cursor] with [code] + trailing space. Returns new text + new cursor index. */
 fun completeWord(text: String, cursor: Int, code: String): Pair<String, Int> {
     val end = cursor.coerceIn(0, text.length)
@@ -106,7 +120,8 @@ sealed class ComposerSuggestion {
  * Autocomplete suggestions for the [word] at the cursor.
  *
  * A word starting with `@` is unambiguously a mention, so it gets chatters only
- * (an empty "@" lists recent chatters). A plain word gets emote matches first,
+ * (an empty "@" lists recent chatters). A word starting with `:` asks for emotes only,
+ * matched anywhere in the code (see [matchEmotesByColon]). A plain word gets emote matches first,
  * then up to [userSlots] chatters whose name also matches, so typing a username
  * without the `@` still finds them without a busy emote set crowding them out.
  * Everything completes via [completeWord], which replaces the whole word, `@`
@@ -122,8 +137,63 @@ fun composerSuggestions(
     if (word.startsWith("@")) {
         return matchChatters(word.drop(1), chatters, limit).map { ComposerSuggestion.User(it) }
     }
+    // ":kek" asks for emotes only (Chatterino style); the colon goes away on completion.
+    if (word.startsWith(":")) {
+        return matchEmotesByColon(word.drop(1), emotes, limit).map { ComposerSuggestion.Emote(it) }
+    }
     if (word.length < 2) return emptyList()
     val users = matchChatters(word, chatters, minOf(userSlots, limit))
     val emoteMatches = matchEmotes(word, emotes, limit - users.size)
     return emoteMatches.map { ComposerSuggestion.Emote(it) } + users.map { ComposerSuggestion.User(it) }
+}
+
+// ---- Tab completion ----------------------------------------------------------
+
+/**
+ * Where Tab completion stands: the word started at [start], [options] are the
+ * completions offered when Tab was first pressed, and [index] is the one now in the
+ * text (followed by a space). Pressing Tab again swaps it for the next option.
+ */
+data class TabCompletion(val start: Int, val options: List<String>, val index: Int) {
+    val inserted: String get() = options[index] + " "
+    val end: Int get() = start + inserted.length
+}
+
+/** The result of a Tab press: the new draft, where the cursor goes, and the cycle to keep. */
+data class TabCompletionResult(val text: String, val cursor: Int, val state: TabCompletion)
+
+/**
+ * True when [state] still describes the draft: the cursor sits right after the
+ * completion it put in, and that text is still there. Typing or moving the cursor
+ * ends the cycle.
+ */
+fun TabCompletion.isCurrent(text: String, cursor: Int): Boolean =
+    options.isNotEmpty() && index in options.indices && cursor == end && end <= text.length && text.startsWith(inserted, start)
+
+/**
+ * One Tab press (Shift+Tab when [backwards]). If [previous] is still current, the
+ * completion in the text moves to the next (or previous) option, wrapping around.
+ * Otherwise a new cycle starts from [options] (the suggestions for the word at the
+ * cursor) with the first one, or the last one going backwards. Null when there is
+ * nothing to complete.
+ */
+fun tabComplete(
+    text: String,
+    cursor: Int,
+    options: List<String>,
+    previous: TabCompletion?,
+    backwards: Boolean = false,
+): TabCompletionResult? {
+    if (previous != null && previous.isCurrent(text, cursor)) {
+        val n = previous.options.size
+        val next = previous.copy(index = (previous.index + if (backwards) n - 1 else 1) % n)
+        val newText = text.substring(0, previous.start) + next.inserted + text.substring(previous.end)
+        return TabCompletionResult(newText, next.end, next)
+    }
+    if (options.isEmpty()) return null
+    val at = cursor.coerceIn(0, text.length)
+    val (_, start) = wordAtCursor(text, at)
+    val state = TabCompletion(start, options, if (backwards) options.size - 1 else 0)
+    val newText = text.substring(0, start) + state.inserted + text.substring(at)
+    return TabCompletionResult(newText, state.end, state)
 }

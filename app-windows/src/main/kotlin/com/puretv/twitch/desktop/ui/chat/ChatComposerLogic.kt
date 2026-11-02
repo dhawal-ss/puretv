@@ -9,8 +9,9 @@ enum class ComposerKeyAction { SEND, COMPLETE, NONE }
 
 /**
  * Maps a composer key press to an action. Enter sends (matching Twitch's web
- * client, and what users expect instead of clicking the arrow); Tab accepts the
- * first suggestion (emote or @username) only when one is offered; anything else
+ * client, and what users expect instead of clicking the arrow); Tab completes when a
+ * suggestion (emote or @username) is offered or a Tab cycle is under way, and the
+ * composer moves to the next suggestion on each further press; anything else
  * falls through to normal text editing. Enter wins over Tab even while the
  * autocomplete strip is open: Tab is the completion key, Enter is always "send".
  */

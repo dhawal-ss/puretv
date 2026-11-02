@@ -275,6 +275,9 @@ data class AppSettings(
     // Windows only: the one-time "PureTV is still running in the tray" notice was shown
     // the first time minimizing hid the app (Windows may tuck the icon in the overflow flyout).
     val trayNoticeShown: Boolean = false,
+    // Windows/Linux: minimizing the main window hides PureTV in the tray instead of the
+    // taskbar. Off by default (1.17.0): a plain minimize keeps the stream playing.
+    val minimizeToTray: Boolean = false,
 
     // Ad Block
     val adBlockEnabled: Boolean = true,

@@ -65,6 +65,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isShiftPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
@@ -84,7 +85,10 @@ import com.puretv.twitch.core.chat.completeWord
 import com.puretv.twitch.core.chat.labels
 import com.puretv.twitch.core.chat.composerSuggestions
 import com.puretv.twitch.core.chat.insertAtCursor
+import com.puretv.twitch.core.chat.TabCompletion
+import com.puretv.twitch.core.chat.isCurrent
 import com.puretv.twitch.core.chat.recentChatters
+import com.puretv.twitch.core.chat.tabComplete
 import com.puretv.twitch.core.chat.wordAtCursor
 import com.puretv.twitch.core.model.ChatMessage
 import com.puretv.twitch.core.model.ChatTextSize
@@ -1407,9 +1411,34 @@ internal fun ChatInputBar(
         composerSuggestions(word, emotes, recentChatters(recentMessages, selfLogin))
     }
 
+    // Tab completion in progress: pressing Tab again swaps in the next suggestion
+    // (Shift+Tab the previous one), Chatterino style. The strip keeps showing the
+    // suggestions the cycle started from, with the one in the text highlighted.
+    var tab by remember { mutableStateOf<TabCompletion?>(null) }
+    var tabItems by remember { mutableStateOf<List<ComposerSuggestion>>(emptyList()) }
+    val cycling = tab?.takeIf { it.isCurrent(value.text, value.selection.start) && tabItems.size == it.options.size }
+    val stripItems = if (cycling != null) tabItems else suggestions
+    // The chip Tab lands on: the one in the text while cycling, otherwise the first.
+    val highlighted = cycling?.index ?: 0
+
     fun applyCompletion(code: String) {
-        val (t, cur) = completeWord(value.text, value.selection.start, code)
+        val current = cycling
+        val (t, cur) = if (current != null) {
+            // Swap out the completion Tab put in rather than adding after it.
+            val inserted = code + " "
+            (value.text.substring(0, current.start) + inserted + value.text.substring(current.end)) to (current.start + inserted.length)
+        } else {
+            completeWord(value.text, value.selection.start, code)
+        }
+        tab = null
         value = TextFieldValue(t, TextRange(cur))
+    }
+
+    fun tabPress(backwards: Boolean) {
+        val r = tabComplete(value.text, value.selection.start, suggestions.map { it.completion }, cycling, backwards) ?: return
+        if (cycling == null) tabItems = suggestions
+        tab = r.state
+        value = TextFieldValue(r.text, TextRange(r.cursor))
     }
 
     Column(modifier = Modifier.fillMaxWidth()) {
@@ -1456,38 +1485,56 @@ internal fun ChatInputBar(
             Spacer(Modifier.height(8.dp))
         }
 
-        // Autocomplete chip strip, only while typing a recognised partial.
-        if (suggestions.isNotEmpty() && fieldFocused) {
+        // Autocomplete chip strip, only while typing a recognised partial (or cycling
+        // with Tab). The chip Tab picks is highlighted, and a hint names the key so
+        // Tab completion is easy to find.
+        if (stripItems.isNotEmpty() && fieldFocused) {
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 14.dp)
-                    .horizontalScroll(rememberScrollState()),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                suggestions.forEach { s ->
-                    val chipInteraction = remember(s.completion) { MutableInteractionSource() }
-                    Row(
-                        modifier = Modifier
-                            .expressiveClickable(
-                                interaction = chipInteraction,
-                                onClick = { applyCompletion(s.completion) },
-                                restRadius = PureTvTheme.shapes.pill,
-                                hoverRadius = PureTvTheme.shapes.pillMorph,
-                                color = c.surfaceHigh,
-                                hoverColor = c.surfaceHighest,
+                Row(
+                    modifier = Modifier
+                        .weight(1f)
+                        .horizontalScroll(rememberScrollState()),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    stripItems.forEachIndexed { i, s ->
+                        val chipInteraction = remember(s.completion) { MutableInteractionSource() }
+                        val selected = i == highlighted
+                        Row(
+                            modifier = Modifier
+                                .expressiveClickable(
+                                    interaction = chipInteraction,
+                                    onClick = { applyCompletion(s.completion) },
+                                    restRadius = PureTvTheme.shapes.pill,
+                                    hoverRadius = PureTvTheme.shapes.pillMorph,
+                                    color = if (selected) c.secondaryContainer else c.surfaceHigh,
+                                    hoverColor = if (selected) c.secondaryContainer else c.surfaceHighest,
+                                )
+                                .padding(horizontal = 10.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            if (s is ComposerSuggestion.Emote) {
+                                EmoteImage(s.emote.imageUrl, s.emote.code, modifier = Modifier.size(20.dp))
+                                Spacer(Modifier.width(5.dp))
+                            }
+                            Text(
+                                s.completion,
+                                color = if (selected) c.onSecondaryContainer else c.onSurfaceVariant,
+                                style = PureTvType.dataSmall,
                             )
-                            .padding(horizontal = 10.dp, vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        if (s is ComposerSuggestion.Emote) {
-                            EmoteImage(s.emote.imageUrl, s.emote.code, modifier = Modifier.size(20.dp))
-                            Spacer(Modifier.width(5.dp))
                         }
-                        Text(s.completion, color = c.onSurfaceVariant, style = PureTvType.dataSmall)
                     }
                 }
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    if (cycling != null) "Tab: next" else "Tab to complete",
+                    color = c.onSurfaceVariant,
+                    style = MaterialTheme.typography.labelSmall,
+                    maxLines = 1,
+                )
             }
             Spacer(Modifier.height(8.dp))
         }
@@ -1521,7 +1568,11 @@ internal fun ChatInputBar(
                     }
                     BasicTextField(
                         value = value,
-                        onValueChange = { value = it },
+                        onValueChange = {
+                            // Any edit of their own ends a Tab cycle.
+                            if (it.text != value.text) tab = null
+                            value = it
+                        },
                         singleLine = true,
                         textStyle = TextStyle(color = c.onSurface, fontSize = MaterialTheme.typography.bodyMedium.fontSize),
                         cursorBrush = SolidColor(c.primary),
@@ -1533,14 +1584,15 @@ internal fun ChatInputBar(
                                 fieldFocused = it.isFocused
                                 onFocusChanged(it.isFocused || searchFocused)
                             }
-                            // Enter sends the message; Tab accepts the first emote or
-                            // @username suggestion when one is offered (see composerKeyAction).
+                            // Enter sends the message; Tab fills in the first emote or
+                            // @username suggestion and each further Tab cycles to the next
+                            // (Shift+Tab back), see composerKeyAction and tabComplete.
                             .onPreviewKeyEvent { ev ->
                                 if (ev.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                                 val isEnter = ev.key == Key.Enter || ev.key == Key.NumPadEnter
-                                when (composerKeyAction(isEnter, ev.key == Key.Tab, suggestions.isNotEmpty())) {
+                                when (composerKeyAction(isEnter, ev.key == Key.Tab, suggestions.isNotEmpty() || cycling != null)) {
                                     ComposerKeyAction.SEND -> { submit(); true }
-                                    ComposerKeyAction.COMPLETE -> { applyCompletion(suggestions.first().completion); true }
+                                    ComposerKeyAction.COMPLETE -> { tabPress(backwards = ev.isShiftPressed); true }
                                     ComposerKeyAction.NONE -> false
                                 }
                             },

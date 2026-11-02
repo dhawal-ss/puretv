@@ -46,7 +46,7 @@ class AudioNormalizerProfileTest {
         val l = options(limiter.removePrefix("alimiter="))
 
         // acompressor wants linear amplitudes and a linear knee ratio (1..8), not dB.
-        assertEquals(0.1, c.getValue("threshold").toDouble(), 1e-4)
+        assertEquals(AudioNormalizerProfile.dbToLinear(AudioNormalizerProfile.THRESHOLD_DB), c.getValue("threshold").toDouble(), 1e-4)
         assertEquals(AudioNormalizerProfile.RATIO, c.getValue("ratio").toDouble())
         assertTrue(c.getValue("knee").toDouble() in 1.0..8.0)
         assertTrue(c.getValue("makeup").toDouble() in 1.0..64.0)

@@ -51,6 +51,7 @@ import com.puretv.twitch.core.model.ChatTextSize
 import com.puretv.twitch.desktop.data.DesktopSettingsStore
 import com.puretv.twitch.desktop.platform.Diagnostics
 import com.puretv.twitch.desktop.platform.LoginStartup
+import com.puretv.twitch.desktop.platform.WindowChrome
 import com.puretv.twitch.desktop.platform.openInBrowser
 import com.puretv.twitch.desktop.ui.components.ExpressiveButtonSize
 import androidx.compose.ui.window.isTraySupported
@@ -158,6 +159,8 @@ fun SettingsContent(koin: Koin, onExit: () -> Unit) {
         NotificationsPanel(
             liveAlerts = state.settings.liveNotifications,
             onLiveAlerts = { on -> settingsStore.updateSettings { it.copy(liveNotifications = on) } },
+            minimizeToTray = state.settings.minimizeToTray,
+            onMinimizeToTray = { on -> settingsStore.updateSettings { it.copy(minimizeToTray = on) } },
             startWithWindows = state.settings.startWithWindows,
             onStartWithWindows = { on ->
                 if (LoginStartup.setEnabled(on)) settingsStore.updateSettings { it.copy(startWithWindows = on) }
@@ -491,14 +494,16 @@ private fun ChatPanel(
 
 /**
  * Go-live alerts and the tray. Alerts arrive as Windows notifications from the tray
- * icon while PureTV is running; minimizing PureTV keeps it in the tray, which is what
- * lets them keep coming (closing the window quits). Without a system tray (rare on Windows) neither works, so
+ * icon while PureTV is running (closing the window quits). Minimizing goes to the taskbar
+ * unless "Minimize to tray" is on. Without a system tray (rare on Windows) neither works, so
  * the panel says so instead of offering switches that would do nothing.
  */
 @Composable
 private fun NotificationsPanel(
     liveAlerts: Boolean,
     onLiveAlerts: (Boolean) -> Unit,
+    minimizeToTray: Boolean,
+    onMinimizeToTray: (Boolean) -> Unit,
     startWithWindows: Boolean,
     onStartWithWindows: (Boolean) -> Unit,
     showNote: Boolean,
@@ -535,11 +540,20 @@ private fun NotificationsPanel(
             }
             SettingsRow(
                 label = "Go-live alerts",
-                description = "Tell me when the channels I picked go live. Open a channel and tap the bell to pick it. Alerts appear from the tray icon, and minimizing PureTV keeps it in the tray. Checks about every 90 seconds while PureTV is running.",
+                description = "Tell me when the channels I picked go live. Open a channel and tap the bell to pick it. Alerts appear from the tray icon while PureTV is open or minimized. Checks about every 90 seconds while PureTV is running.",
             ) {
                 ExpressiveSwitch(checked = liveAlerts, onCheckedChange = onLiveAlerts)
             }
             ExpressiveDivider(Modifier.padding(vertical = 24.dp))
+            if (WindowChrome.minimizeToTray()) {
+                SettingsRow(
+                    label = "Minimize to tray",
+                    description = "Minimizing hides PureTV in the tray instead of the taskbar. The stream stops while hidden and picks up again when you open PureTV. Off: minimizing keeps the stream playing.",
+                ) {
+                    ExpressiveSwitch(checked = minimizeToTray, onCheckedChange = onMinimizeToTray)
+                }
+                ExpressiveDivider(Modifier.padding(vertical = 24.dp))
+            }
             SettingsRow(
                 label = LoginStartup.label(),
                 description = if (startupAvailable) {

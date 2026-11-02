@@ -9,6 +9,7 @@ import com.puretv.twitch.core.model.StreamInfo
 import com.puretv.twitch.core.model.VideoInfo
 import com.puretv.twitch.core.model.VideoType
 import com.puretv.twitch.core.stream.TwitchGqlDirectoryClient
+import com.puretv.twitch.core.stream.toSizeTemplate
 import com.puretv.twitch.core.model.parseTwitchDuration
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
@@ -237,6 +238,34 @@ class TwitchApiClient(
         return resp.data
     }
 
+    /**
+     * GET /games/top, one page of [first] (Helix allows up to 100) starting at the
+     * [after] cursor. The returned cursor is null on the last page.
+     */
+    suspend fun getTopGamesPage(first: Int = 100, after: String? = null): GamesPage {
+        val resp: HelixPagedEnvelope<GameInfo> = withRateLimitRetry {
+            authedClient().get("${TwitchConfig.API_BASE}/games/top") {
+                header("Client-Id", TwitchConfig.CLIENT_ID)
+                tokenProvider()?.let { header("Authorization", "Bearer $it") }
+                parameter("first", first.coerceIn(1, 100).toString())
+                if (after != null) parameter("after", after)
+            }.body()
+        }
+        return GamesPage(resp.data, resp.pagination.cursor?.takeIf { it.isNotBlank() })
+    }
+
+    /**
+     * GET /search/categories. Helix hands back fixed-size box art (`-52x72.jpg`),
+     * so it is turned back into the `{width}x{height}` template the tiles fill.
+     */
+    suspend fun searchCategories(query: String, first: Int = 20): List<GameInfo> {
+        val resp: HelixEnvelope<GameInfo> = get(
+            "/search/categories",
+            mapOf("query" to query, "first" to first.coerceIn(1, 100).toString()),
+        )
+        return resp.data.map { it.copy(boxArtUrl = toSizeTemplate(it.boxArtUrl)) }
+    }
+
     /** GET /search/channels — search by query string. */
     suspend fun searchChannels(query: String, liveOnly: Boolean = false): List<ChannelSearchResult> {
         val resp: HelixEnvelope<ChannelSearchResult> = get(
@@ -423,6 +452,9 @@ fun HelixVideo.toDomain(): VideoInfo =
 
 /** A page of videos plus the cursor for the next page (null when no more). */
 data class VideoPage(val videos: List<VideoInfo>, val cursor: String?)
+
+/** One page of categories; [cursor] fetches the next one and is null on the last page. */
+data class GamesPage(val games: List<GameInfo>, val cursor: String?)
 
 @Serializable
 data class FollowedChannel(

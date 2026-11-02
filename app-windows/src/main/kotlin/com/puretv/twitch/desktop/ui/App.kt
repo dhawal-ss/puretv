@@ -153,8 +153,8 @@ private val RAIL_COLLAPSED = 88.dp
  * The window's content.
  *
  * [onClose] is the window's own close (the title bar X): it quits PureTV from the main
- * window and closes just this window from any other. Minimizing the main window is what
- * sends PureTV to the tray (see main.kt). [onQuit] always exits for real; the updater
+ * window and closes just this window from any other. Minimizing the main window sends
+ * PureTV to the tray only when "Minimize to tray" is on (see main.kt). [onQuit] always exits for real; the updater
  * uses it, because an update that only hid the window would leave PureTV running while
  * the installer replaces its files.
  */
@@ -370,12 +370,23 @@ fun App(
             LaunchedEffect(route) { if (route !is Route.Stream) shell.exitMini() }
             LaunchedEffect(frontRequests) { if (frontRequests > 0) shell.exitMini() }
             // Hidden in the tray, nothing should keep playing or keep chat sockets open:
-            // leaving the stream (or VOD) route disposes its player and chat.
+            // leaving the stream (or VOD) route disposes its player and chat. The stream or
+            // VOD is remembered and opens again when the window comes back, so hiding to the
+            // tray never drops someone on Home (issue #40).
+            var resumeRoute by remember { mutableStateOf<Route?>(null) }
             LaunchedEffect(windowVisible) {
+                if (windowVisible) {
+                    resumeRoute?.let { route = it }
+                    resumeRoute = null
+                    return@LaunchedEffect
+                }
                 // Streams in their own windows stop too: the session ends and its windows close.
-                if (!windowVisible && isPrimary) multiSession.end()
-                if (!windowVisible && (route is Route.Stream || route is Route.Multi || route is Route.Vod)) {
+                if (isPrimary) multiSession.end()
+                val playing = route
+                if (playing is Route.Stream || playing is Route.Multi || playing is Route.Vod) {
                     shell.exitImmersive()
+                    // Multi-stream ended with its session, so the window comes back on the stream it started from.
+                    resumeRoute = if (playing is Route.Multi) Route.Stream(playing.login) else playing
                     route = Route.Top
                 }
             }

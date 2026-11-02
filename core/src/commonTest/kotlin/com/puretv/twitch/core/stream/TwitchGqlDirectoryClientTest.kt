@@ -377,4 +377,35 @@ class TwitchGqlDirectoryClientTest {
         assertEquals(emptyList(), api.liveStreamsForLogins(emptyList()))
         assertEquals(0, calls)
     }
+
+    // Issue #41: Search found channels only. Fixture trimmed from a live anonymous capture (2026-11-02).
+    @Test fun categorySearchMapsGamesWithSizeTemplates() = runTest {
+        var body: JsonObject? = null
+        val api = client { request ->
+            body = request.bodyJson()
+            respond(
+                """
+                {"data":{"searchFor":{"games":{"edges":[
+                  {"item":{"id":"1848745913","name":"Battlefield REDSEC","displayName":"Battlefield REDSEC",
+                    "boxArtURL":"https://static-cdn.jtvnw.net/ttv-boxart/1848745913_IGDB-144x192.jpg"}},
+                  null,
+                  {"item":{}}
+                ]}}}}
+                """.trimIndent(),
+                HttpStatusCode.OK,
+                jsonHeaders,
+            )
+        }
+        val games = api.searchCategories("Battlefield REDSEC")
+        assertEquals(listOf("1848745913"), games.map { it.id })
+        assertEquals("Battlefield REDSEC", games[0].name)
+        assertEquals("https://static-cdn.jtvnw.net/ttv-boxart/1848745913_IGDB-{width}x{height}.jpg", games[0].boxArtUrl)
+        assertEquals(SEARCH_CATEGORIES_QUERY, body?.get("query")?.jsonPrimitive?.content, "the query text is a constant")
+        assertEquals("Battlefield REDSEC", body?.get("variables")?.jsonObject?.get("query")?.jsonPrimitive?.content)
+    }
+
+    @Test fun blankCategorySearchMakesNoRequest() = runTest {
+        val api = client { error("no request expected") }
+        assertEquals(emptyList(), api.searchCategories("  "))
+    }
 }

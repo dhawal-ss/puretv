@@ -7,8 +7,8 @@ import kotlin.math.roundToLong
  * The one curve behind the "Even out loud and quiet audio" setting, written once
  * in dB and ms and handed to each player in the form it understands:
  *  - VLC 3.0.23 (Windows): its `compressor` audio filter, as libVLC instance
- *    arguments ([vlcArgs]). VLC only loads audio filters per instance, so the
- *    switch applies after a restart there.
+ *    arguments ([vlcArgs]). VLC only loads audio filters per instance, so
+ *    switching it runs the stream on a second libVLC instance built with them.
  *  - mpv (Windows): ffmpeg's `acompressor` then `alimiter`, as the `af`
  *    property ([mpvAudioFilter]), set live.
  *  - ExoPlayer (phone and TV): [DynamicRangeCompressor], run on the decoded PCM.
@@ -19,27 +19,29 @@ import kotlin.math.roundToLong
  * no delay and leaves low latency alone.
  *
  * Quiet passages (below the knee) only get [MAKEUP_DB]; louder ones are pulled
- * down at [RATIO]:1 above [THRESHOLD_DB]. A source peaking at full scale ends
- * up around -9 dBFS, one at -30 dBFS around -26 dBFS.
+ * down at [RATIO]:1 above [THRESHOLD_DB]. A voice peaking at -3 dBFS ends up
+ * around -11 dBFS, about where it was before, while background music at -36 dBFS
+ * comes up to -25 dBFS: a 33 dB gap shrinks to about 14 dB. (1.17.0 retune; the
+ * first curve, -20 dB at 3:1 with +4 dB, only shrank it to about 20 dB, issue #36.)
  */
 object AudioNormalizerProfile {
-    /** Where compression starts, in dBFS of the peak level. */
-    const val THRESHOLD_DB = -20.0
+    /** Where compression starts, in dBFS of the peak level. VLC accepts nothing lower. */
+    const val THRESHOLD_DB = -30.0
 
     /** Above the threshold, every [RATIO] dB in gives 1 dB out. */
-    const val RATIO = 3.0
+    const val RATIO = 4.0
 
     /** How fast the gain comes down when the audio gets louder. */
-    const val ATTACK_MS = 5.0
+    const val ATTACK_MS = 3.0
 
     /** How fast the gain recovers when it gets quieter again. Slow enough not to pump. */
-    const val RELEASE_MS = 250.0
+    const val RELEASE_MS = 300.0
 
     /** Width of the soft knee centred on the threshold, so the curve has no corner. */
-    const val KNEE_DB = 6.0
+    const val KNEE_DB = 8.0
 
-    /** Fixed gain on top, so quiet speech ends up a little louder than before. */
-    const val MAKEUP_DB = 4.0
+    /** Fixed gain on top: lifts quiet audio and keeps a compressed voice about as loud as before. */
+    const val MAKEUP_DB = 11.0
 
     /**
      * Peak ceiling of the limiter after the compressor (mpv and ExoPlayer). It

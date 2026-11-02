@@ -38,10 +38,26 @@ class DynamicRangeCompressorTest {
     fun loudAudioIsTurnedDown() {
         val audio = sine(0.9f, seconds = 1.0)
         compressor().process(audio)
-        // Settled second half: -0.9 dBFS in comes out near -9.6 dBFS on the 3:1 curve.
+        // Settled second half: -0.9 dBFS in comes out near -11.7 dBFS on the 4:1 curve.
         val settled = peak(audio, from = audio.size / 2)
         assertTrue(settled < 0.9f * 0.5f, "loud peak only came down to $settled")
         assertTrue(settled > 0.25f, "loud peak squashed too far, to $settled")
+    }
+
+    @Test
+    fun voiceAndBackgroundMusicEndUpMuchCloser() {
+        // Issue #36: a streamer's voice peaking at -3 dBFS over music at -36 dBFS.
+        // Off, that is a 33 dB gap; the curve must close most of it, and the voice
+        // must come out about as loud as the first curve left it (around -11 dBFS).
+        val voice = sine(0.708f, seconds = 1.0)
+        val music = sine(0.0158f, seconds = 1.0)
+        compressor().process(voice)
+        compressor().process(music)
+        val voiceDb = 20 * kotlin.math.log10(peak(voice, from = voice.size / 2).toDouble())
+        val musicDb = 20 * kotlin.math.log10(peak(music, from = music.size / 2).toDouble())
+        val gap = voiceDb - musicDb
+        assertTrue(gap < 16.0, "voice/music gap is still ${gap} dB")
+        assertTrue(voiceDb in -14.0..-8.0, "voice came out at ${voiceDb} dBFS")
     }
 
     @Test
