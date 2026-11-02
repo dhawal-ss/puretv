@@ -81,7 +81,7 @@ class ReleasablePlayerTest {
 class SecondaryPlaybackTest {
     @Test fun releasingBeforePreparingBuildsNothing() {
         // The engine is never touched: a window that closed before its player was made makes none.
-        val secondary = SecondaryPlayback(VlcEngine { emptyList() }, ChannelClaims())
+        val secondary = SecondaryPlayback(VlcEngines(levelling = { null }), ChannelClaims())
         secondary.release()
         secondary.release()
         assertFalse(secondary.prepare())

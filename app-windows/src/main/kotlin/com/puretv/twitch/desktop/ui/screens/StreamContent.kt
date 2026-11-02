@@ -430,6 +430,22 @@ private fun StreamScreen(
     val latestMenuOpen = rememberUpdatedState(settingsMenuOpen)
     var heldKey = 0
     val latestViewModel = rememberUpdatedState(viewModel)
+
+    // "Even out loud and quiet audio" from the controls bar or the A key: a short note
+    // says which way it went, since the only other sign is the sound (and on VLC a second
+    // or two of rebuffering while the stream starts again with or without it).
+    var audioNote by remember { mutableStateOf<String?>(null) }
+    var audioNoteJob by remember { mutableStateOf<Job?>(null) }
+    fun setAudioNormalizer(on: Boolean) {
+        latestViewModel.value.setAudioNormalizer(on)
+        audioNote = if (on) "Evening out loud and quiet audio (${settingsStore.settings.value.audioLevelling.label})" else "Audio levelling off"
+        audioNoteJob?.cancel()
+        audioNoteJob = scope.launch {
+            delay(2_500)
+            audioNote = null
+        }
+    }
+
     val myWindow = LocalAwtWindow.current
     DisposableEffect(Unit) {
         val dispatcher = KeyEventDispatcher { e ->
@@ -500,6 +516,10 @@ private fun StreamScreen(
                 }
                 ShortcutAction.ToggleMute -> { latestViewModel.value.toggleMute(); resetControls() }
                 ShortcutAction.CycleSleepTimer -> { sleep.cycle(); resetControls() }
+                ShortcutAction.ToggleAudioNormalizer -> {
+                    setAudioNormalizer(!settingsStore.settings.value.audioNormalizer)
+                    resetControls() // the controls bar's audio button lights up with it
+                }
                 ShortcutAction.ToggleMini -> shell.setPlayerMode(if (m == PlayerMode.MINI) PlayerMode.DEFAULT else PlayerMode.MINI)
             }
             true
@@ -673,13 +693,17 @@ private fun StreamScreen(
                             ) else null,
                             engineNeedsRestart = playerProvider.runningBackend(appSettings.playbackBackend) != appSettings.playbackBackend,
                             onRestart = if (AppRestart.isAvailable) AppRestart::restart else null,
+                            audioNormalizer = appSettings.audioNormalizer,
+                            onAudioNormalizerChange = viewModel::setAudioNormalizer,
+                            audioLevelling = appSettings.audioLevelling,
+                            onAudioLevellingSelected = viewModel::setAudioLevelling,
                         )
                     }
 
                     // Flip banner and the sleep timer's last-minute warning, then the
                     // shortcuts list: between the video and the controls like the menu above.
                     PlayerNoticeStrip(
-                        text = if (mini) null else flipTarget?.let { "Switching to $it" } ?: flipNote ?: sleep.ui.warning,
+                        text = if (mini) null else flipTarget?.let { "Switching to $it" } ?: flipNote ?: audioNote ?: sleep.ui.warning,
                     )
                     ShortcutsSheet(visible = helpOpen)
                 }
@@ -697,9 +721,11 @@ private fun StreamScreen(
                         settingsOpen = settingsMenuOpen,
                         mode = mode,
                         isChatOpen = isChatOpen,
+                        audioNormalizer = appSettings.audioNormalizer,
                         onTogglePlayPause = viewModel::togglePlayPause,
                         onVolumeChange = viewModel::setVolume,
                         onToggleMute = viewModel::toggleMute,
+                        onToggleAudioNormalizer = { setAudioNormalizer(!appSettings.audioNormalizer) },
                         onToggleSettings = { settingsMenuOpen = !settingsMenuOpen },
                         onToggleChat = { shell.toggleChat() },
                         onToggleTheater = { shell.setPlayerMode(if (mode == PlayerMode.THEATER) PlayerMode.DEFAULT else PlayerMode.THEATER) },
@@ -980,9 +1006,11 @@ private fun PlaybackControls(
     settingsOpen: Boolean,
     mode: PlayerMode,
     isChatOpen: Boolean,
+    audioNormalizer: Boolean,
     onTogglePlayPause: () -> Unit,
     onVolumeChange: (Int) -> Unit,
     onToggleMute: () -> Unit,
+    onToggleAudioNormalizer: () -> Unit,
     onToggleSettings: () -> Unit,
     onToggleChat: () -> Unit,
     onToggleTheater: () -> Unit,
@@ -1015,6 +1043,8 @@ private fun PlaybackControls(
             settingsOpen = settingsOpen,
             isChatOpen = isChatOpen,
             mode = mode,
+            audioNormalizer = audioNormalizer,
+            onToggleAudioNormalizer = onToggleAudioNormalizer,
             onToggleSettings = onToggleSettings,
             onToggleChat = onToggleChat,
             onToggleTheater = onToggleTheater,
@@ -1077,7 +1107,7 @@ private fun VolumeButton(isMuted: Boolean, onClick: () -> Unit) {
     }
 }
 
-/** The welded quality/settings/chat/theater/fullscreen cluster: one 28dp-radius bar,
+/** The welded audio/quality/settings/chat/theater/fullscreen cluster: one 28dp-radius bar,
  *  1dp outlineVariant dividers between square segments. The segments themselves
  *  never round; only the group's outer silhouette does. */
 @Composable
@@ -1085,6 +1115,8 @@ private fun ConnectedControlsGroup(
     settingsOpen: Boolean,
     isChatOpen: Boolean,
     mode: PlayerMode,
+    audioNormalizer: Boolean,
+    onToggleAudioNormalizer: () -> Unit,
     onToggleSettings: () -> Unit,
     onToggleChat: () -> Unit,
     onToggleTheater: () -> Unit,
@@ -1098,6 +1130,15 @@ private fun ConnectedControlsGroup(
             .clip(RoundedCornerShape(28.dp))
             .background(c.surfaceHigh),
     ) {
+        // "Even out loud and quiet audio" (A): lit while it is on, like chat and theater.
+        // The sliders glyph reads as audio levels; the icon pack has no compressor symbol.
+        ControlsGroupButton(
+            ExpressiveIcons.Tune,
+            if (audioNormalizer) "Stop evening out audio" else "Even out loud and quiet audio",
+            onToggleAudioNormalizer,
+            tint = if (audioNormalizer) c.primary else null,
+        )
+        GroupDivider()
         // No dedicated quick-quality flow exists in the ViewModel: resolution lives
         // inside the same combined playback menu the gear opens, so this is a second
         // entry point into that one menu rather than a distinct feature.

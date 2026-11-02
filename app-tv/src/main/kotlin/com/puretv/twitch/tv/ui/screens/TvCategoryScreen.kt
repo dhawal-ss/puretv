@@ -56,12 +56,14 @@ fun TvCategoryScreen(
     gameId: String,
     onOpenStream: (String) -> Unit,
     onBack: () -> Unit,
+    /** The name the opener knew (Browse, Search), for when nothing here is live. */
+    gameName: String = "",
     viewModel: CategoryViewModel = koinViewModel(parameters = { parametersOf(gameId) }),
 ) {
     val state by viewModel.state.collectAsState()
     val flipOrigin = koinInject<FlipOrigin>()
     val c = PureTvTvTheme.colors
-    val displayName = state.gameName.ifBlank { "Category" }
+    val displayName = state.gameName.ifBlank { gameName }.ifBlank { "Category" }
 
     Column(modifier = Modifier.fillMaxSize().background(c.surface)) {
         CategoryHeader(displayName = displayName, streams = state.streams, onBack = onBack)

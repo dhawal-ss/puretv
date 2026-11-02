@@ -60,10 +60,16 @@ import org.koin.core.parameter.parametersOf
  * here: nothing real to wire one to.
  */
 @Composable
-fun CategoryScreen(gameId: String, onOpenStream: (String) -> Unit, onBack: () -> Unit) {
+fun CategoryScreen(
+    gameId: String,
+    onOpenStream: (String) -> Unit,
+    onBack: () -> Unit,
+    /** The name the opener knew (Browse, Home, Search), for when nothing here is live. */
+    gameName: String = "",
+) {
     val viewModel: CategoryViewModel = koinViewModel(parameters = { parametersOf(gameId) })
     val state by viewModel.state.collectAsState()
-    val displayName = state.gameName.ifBlank { "Category" }
+    val displayName = state.gameName.ifBlank { gameName }.ifBlank { "Category" }
 
     LazyVerticalGrid(
         columns = GridCells.Adaptive(minSize = 300.dp),

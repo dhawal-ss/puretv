@@ -97,12 +97,19 @@ object Routes {
     const val LOGIN = "login"
     const val STREAM = "stream/{channelLogin}"
     const val CHANNEL = "channel/{channelLogin}"
-    const val CATEGORY = "category/{gameId}"
+    const val CATEGORY = "category/{gameId}?name={name}"
     const val VOD = "vod/{vodId}?login={login}&title={title}&thumb={thumb}"
 
     fun stream(channelLogin: String) = "stream/$channelLogin"
     fun channel(channelLogin: String) = "channel/$channelLogin"
-    fun category(gameId: String) = "category/$gameId"
+
+    /**
+     * A category. [name] is optional: it titles the screen when nothing in the
+     * category is live (the title otherwise comes from the first live stream).
+     * Names carry spaces, colons and ampersands, so it is encoded.
+     */
+    fun category(gameId: String, name: String = "") =
+        if (name.isBlank()) "category/$gameId" else "category/$gameId?name=${Uri.encode(name)}"
 
     /** A past broadcast. Titles carry spaces, slashes and ampersands, so every value is encoded. */
     fun vod(launch: VodLaunch) =
@@ -315,7 +322,7 @@ fun PureTvNavHost(navController: NavHostController, modifier: Modifier = Modifie
                 onOpenStream = { navController.go(Routes.stream(it)) },
                 onOpenChannel = { navController.go(Routes.channel(it)) },
                 onOpenBrowse = { navController.switchTab(Routes.BROWSE) },
-                onOpenCategory = { navController.go(Routes.category(it)) },
+                onOpenCategory = { id, name -> navController.go(Routes.category(id, name)) },
                 onOpenSearch = { navController.switchTab(Routes.SEARCH) },
                 onOpenVod = { navController.go(Routes.vod(it)) },
                 onOpenSettings = { navController.go(Routes.SETTINGS) },
@@ -323,10 +330,13 @@ fun PureTvNavHost(navController: NavHostController, modifier: Modifier = Modifie
             )
         }
         composable(Routes.BROWSE) {
-            BrowseScreen(onOpenCategory = { navController.go(Routes.category(it)) })
+            BrowseScreen(onOpenCategory = { id, name -> navController.go(Routes.category(id, name)) })
         }
         composable(Routes.SEARCH) {
-            SearchScreen(onOpenChannel = { navController.go(Routes.channel(it)) })
+            SearchScreen(
+                onOpenChannel = { navController.go(Routes.channel(it)) },
+                onOpenCategory = { id, name -> navController.go(Routes.category(id, name)) },
+            )
         }
         composable(Routes.FOLLOWING) {
             FollowingScreen(
@@ -372,10 +382,17 @@ fun PureTvNavHost(navController: NavHostController, modifier: Modifier = Modifie
             )
             VodPlayerScreen(launch = launch, onBack = navController::popBackStack)
         }
-        composable(Routes.CATEGORY) { backStackEntry ->
+        composable(
+            Routes.CATEGORY,
+            arguments = listOf(
+                navArgument("gameId") { type = NavType.StringType },
+                navArgument("name") { type = NavType.StringType; defaultValue = "" },
+            ),
+        ) { backStackEntry ->
             val gameId = backStackEntry.arguments?.getString("gameId").orEmpty()
             CategoryScreen(
                 gameId = gameId,
+                gameName = backStackEntry.arguments?.getString("name").orEmpty(),
                 onOpenStream = { navController.go(Routes.stream(it)) },
                 onBack = navController::popBackStack,
             )

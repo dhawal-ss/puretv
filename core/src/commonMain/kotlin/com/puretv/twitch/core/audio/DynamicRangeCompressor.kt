@@ -7,7 +7,7 @@ import kotlin.math.pow
 
 /**
  * The phone and TV audio normalizer: a stereo-linked peak compressor followed by
- * a peak limiter, on [AudioNormalizerProfile]'s curve. It runs on ExoPlayer's
+ * a peak limiter, on the curve of the chosen [level] (see [AudioLevelling]). It runs on ExoPlayer's
  * audio thread for every decoded sample, so it is built to be cheap there:
  *  - nothing is allocated after [configure];
  *  - the envelope follower costs a compare and a multiply-add per frame;
@@ -21,7 +21,9 @@ import kotlin.math.pow
  * few ms of a sudden loud sound (before the attack catches up) from clipping:
  * the gain for a frame is never more than the ceiling divided by its peak.
  *
- * [enabled] may be flipped from any thread. Turning it off fades the effect out
+ * [enabled] and [level] may be changed from any thread; a new level takes over on
+ * the audio thread at the next frame, the gain gliding to the new curve over one
+ * block. Turning it off fades the effect out
  * over [FADE_MS] instead of jumping, and once the fade is done [isBypassed] says
  * the caller can copy the audio through untouched. Everything else runs on the
  * audio thread only.
@@ -33,6 +35,14 @@ class DynamicRangeCompressor {
 
     /** Whether the normalizer should be heard. Safe to set from any thread. */
     @Volatile var enabled: Boolean = false
+
+    /** How strongly it works. Safe to set from any thread; applied at the next frame. */
+    @Volatile var level: AudioLevelling = AudioLevelling.DEFAULT
+
+    // The level the coefficients below were worked out for (audio thread).
+    private var activeLevel: AudioLevelling = AudioLevelling.DEFAULT
+    private var curve: AudioCurve = activeLevel.curve
+    private var sampleRate = DEFAULT_SAMPLE_RATE
 
     private var attackCoef = 0f
     private var releaseCoef = 0f
@@ -48,10 +58,8 @@ class DynamicRangeCompressor {
     private var limiterGain = 1f
     private var mix = 0f
 
-    private val kneeStart = AudioNormalizerProfile.dbToLinear(
-        AudioNormalizerProfile.THRESHOLD_DB - AudioNormalizerProfile.KNEE_DB / 2,
-    ).toFloat()
-    private val makeup = AudioNormalizerProfile.dbToLinear(AudioNormalizerProfile.MAKEUP_DB).toFloat()
+    private var kneeStart = 0f
+    private var makeup = 1f
     private val ceiling = AudioNormalizerProfile.dbToLinear(AudioNormalizerProfile.CEILING_DB).toFloat()
 
     init {
@@ -61,12 +69,22 @@ class DynamicRangeCompressor {
     /** Sets the stream's format and starts from silence. Call before the first sample of a new format. */
     fun configure(sampleRate: Int, channelCount: Int) {
         val rate = sampleRate.coerceAtLeast(1)
+        this.sampleRate = rate
         this.channelCount = channelCount.coerceAtLeast(1)
-        attackCoef = coefficient(AudioNormalizerProfile.ATTACK_MS, rate)
-        releaseCoef = coefficient(AudioNormalizerProfile.RELEASE_MS, rate)
+        applyLevel(level)
         limiterReleaseCoef = coefficient(AudioNormalizerProfile.LIMITER_RELEASE_MS, rate)
         fadeStep = (1.0 / (FADE_MS / 1000.0 * rate)).toFloat()
         reset()
+    }
+
+    /** Works out the curve's constants for [newLevel] at the current sample rate. */
+    private fun applyLevel(newLevel: AudioLevelling) {
+        activeLevel = newLevel
+        curve = newLevel.curve
+        attackCoef = coefficient(curve.attackMs, sampleRate)
+        releaseCoef = coefficient(curve.releaseMs, sampleRate)
+        kneeStart = AudioNormalizerProfile.dbToLinear(curve.thresholdDb - curve.kneeDb / 2).toFloat()
+        makeup = AudioNormalizerProfile.dbToLinear(curve.makeupDb).toFloat()
     }
 
     /** Forgets the audio so far (a seek, a new stream), keeping the format. */
@@ -100,6 +118,12 @@ class DynamicRangeCompressor {
             // instead of from the level of whatever played before.
             resetFollowers()
             return 1f
+        }
+        // A new strength: swap the curve now, and start a fresh block so the gain glides to it.
+        val wanted = level
+        if (wanted !== activeLevel) {
+            applyLevel(wanted)
+            blockLeft = 0
         }
         // A NaN or infinite sample (a broken decoder) must not poison the envelope for good.
         val peak = if (rawPeak.isFinite()) rawPeak else 0f
@@ -162,9 +186,9 @@ class DynamicRangeCompressor {
     /** Gain for a steady level, makeup included: the static curve with a soft knee. */
     private fun targetGain(level: Float): Float {
         if (level <= kneeStart) return makeup
-        val threshold = AudioNormalizerProfile.THRESHOLD_DB
-        val knee = AudioNormalizerProfile.KNEE_DB
-        val slope = 1.0 / AudioNormalizerProfile.RATIO - 1.0
+        val threshold = curve.thresholdDb
+        val knee = curve.kneeDb
+        val slope = 1.0 / curve.ratio - 1.0
         val x = 20.0 * log10(level.toDouble())
         val over = x - threshold
         val reductionDb = if (over < knee / 2) {
@@ -173,7 +197,7 @@ class DynamicRangeCompressor {
         } else {
             slope * over
         }
-        return 10.0.pow((reductionDb + AudioNormalizerProfile.MAKEUP_DB) / 20.0).toFloat()
+        return 10.0.pow((reductionDb + curve.makeupDb) / 20.0).toFloat()
     }
 
     companion object {

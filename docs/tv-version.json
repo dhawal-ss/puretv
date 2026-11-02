@@ -1,6 +1,6 @@
 {
-  "versionCode": 9,
-  "versionName": "1.3.0",
+  "versionCode": 10,
+  "versionName": "1.4.0",
   "apkUrl": "https://github.com/dhawal-ss/puretv/releases/download/tv-latest/PureTV-FireTV-AndroidTV.apk",
-  "notes": "Press Up or Down while you watch to flip channels, with a sleep timer and a Continue watching row on Home. Past broadcasts are on every channel page, with scrubbing and resume. Chat shows emotes and can sit over or beside the video. Turn on the bell for a channel to get a banner when it goes live. Quality sticks, streams start sooner and play closer to live, and focus and screens move more smoothly."
+  "notes": "Search finds categories as well as channels, and Browse shows every category instead of the top 20, sorted by most viewers, fewest viewers or A to Z. Even out loud and quiet audio now has Light, Balanced and Strong levels and its own button in the player controls."
 }

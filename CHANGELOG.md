@@ -11,6 +11,83 @@ release notes automatically.
 
 ---
 
+## 1.17.0 - 2026-11-02
+
+Minimizing keeps your stream playing again, Search finds categories, Browse shows every category your way, and audio levelling has three strengths and is one click away while you watch.
+
+### Fixed
+- **Minimizing keeps your stream playing.** Since 1.13, minimizing PureTV hid it
+  in the tray and closed the stream, so opening it again landed you on Home.
+  Minimizing now goes to the taskbar like any other app and the stream keeps
+  playing. If you liked the tray, turn on **Minimize to tray** in Settings,
+  Notifications: the stream stops while PureTV is hidden and opens again when
+  you bring PureTV back. Thanks to Akaneias for reporting it
+  ([#40](https://github.com/dhawal-ss/puretv/issues/40)).
+- **Search finds categories.** Typing a game or category, like "Battlefield
+  REDSEC", now shows matching categories above the channels. Click one to see
+  who is live in it. Thanks to Tohidmzn and peter-g1h2r
+  ([#41](https://github.com/dhawal-ss/puretv/issues/41)).
+- **Browse shows every category.** Browse used to stop at the top 20. It now
+  loads the top 100 at once, and when you're signed in it keeps loading more as
+  you scroll, all the way to the end.
+
+### New
+- **Sort Browse.** Pick **Most viewers**, **Fewest viewers** (great for finding
+  smaller games) or **A to Z** at the top of Browse. PureTV remembers your pick.
+  When you're signed out, each category also shows how many people are watching.
+- **Audio levelling strength.** "Even out loud and quiet audio" now comes in
+  three strengths: **Light** takes the edge off sudden loud moments, **Balanced**
+  (the default) brings quiet voices and music much closer to loud ones, and
+  **Strong** keeps everything at about one level, good for quiet listening.
+  Light is how it worked before. At every strength a normal voice stays about
+  as loud as it was.
+- **Switch audio levelling while you watch.** There is a button for it in the
+  player controls, the strength is in the player menu, and the A key toggles it.
+  With the default engine it now switches in a second or two instead of after a
+  restart.
+- **Chat: `:` for emotes, Tab to cycle.** Type a colon and two letters, like
+  `:kek`, to see only emotes, including ones with those letters anywhere in the
+  name. Press Tab to fill in the highlighted suggestion and keep pressing Tab to
+  move through the rest (Shift+Tab goes back). The suggestion strip now says
+  "Tab to complete" so it's easier to find
+  ([discussion #35](https://github.com/dhawal-ss/puretv/discussions/35)).
+
+## Android 1.4.0 - 2026-11-02
+
+Search finds categories, Browse shows every category your way, and audio levelling has three strengths and is one tap away while you watch.
+
+### Improved
+- **Search finds categories.** Matching categories show above the channels; tap
+  one to see who is live in it
+  ([#41](https://github.com/dhawal-ss/puretv/issues/41)).
+- **Browse shows every category.** Browse used to stop at the top 20. It now
+  loads the top 100, and keeps loading more as you scroll when you're signed in.
+- **Sort Browse** by most viewers, fewest viewers or A to Z. PureTV remembers
+  your pick.
+- **Audio levelling strength.** Pick Light, Balanced or Strong in Settings.
+  Balanced, the default, brings quiet music and voices much closer to the
+  loudest moments.
+- **Switch audio levelling while you watch.** Tap the new button in the player
+  controls.
+- **Chat: `:` for emotes.** Type a colon and two letters, like `:kek`, to see
+  only emotes in the suggestions.
+
+## Android TV 1.4.0 - 2026-11-02
+
+Search finds categories, Browse shows every category your way, and audio levelling has three strengths and is one press away while you watch.
+
+### Improved
+- **Search finds categories.** Matching categories show above the channels.
+- **Browse shows every category.** Browse used to stop at the top 20. It now
+  loads the top 100, and keeps loading more as you scroll when you're signed in.
+- **Sort Browse** by most viewers, fewest viewers or A to Z. PureTV remembers
+  your pick.
+- **Audio levelling strength.** Pick Light, Balanced or Strong in Settings.
+  Balanced, the default, brings quiet music and voices much closer to the
+  loudest moments.
+- **Switch audio levelling while you watch.** A new button in the player
+  controls steps through Off, Light, Balanced and Strong.
+
 ## Android 1.3.1 - 2026-10-27
 
 Past broadcasts are one tap away from Following, and chat holds up better on the move. This release includes the first community contribution to the phone app: thank you, [@laryaonyx5-ux](https://github.com/laryaonyx5-ux)!

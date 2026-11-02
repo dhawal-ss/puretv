@@ -68,6 +68,7 @@ import com.puretv.twitch.android.update.AndroidUpdateInfo
 import com.puretv.twitch.android.update.AndroidUpdateManager
 import com.puretv.twitch.android.update.AndroidUpdateState
 import com.puretv.twitch.core.adblock.AdSimulator
+import com.puretv.twitch.core.audio.AudioLevelling
 import com.puretv.twitch.core.model.AppSettings
 import com.puretv.twitch.core.model.ChatTextSize
 import com.puretv.twitch.core.model.StreamQuality
@@ -140,6 +141,7 @@ fun SettingsScreen(onBack: () -> Unit) {
             onPipOnLeaveChange = viewModel::setPipOnLeave,
             onAudioOnlyInBackgroundChange = viewModel::setAudioOnlyInBackground,
             onAudioNormalizerChange = viewModel::setAudioNormalizer,
+            onAudioLevellingChange = viewModel::setAudioLevelling,
         )
         Spacer(Modifier.height(16.dp))
 
@@ -327,6 +329,7 @@ private fun PlaybackPanel(
     onPipOnLeaveChange: (Boolean) -> Unit,
     onAudioOnlyInBackgroundChange: (Boolean) -> Unit,
     onAudioNormalizerChange: (Boolean) -> Unit,
+    onAudioLevellingChange: (AudioLevelling) -> Unit,
 ) {
     val c = PureTvTheme.colors
     ExpressivePanel {
@@ -381,12 +384,29 @@ private fun PlaybackPanel(
                     Text("Even out loud and quiet audio", style = MaterialTheme.typography.titleMedium, color = c.onSurface)
                     Text(
                         "Turns down sudden loud moments and lifts quiet voices a little, so you can " +
-                            "leave the volume alone. Music can sound flatter with it on.",
+                            "leave the volume alone. Music can sound flatter with it on. You can also " +
+                            "switch it from the player controls.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = c.onSurfaceVariant,
                     )
                 }
                 ExpressiveSwitch(checked = settings.audioNormalizer, onCheckedChange = onAudioNormalizerChange)
+            }
+            // How strongly, only while it is on. Applied live like the switch.
+            if (settings.audioNormalizer) {
+                Spacer(Modifier.height(16.dp))
+                SegmentedToggle(
+                    options = AudioLevelling.entries,
+                    selected = settings.audioLevelling,
+                    label = { it.label },
+                    onSelect = onAudioLevellingChange,
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    settings.audioLevelling.description,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = c.onSurfaceVariant,
+                )
             }
 
             ExpressiveDivider(Modifier.padding(vertical = 24.dp))

@@ -5,15 +5,16 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -68,6 +69,12 @@ fun TvControlsOverlay(
     /** The short confirmation after a tap on the bell, shown under the title. */
     alertsNote: String? = null,
     onToggleAlerts: () -> Unit = {},
+    /**
+     * The audio levelling button's label, for example "Audio levelling: Off" or
+     * "Audio levelling: Balanced"; null hides the button.
+     */
+    audioLevellingLabel: String? = null,
+    onCycleAudioLevelling: () -> Unit = {},
     /** Where the screen puts focus when the controls appear (Play/Pause). */
     playPauseFocusRequester: FocusRequester? = null,
 ) {
@@ -142,26 +149,44 @@ fun TvControlsOverlay(
                         modifier = if (playPauseFocusRequester != null) Modifier.focusRequester(playPauseFocusRequester) else Modifier,
                     )
                     TvLivePill(pulse = false)
-                    Spacer(modifier = Modifier.weight(1f))
-                    // Reachable with the D-pad like every other control, so chat and the
-                    // sleep timer need no dedicated keys.
-                    TvExpressiveButton(
-                        text = if (chatVisible) "Hide chat" else "Chat",
-                        onClick = onToggleChat,
-                        style = TvButtonStyle.Tonal,
-                        icon = ExpressiveIcons.Chat,
-                    )
-                    TvExpressiveButton(
-                        text = if (alertsOn) "Alerts on" else "Notify me",
-                        onClick = onToggleAlerts,
-                        style = TvButtonStyle.Tonal,
-                        icon = if (alertsOn) ExpressiveIcons.NotifyOn else ExpressiveIcons.Notify,
-                    )
-                    TvExpressiveButton(
-                        text = sleepLabel,
-                        onClick = onCycleSleep,
-                        style = TvButtonStyle.Tonal,
-                    )
+                    // Right-aligned when they fit. With chat beside the video the bar is
+                    // much narrower, so the buttons scroll instead of being cut off: D-pad
+                    // focus brings the next one into view.
+                    Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterEnd) {
+                        Row(
+                            modifier = Modifier
+                                .horizontalScroll(rememberScrollState())
+                                // Room for the focused button's grow, which the scroll clips.
+                                .padding(horizontal = 6.dp),
+                            horizontalArrangement = Arrangement.spacedBy(16.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            // Reachable with the D-pad like every other control, so chat and the
+                            // sleep timer need no dedicated keys.
+                            TvExpressiveButton(
+                                text = if (chatVisible) "Hide chat" else "Chat",
+                                onClick = onToggleChat,
+                                style = TvButtonStyle.Tonal,
+                                icon = ExpressiveIcons.Chat,
+                            )
+                            TvExpressiveButton(
+                                text = if (alertsOn) "Alerts on" else "Notify me",
+                                onClick = onToggleAlerts,
+                                style = TvButtonStyle.Tonal,
+                                icon = if (alertsOn) ExpressiveIcons.NotifyOn else ExpressiveIcons.Notify,
+                            )
+                            TvExpressiveButton(
+                                text = sleepLabel,
+                                onClick = onCycleSleep,
+                                style = TvButtonStyle.Tonal,
+                            )
+                            // The same setting as Settings > Even out loud and quiet audio and
+                            // its strength, stepped by one button and applied live.
+                            audioLevellingLabel?.let { label ->
+                                TvExpressiveButton(text = label, onClick = onCycleAudioLevelling, style = TvButtonStyle.Tonal)
+                            }
+                        }
+                    }
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     // Same order stepQuality() in TvStreamScreen walks via FF/RW, so the

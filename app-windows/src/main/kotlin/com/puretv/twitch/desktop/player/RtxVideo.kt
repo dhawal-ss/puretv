@@ -2,14 +2,13 @@ package com.puretv.twitch.desktop.player
 
 import com.puretv.twitch.core.model.AppSettings
 import com.puretv.twitch.desktop.platform.RtxGpu
-import java.util.concurrent.ConcurrentHashMap
 
 /**
  * NVIDIA RTX Video for the single-stream player: Super Resolution (an AI upscaler
  * for video shown larger than it was sent) and RTX Video HDR (SDR made into HDR when
  * Windows HDR is on). VLC 3.0.21 and newer drive both through Direct3D 11, but only
  * as libVLC instance arguments (a per-media option never reaches the video output),
- * so the player that uses them runs on its own instance (see [RtxVlcEngines]).
+ * so the player that uses them runs on its own instance (see [VlcEngines] and [RtxVlcSupport]).
  *
  * What the viewer asked for, after checking it can run here. [NONE] off Windows, or
  * without an RTX card.
@@ -209,18 +208,15 @@ class RtxLogReader(private val choice: RtxVideoChoice) {
 }
 
 /**
- * The libVLC instances the main player picks from. RTX Video only works as instance
- * arguments, and multi-stream tiles and extra windows should not pay for it, so the
- * main player plays on an instance of its own for each [RtxVideoChoice], built the
- * first time that choice is needed. With RTX Video off it shares [standard].
+ * What RTX Video the main player should run with. RTX Video only works as instance
+ * arguments, and multi-stream tiles and extra windows should not pay for it, so only
+ * the main player has one of these: it plays on the [VlcEngines] instance for its
+ * [RtxVideoChoice] (and normalizer setting), built the first time that pair is needed.
+ * With RTX Video off it shares the plain instance with the tiles.
  */
-class RtxVlcEngines(
-    val standard: VlcEngine,
-    private val extraArgs: () -> List<String>,
+class RtxVlcSupport(
     private val choice: () -> RtxVideoChoice,
 ) {
-    private val engines = ConcurrentHashMap<RtxVideoChoice, VlcEngine>()
-
     /** Whether RTX Video can run here at all (Windows with an RTX card). Reads the GPU list once. */
     val supported: Boolean get() = RtxGpu.present
 
@@ -239,17 +235,6 @@ class RtxVlcEngines(
      * load libvlccore first) and left the Mac build with no player at all.
      */
     val vlcHdrSafe: Boolean by lazy { RtxGpu.present && vlcHdrSafe(VlcEngine.libVlcVersion()) }
-
-    /** The instance for [wanted]: [standard] when it asks for nothing. Cheap; libVLC loads on first use. */
-    fun engineFor(wanted: RtxVideoChoice): VlcEngine =
-        if (!wanted.any) standard
-        else engines.computeIfAbsent(wanted) { VlcEngine(extraArgs, optionalArgs = { wanted.vlcArgs() }) }
-
-    /** Whether the instance for [wanted] already started, so moving to it is instant. */
-    fun isBuilt(wanted: RtxVideoChoice): Boolean = engineFor(wanted).isBuilt
-
-    /** Frees every RTX instance that was built. Call once at shutdown, after the players. */
-    fun releaseIfBuilt() = engines.values.forEach { it.releaseIfBuilt() }
 }
 
 /**

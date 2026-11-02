@@ -25,7 +25,7 @@ import androidx.compose.ui.window.WindowPosition
 import androidx.compose.ui.window.rememberWindowState
 import com.puretv.twitch.desktop.platform.WindowsNative
 import com.puretv.twitch.desktop.player.ChannelClaims
-import com.puretv.twitch.desktop.player.VlcEngine
+import com.puretv.twitch.desktop.player.VlcEngines
 import com.puretv.twitch.desktop.player.WindowPlayback
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -117,7 +117,7 @@ private fun SecondaryWindow(
     )
 
     // This window's own player, made off the UI thread: the first one loads libVLC, which is slow.
-    val secondary = remember(entry.id) { WindowPlayback.secondary(koin.get<VlcEngine>(), koin.get<ChannelClaims>()) }
+    val secondary = remember(entry.id) { WindowPlayback.secondary(koin.get<VlcEngines>(), koin.get<ChannelClaims>()) }
     var ready by remember(entry.id) { mutableStateOf(false) }
     var failed by remember(entry.id) { mutableStateOf(false) }
     var attempt by remember(entry.id) { mutableStateOf(0) }

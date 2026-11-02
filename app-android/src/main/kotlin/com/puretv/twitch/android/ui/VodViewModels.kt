@@ -32,7 +32,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -61,6 +63,8 @@ data class VodPlayerUiState(
     val resumeOfferMs: Long? = null,
     /** Seek preview frames, loaded once per video; null when it has none. */
     val storyboard: Storyboard? = null,
+    /** Settings > Even out loud and quiet audio, also switchable from the player controls. */
+    val audioNormalizer: Boolean = false,
 )
 
 /**
@@ -123,6 +127,11 @@ class VodPlayerViewModel(
         viewModelScope.launch {
             runCatching { vodRepository.loadStoryboard(launch.vodId) }
                 .onSuccess { sb -> _state.update { it.copy(storyboard = sb) } }
+        }
+        viewModelScope.launch {
+            settingsStore.flow.map { it.audioNormalizer }.distinctUntilChanged().collect { on ->
+                _state.update { it.copy(audioNormalizer = on) }
+            }
         }
         // Save every 10 s while playing. Each save is guarded, so one failed write
         // (full disk) does not end the loop for the rest of the video.
@@ -239,6 +248,11 @@ class VodPlayerViewModel(
         StreamQuality.preferenceFor(quality)?.let { preference ->
             viewModelScope.launch { settingsStore.update { it.copy(preferredQuality = preference) } }
         }
+    }
+
+    /** The player's audio levelling button: flips the saved setting, applied live by the app. */
+    fun toggleAudioNormalizer() = viewModelScope.launch {
+        settingsStore.update { it.copy(audioNormalizer = !it.audioNormalizer) }
     }
 
     private fun currentPositionMs(): Long =

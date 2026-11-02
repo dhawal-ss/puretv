@@ -51,12 +51,19 @@ object Routes {
     const val LOGIN = "login"
     const val STREAM = "stream/{channelLogin}"
     const val CHANNEL = "channel/{channelLogin}"
-    const val CATEGORY = "category/{gameId}"
+    const val CATEGORY = "category/{gameId}?name={name}"
     const val VOD = "vod/{vodId}?login={login}&title={title}&thumb={thumb}"
 
     fun stream(channelLogin: String) = "stream/$channelLogin"
     fun channel(channelLogin: String) = "channel/$channelLogin"
-    fun category(gameId: String) = "category/$gameId"
+
+    /**
+     * A category. [name] is optional: it titles the screen when nothing in the
+     * category is live (the title otherwise comes from the first live stream).
+     * Names carry spaces, colons and ampersands, so it is encoded.
+     */
+    fun category(gameId: String, name: String = "") =
+        if (name.isBlank()) "category/$gameId" else "category/$gameId?name=${Uri.encode(name)}"
 
     /** A past broadcast. Titles carry spaces, slashes and ampersands, so every value is encoded. */
     fun vod(launch: VodLaunch) =
@@ -103,12 +110,22 @@ fun PureTvTvNavHost(navController: NavHostController = rememberNavController()) 
                 )
             }
             composable(Routes.BROWSE) {
-                TvBrowseScreen(onOpenCategory = { navController.navigate(Routes.category(it)) }, onBack = navController::popBackStack)
+                TvBrowseScreen(
+                    onOpenCategory = { id, name -> navController.navigate(Routes.category(id, name)) },
+                    onBack = navController::popBackStack,
+                )
             }
-            composable(Routes.CATEGORY) { backStackEntry ->
+            composable(
+                Routes.CATEGORY,
+                arguments = listOf(
+                    navArgument("gameId") { type = NavType.StringType },
+                    navArgument("name") { type = NavType.StringType; defaultValue = "" },
+                ),
+            ) { backStackEntry ->
                 val gameId = backStackEntry.arguments?.getString("gameId").orEmpty()
                 TvCategoryScreen(
                     gameId = gameId,
+                    gameName = backStackEntry.arguments?.getString("name").orEmpty(),
                     onOpenStream = { navController.navigate(Routes.stream(it)) },
                     onBack = navController::popBackStack,
                 )
@@ -116,6 +133,7 @@ fun PureTvTvNavHost(navController: NavHostController = rememberNavController()) 
             composable(Routes.SEARCH) {
                 TvSearchScreen(
                     onOpenChannel = { navController.navigate(Routes.channel(it)) },
+                    onOpenCategory = { id, name -> navController.navigate(Routes.category(id, name)) },
                     onBack = navController::popBackStack,
                 )
             }

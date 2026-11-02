@@ -1,5 +1,6 @@
 package com.puretv.twitch.desktop.player
 
+import com.puretv.twitch.core.audio.AudioLevelling
 import com.puretv.twitch.core.perf.TimingLog
 import com.puretv.twitch.desktop.platform.DisplayHdr
 import com.puretv.twitch.core.stream.LiveLatency
@@ -49,10 +50,10 @@ import javax.swing.Timer
  * fields and queues work; it never waits on the worker.
  */
 class VlcPlayer(
-    // The shared libVLC instance (see VlcEngine), which owns the bundled-VLC lookup,
-    // the cache arguments and the audio normalizer. The single-stream player and
-    // every multi-stream tile each make their own media player from it.
-    engine: VlcEngine,
+    // The app's libVLC instances (see VlcEngines), one per set of instance arguments
+    // (RTX Video, the audio normalizer). This player makes its media player on the one
+    // its settings ask for, and moves to another when they change (see [switchEngine]).
+    private val engines: VlcEngines,
     // A named libVLC audio output for this player alone, or null for VLC's default.
     // See [TILE_AUDIO_OUTPUT]: the default output shares one volume across players.
     private val audioOutput: String? = null,
@@ -61,9 +62,9 @@ class VlcPlayer(
     // while playing is ignored: the same stream is started again on the same player
     // instead, which costs a second or two of rebuffering and nothing else.
     private val replayOnNewSurface: Boolean = false,
-    // The main player only: the instances NVIDIA RTX Video runs on (see [RtxVlcEngines]).
-    // When the settings ask for it, this player plays on one of those instead of [engine].
-    private val rtx: RtxVlcEngines? = null,
+    // The main player only: what NVIDIA RTX Video it should run with (see [RtxVlcSupport]).
+    // Without it the player always plays without RTX Video.
+    private val rtx: RtxVlcSupport? = null,
 ) : DesktopPlayer {
 
     // Declared before the first media player is made, which registers it. Every media
@@ -158,18 +159,30 @@ class VlcPlayer(
         runCatching { worker.execute { runCatching(block) } }
     }
 
-    // What RTX Video this player runs with now, and the instance that gives it. Both
-    // change only on the UI thread (see [switchEngine]).
-    // Before there is a window, assume the HDR display if there is one (the instance
-    // RtxVlcEngines.warmUpLikely builds); attachToPanel corrects it for the real display.
+    // The audio normalizer strength wanted (null for off): the settings when this player
+    // was made, then whatever [setAudioLevelling] last said. Kept here rather than read
+    // from the settings each time so a switch flipped quickly (on, off, on) always ends
+    // on the last word.
+    @Volatile private var levellingWanted: AudioLevelling? = engines.levellingWanted()
+
+    // The instance this player is on now (what RTX Video and normalizer it runs with), and
+    // that instance. Both change only on the UI thread (see [switchEngine]).
+    // Before there is a window, assume the HDR display if there is one; attachToPanel
+    // corrects it for the real display.
     // Timed: it waits for the GPU lookup and reads libVLC's version (see timing.log).
-    @Volatile private var rtxChoice: RtxVideoChoice = rtx?.let {
-        val started = System.nanoTime()
-        it.choiceFor(displayHdr = it.wanted().hdr && DisplayHdr.anyOn()).also { choice ->
-            TimingLog.log("player.rtx_check", (System.nanoTime() - started) / 1_000_000, "sr=${choice.superResolution} hdr=${choice.hdr}")
-        }
-    } ?: RtxVideoChoice.NONE
-    @Volatile private var engine: VlcEngine = rtx?.engineFor(rtxChoice) ?: engine
+    @Volatile private var key: VlcEngineKey = VlcEngineKey(
+        rtx = rtx?.let {
+            val started = System.nanoTime()
+            it.choiceFor(displayHdr = it.wanted().hdr && DisplayHdr.anyOn()).also { choice ->
+                TimingLog.log("player.rtx_check", (System.nanoTime() - started) / 1_000_000, "sr=${choice.superResolution} hdr=${choice.hdr}")
+            }
+        } ?: RtxVideoChoice.NONE,
+        levelling = levellingWanted,
+    )
+    @Volatile private var engine: VlcEngine = engines.engineFor(key)
+
+    /** What RTX Video this player runs with now (part of [key]). */
+    private val rtxChoice: RtxVideoChoice get() = key.rtx
 
     @Volatile private var mediaPlayer: EmbeddedMediaPlayer? = newMediaPlayer(this.engine)
 
@@ -186,10 +199,23 @@ class VlcPlayer(
 
     /** The choice for the display this player's window is on now. */
     private fun desiredRtx(component: Component? = attachedComponent): RtxVideoChoice {
-        val engines = rtx ?: return RtxVideoChoice.NONE
-        val hdrWanted = engines.wanted().hdr
-        return engines.choiceFor(displayHdr = hdrWanted && component != null && DisplayHdr.isOn(component))
+        val support = rtx ?: return RtxVideoChoice.NONE
+        val hdrWanted = support.wanted().hdr
+        return support.choiceFor(displayHdr = hdrWanted && component != null && DisplayHdr.isOn(component))
     }
+
+    /**
+     * The instance this player should be on: RTX Video for its window's display, and the
+     * normalizer strength as last asked for. Every check for "move to another instance" compares
+     * this whole key, so a change of either one is never missed.
+     */
+    private fun desiredKey(component: Component? = attachedComponent): VlcEngineKey =
+        VlcEngineKey(desiredRtx(component), levellingWanted)
+
+    // Told by [VlcEngines.levellingChanged] when the settings change anywhere (Settings,
+    // another window's player controls), so every VLC player follows them. One object, so
+    // release() can stop following.
+    private val normalizerFollower: (AudioLevelling?) -> Unit = { level -> setAudioLevelling(level) }
 
     // Every two seconds while RTX Video is on: refresh the status (the stream's own size
     // changes with quality and ad breaks, and nothing else would say so), and, while HDR
@@ -197,10 +223,10 @@ class VlcPlayer(
     // at any time, and the window can move (one cheap user32 query). Moves to the right
     // instance when the answer changes.
     private val hdrWatch = Timer(2_000) {
-        val engines = rtx ?: return@Timer
-        if (released || attachedComponent == null || !engines.wanted().any && !rtxChoice.any) return@Timer
+        val support = rtx ?: return@Timer
+        if (released || attachedComponent == null || !support.wanted().any && !rtxChoice.any) return@Timer
         refreshRtxStatus()
-        if ((engines.wanted().hdr || rtxChoice.hdr) && !switchPending && desiredRtx() != rtxChoice) applyRtxVideo()
+        if ((support.wanted().hdr || rtxChoice.hdr) && !switchPending && desiredKey() != key) moveToWantedEngine()
     }
 
     // Set by release(): an instance switch still on its way must not make a new player.
@@ -234,6 +260,10 @@ class VlcPlayer(
 
     init {
         listenToRtxLog()
+        engines.follow(normalizerFollower)
+        // A change that landed between reading the settings above and following them here
+        // would otherwise wait for the next one. A no-op when nothing changed.
+        setAudioLevelling(engines.levellingWanted())
     }
 
     private fun newMediaPlayer(from: VlcEngine): EmbeddedMediaPlayer? = from.newEmbeddedPlayer()?.also { mp ->
@@ -256,17 +286,18 @@ class VlcPlayer(
     override fun attachToPanel(panel: Component) {
         check(SwingUtilities.isEventDispatchThread()) { "attachToPanel must be called on the Swing EDT" }
         if (attachedComponent === panel) return
-        // The display decides HDR: when this window's display needs another instance and
-        // that one is already running, move to it before anything plays.
-        if (rtx != null && panel.isDisplayable) {
-            val want = desiredRtx(panel)
-            if (want != rtxChoice && rtx.isBuilt(want)) {
+        // The display decides HDR, and the normalizer may have changed while this player
+        // had no window: when it needs another instance and that one is already running,
+        // move to it before anything plays.
+        if (panel.isDisplayable) {
+            val want = desiredKey(panel)
+            if (want != key && engines.isBuilt(want)) {
                 attachedComponent = null
                 switchEngine(want, replay = false)
-            } else if (want != rtxChoice) {
-                SwingUtilities.invokeLater(::applyRtxVideo) // builds it off the UI thread, then moves
+            } else if (want != key) {
+                SwingUtilities.invokeLater(::moveToWantedEngine) // builds it off the UI thread, then moves
             }
-            if (!hdrWatch.isRunning) hdrWatch.start()
+            if (rtx != null && !hdrWatch.isRunning) hdrWatch.start()
         }
         val mp = mediaPlayer ?: return
         // VLCJ 4.x: ComponentIdVideoSurface takes a native window handle (long),
@@ -365,9 +396,16 @@ class VlcPlayer(
         // else: attachToPanel will pick up currentUrl and start playback once
         // the surface is bound. See its tail.
         SwingUtilities.invokeLater {
-            // The RTX Video settings changed since this player last played: move to the
-            // instance they ask for before starting. Read the player after, not before.
-            if (rtx != null) desiredRtx().let { if (it != rtxChoice) switchEngine(it, replay = false) }
+            // The RTX Video or normalizer settings changed since this player last played:
+            // move to the instance they ask for before starting. Read the player after, not
+            // before. Only when that instance is already running: starting libVLC here
+            // would freeze the window for its plugin scan. Otherwise this stream starts
+            // where the player is, and moves over (started again) once the other is built.
+            desiredKey().let { want ->
+                if (want != key) {
+                    if (!switchPending && engines.isBuilt(want)) switchEngine(want, replay = false) else moveToWantedEngine()
+                }
+            }
             val mp = mediaPlayer ?: return@invokeLater
             // VLCJ's ComponentVideoSurface.attach() — invoked transitively by
             // media().play() via EmbeddedMediaPlayer.onBeforePlay() — re-checks
@@ -454,6 +492,8 @@ class VlcPlayer(
         val mp = mediaPlayer ?: return
         currentUrl = null
         vlc {
+            // Moved to another instance meanwhile: retire() already stopped and freed this one.
+            if (mp !== mediaPlayer) return@vlc
             val started = System.nanoTime()
             mp.controls().stop()
             // libVLC's stop waits for the stream's threads (on this worker, not the UI thread).
@@ -489,6 +529,7 @@ class VlcPlayer(
 
     override fun release() {
         released = true
+        engines.unfollow(normalizerFollower)
         SwingUtilities.invokeLater { hdrWatch.stop(); remeasureTimer.stop() }
         val mp = mediaPlayer
         // Only this player's own media player; libVLC belongs to the engine. Queued behind
@@ -502,23 +543,57 @@ class VlcPlayer(
         worker.shutdown()
     }
 
-    // ---- NVIDIA RTX Video (main player only) ---------------------------------------
+    // ---- Moving between libVLC instances (RTX Video, the audio normalizer) -----------
 
+    /** The RTX Video settings changed (main player only): move to the instance they ask for. */
     override fun applyRtxVideo() {
-        val engines = rtx ?: return
-        if (switchPending) return
+        if (rtx == null) return
+        moveToWantedEngine()
+    }
+
+    /**
+     * Turns the audio normalizer on (at [level]), off (null) or to another strength for
+     * the stream that is playing. VLC 3.0 only takes audio filters when an instance
+     * starts, so this moves the player to the instance with that level's arguments (or
+     * none) and starts the stream again there: live streams rejoin at the live edge, past
+     * videos carry on from where they are (see [optionsToReplay]). A second or two of
+     * rebuffering, no restart. With nothing playing it still moves now, so the next
+     * stream starts on the right one without waiting for libVLC to load. Safe from any
+     * thread.
+     */
+    override fun setAudioLevelling(level: AudioLevelling?) {
+        if (released || levellingWanted == level) return
+        levellingWanted = level
+        if (SwingUtilities.isEventDispatchThread()) moveToWantedEngine()
+        else SwingUtilities.invokeLater(::moveToWantedEngine)
+    }
+
+    /**
+     * Moves to the instance [desiredKey] names, if this player is not on it. libVLC scans
+     * its plugins when an instance starts, and the display query is a native call: both
+     * happen off the UI thread, then the move happens on it. UI thread only (so the
+     * [switchPending] check and set cannot race).
+     */
+    private fun moveToWantedEngine() {
+        if (released || switchPending) return
         switchPending = true
-        // libVLC scans its plugins when an instance starts, and the display query is a
-        // native call: do both off the UI thread, then move over on it.
         Thread({
-            val wanted = desiredRtx()
-            if (wanted != rtxChoice) engines.engineFor(wanted).warmUp()
+            val wanted = desiredKey()
+            if (wanted != key) engines.engineFor(wanted).warmUp()
             SwingUtilities.invokeLater {
                 switchPending = false
-                if (!released && desiredRtx() == wanted && wanted != rtxChoice) switchEngine(wanted, replay = true)
+                if (released) return@invokeLater
+                val now = desiredKey()
+                when {
+                    now == wanted && wanted != key -> switchEngine(wanted, replay = true)
+                    // The wish changed while that instance was loading (the A key pressed
+                    // twice, another strength picked, a window moved to another display):
+                    // go again for the newest.
+                    now != key -> moveToWantedEngine()
+                }
                 refreshRtxStatus()
             }
-        }, "vlc-rtx-switch").apply { isDaemon = true }.start()
+        }, "vlc-engine-switch").apply { isDaemon = true }.start()
     }
 
     /**
@@ -527,13 +602,19 @@ class VlcPlayer(
      * The old media player is stopped and freed on the worker, before the new one plays.
      * UI thread only.
      */
-    private fun switchEngine(wanted: RtxVideoChoice, replay: Boolean) {
-        val engines = rtx ?: return
-        if (released || wanted == rtxChoice) return
+    private fun switchEngine(wanted: VlcEngineKey, replay: Boolean) {
+        if (released || wanted == key) return
         val next = engines.engineFor(wanted)
         val fresh = newMediaPlayer(next) ?: return // that instance would not start: stay put
+        // Released while the new player was being made (release() may run off the UI
+        // thread): free the new one rather than leak it, and leave the old to release().
+        // It never played, so freeing it here is quick, and the worker may be gone.
+        if (released) {
+            runCatching { fresh.release() }
+            return
+        }
         val old = mediaPlayer
-        rtxChoice = wanted
+        key = wanted
         engine = next
         mediaPlayer = fresh
         listenToRtxLog()
@@ -546,6 +627,8 @@ class VlcPlayer(
         fresh.videoSurface().set(next.newVideoSurface(component))
         if (!replay) return
         val url = currentUrl ?: return
+        // A VOD that had played to its end stays ended rather than replaying its last moment.
+        if (isVod && VodPlayback.isEnded(lastGoodMs, _status.value.durationMs)) return
         _status.update { it.copy(isBuffering = true) }
         if (isVod) pauseAfterStart = pausedByUser
         val options = optionsToReplay()
@@ -646,9 +729,9 @@ class VlcPlayer(
      * is one whose HDR mode crashes (see [RtxVideoChoice.forVlc]).
      */
     private fun withDisplayHdr(s: RtxVideoStatus): RtxVideoStatus {
-        val engines = rtx ?: return s
-        if (!engines.wanted().hdr || rtxChoice.hdr) return s
-        return s.copy(hdr = if (engines.vlcHdrSafe) RtxHdrState.DISPLAY_SDR else RtxHdrState.UNSUPPORTED)
+        val support = rtx ?: return s
+        if (!support.wanted().hdr || rtxChoice.hdr) return s
+        return s.copy(hdr = if (support.vlcHdrSafe) RtxHdrState.DISPLAY_SDR else RtxHdrState.UNSUPPORTED)
     }
 
     /**

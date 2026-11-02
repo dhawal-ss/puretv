@@ -1,5 +1,6 @@
 package com.puretv.twitch.desktop.player
 
+import com.puretv.twitch.core.audio.AudioLevelling
 import com.puretv.twitch.core.model.UpscalingMode
 import java.awt.Component
 import java.util.concurrent.atomic.AtomicBoolean
@@ -10,7 +11,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  *
  * The main window's is the app-wide player the viewer picked in Settings (VLC or mpv) and
  * the app-wide ticket, exactly as before windows were many. Every other window has a
- * player of its own ([secondary]): always VLC, made from the shared engine with its own
+ * player of its own ([secondary]): always VLC, made from the shared engines with its own
  * audio output so its volume is its own, and released when the window closes. Windows
  * therefore never fight over one player, and one window's stop cannot end another's stream.
  *
@@ -45,12 +46,12 @@ class WindowPlayback(
          * A window's own player. The engine is loaded and the player made by [prepare], off
          * the UI thread (libVLC's plugin scan is slow); the screens only read [player] after.
          */
-        fun secondary(engine: VlcEngine, claims: ChannelClaims): SecondaryPlayback = SecondaryPlayback(engine, claims)
+        fun secondary(engines: VlcEngines, claims: ChannelClaims): SecondaryPlayback = SecondaryPlayback(engines, claims)
     }
 }
 
 /** The own-player [WindowPlayback] of a secondary window, in two steps: [prepare], then use. */
-class SecondaryPlayback(private val engine: VlcEngine, private val claims: ChannelClaims) {
+class SecondaryPlayback(private val engines: VlcEngines, private val claims: ChannelClaims) {
     @Volatile private var built: ReleasablePlayer? = null
     private val released = AtomicBoolean(false)
 
@@ -58,7 +59,7 @@ class SecondaryPlayback(private val engine: VlcEngine, private val claims: Chann
     fun prepare(): Boolean {
         if (released.get()) return false
         if (built == null) {
-            val player = ReleasablePlayer(VlcPlayer(engine, audioOutput = TILE_AUDIO_OUTPUT))
+            val player = ReleasablePlayer(VlcPlayer(engines, audioOutput = TILE_AUDIO_OUTPUT))
             built = player
             // The window closed while libVLC was loading.
             if (released.get()) player.release()
@@ -107,7 +108,7 @@ class ReleasablePlayer(private val inner: DesktopPlayer) : DesktopPlayer {
     override fun detachFromPanel() { if (!gone.get()) inner.detachFromPanel() }
     override fun renderStatsOverlay(show: Boolean) { if (!gone.get()) inner.renderStatsOverlay(show) }
     override fun setUpscaling(mode: UpscalingMode) { if (!gone.get()) inner.setUpscaling(mode) }
-    override fun setAudioNormalizer(enabled: Boolean) { if (!gone.get()) inner.setAudioNormalizer(enabled) }
+    override fun setAudioLevelling(level: AudioLevelling?) { if (!gone.get()) inner.setAudioLevelling(level) }
     override val videoOutputs get() = inner.videoOutputs
     override val rtxStatus get() = inner.rtxStatus
     override val supportsRtxVideo: Boolean get() = inner.supportsRtxVideo

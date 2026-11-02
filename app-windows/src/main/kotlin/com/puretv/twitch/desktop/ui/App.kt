@@ -376,7 +376,10 @@ fun App(
             var resumeRoute by remember { mutableStateOf<Route?>(null) }
             LaunchedEffect(windowVisible) {
                 if (windowVisible) {
-                    resumeRoute?.let { route = it }
+                    // Only while still on the Home the hide left: a go-live toast or a
+                    // `--channel` launch that brought the window back has already opened
+                    // its own stream, and that one wins.
+                    if (route == Route.Top) resumeRoute?.let { route = it }
                     resumeRoute = null
                     return@LaunchedEffect
                 }
@@ -569,6 +572,10 @@ fun App(
                                             openChannel(login)
                                         },
                                         initialQuery = searchSeed,
+                                        onOpenCategory = { gameId, gameName, query ->
+                                            searchSeed = query
+                                            openCategory(gameId, gameName)
+                                        },
                                     )
                                     Destination.SETTINGS -> SettingsContent(koin = koin, onExit = onQuit)
                                     Destination.ACCOUNT -> LoginContent(koin = koin)

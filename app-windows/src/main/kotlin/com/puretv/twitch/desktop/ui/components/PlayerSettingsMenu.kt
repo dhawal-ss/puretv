@@ -1,5 +1,6 @@
 package com.puretv.twitch.desktop.ui.components
 
+import com.puretv.twitch.core.audio.AudioLevelling
 import androidx.compose.foundation.layout.Row
 import androidx.compose.ui.Alignment
 import androidx.compose.foundation.background
@@ -8,6 +9,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -24,8 +26,8 @@ import com.puretv.twitch.desktop.ui.theme.PureTvTheme
 /**
  * The in-player "Playback" menu: one panel reused by the live stream and VOD
  * players (highlights are VODs). It consolidates the per-playback controls:
- * Resolution (source quality, live), Scaling (mpv GPU upscaler, live), and Engine
- * (restart-gated). Rendered in the player Column (NOT floating over the video,
+ * Resolution (source quality, live), Audio (the normalizer, live), Scaling (mpv GPU
+ * upscaler, live), and Engine (restart-gated). Rendered in the player Column (NOT floating over the video,
  * the heavyweight AWT Canvas paints above Compose), styled to the Cinémathèque
  * system. Stateless: the caller owns current values + callbacks.
  *
@@ -51,6 +53,12 @@ fun PlayerSettingsMenu(
     // restart right away instead of only saying it applies after a restart.
     engineNeedsRestart: Boolean = false,
     onRestart: (() -> Unit)? = null,
+    // "Even out loud and quiet audio" (the same settings as in Settings): null hides the
+    // section. [audioLevelling] is its strength, offered while it is on.
+    audioNormalizer: Boolean? = null,
+    onAudioNormalizerChange: (Boolean) -> Unit = {},
+    audioLevelling: AudioLevelling = AudioLevelling.DEFAULT,
+    onAudioLevellingSelected: (AudioLevelling) -> Unit = {},
 ) {
     val c = PureTvTheme.colors
     Column(
@@ -71,6 +79,13 @@ fun PlayerSettingsMenu(
                 hdr = rtx.hdr,
                 onHdrChange = rtx.onHdrChange,
             )
+        }
+        if (audioNormalizer != null) PlayerMenuSection("Audio") {
+            AudioNormalizerRow(audioNormalizer, onAudioNormalizerChange)
+            if (audioNormalizer) {
+                SegmentedControl(AudioLevelling.entries.toList(), audioLevelling, { it.label }, onAudioLevellingSelected)
+                Text(audioLevelling.description, style = MaterialTheme.typography.bodySmall, color = c.onSurfaceVariant)
+            }
         }
         // Without mpv (macOS) there is no engine choice and no GPU upscaling to offer.
         if (NativeLibs.mpvSupported()) PlayerMenuSection("Scaling") {
@@ -123,6 +138,32 @@ class RtxMenuState(
     val hdr: Boolean?,
     val onHdrChange: (Boolean) -> Unit,
 )
+
+/**
+ * The menu's audio normalizer switch. It (and the strength under it) changes the stream
+ * that is playing: mpv swaps its audio filter, VLC starts the stream again on an
+ * instance with that level (or without it), which takes a second or two.
+ */
+@Composable
+private fun AudioNormalizerRow(checked: Boolean, onChange: (Boolean) -> Unit) {
+    val c = PureTvTheme.colors
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text("Even out loud and quiet audio", style = MaterialTheme.typography.titleSmall, color = c.onSurface)
+            Text(
+                "Turns down sudden loud moments and lifts quiet voices. Press A to switch it while watching.",
+                style = MaterialTheme.typography.bodySmall,
+                color = c.onSurfaceVariant,
+                modifier = Modifier.widthIn(max = 640.dp),
+            )
+        }
+        ExpressiveSwitch(checked = checked, onCheckedChange = onChange)
+    }
+}
 
 @Composable
 private fun PlayerMenuSection(title: String, content: @Composable () -> Unit) {

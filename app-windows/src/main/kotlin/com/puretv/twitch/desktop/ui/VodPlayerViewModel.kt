@@ -1,5 +1,7 @@
 package com.puretv.twitch.desktop.ui
 
+import com.puretv.twitch.desktop.player.audioLevellingInUse
+import com.puretv.twitch.core.audio.AudioLevelling
 import com.puretv.twitch.core.model.PlaybackBackend
 import com.puretv.twitch.core.model.StreamQuality
 import com.puretv.twitch.core.model.UpscalingMode
@@ -131,6 +133,25 @@ class VodPlayerViewModel(
         settingsStore.updateSettings { it.copy(rtxHdr = on) }
         player.applyRtxVideo()
     }
+
+    /**
+     * "Even out loud and quiet audio" from the player menu or the A key: saved, then
+     * applied to this video (mirrors StreamViewModel). On VLC the video starts again on
+     * an instance with (or without) it and carries on from where it was.
+     */
+    fun setAudioNormalizer(on: Boolean) {
+        settingsStore.updateSettings { it.copy(audioNormalizer = on) }
+        player.setAudioLevelling(settingsStore.settings.value.audioLevellingInUse())
+    }
+
+    /** The normalizer's strength from the player menu: saved, then applied (when it is on). */
+    fun setAudioLevelling(level: AudioLevelling) {
+        settingsStore.updateSettings { it.copy(audioLevelling = level) }
+        player.setAudioLevelling(settingsStore.settings.value.audioLevellingInUse())
+    }
+
+    /** The A key: flips the setting. */
+    fun toggleAudioNormalizer() = setAudioNormalizer(!settingsStore.settings.value.audioNormalizer)
 
     fun setUpscaling(mode: UpscalingMode) {
         player.setUpscaling(mode)

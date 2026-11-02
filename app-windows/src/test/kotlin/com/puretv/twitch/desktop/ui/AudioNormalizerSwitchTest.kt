@@ -1,5 +1,6 @@
 package com.puretv.twitch.desktop.ui
 
+import com.puretv.twitch.core.audio.AudioLevelling
 import com.puretv.twitch.core.di.TokenHolder
 import com.puretv.twitch.desktop.data.DesktopSettingsStore
 import java.io.File
@@ -16,14 +17,31 @@ class AudioNormalizerSwitchTest {
 
     @Test fun savesTheSettingAndTellsTheRunningPlayer() {
         val store = DesktopSettingsStore(TokenHolder(), tmp)
-        val told = mutableListOf<Boolean>()
-        val viewModel = SettingsViewModel(store, onAudioNormalizerChange = { told += it })
+        val told = mutableListOf<AudioLevelling?>()
+        val viewModel = SettingsViewModel(store, onAudioLevellingChange = { told += it })
 
         viewModel.setAudioNormalizer(true)
         assertTrue(store.settings.value.audioNormalizer)
         viewModel.setAudioNormalizer(false)
 
-        assertEquals(listOf(true, false), told)
+        // On means the saved strength (Balanced until one is picked); off means no levelling.
+        assertEquals(listOf(AudioLevelling.BALANCED, null), told)
+        viewModel.dispose()
+        store.flush()
+    }
+
+    @Test fun aNewStrengthIsSavedAndReachesThePlayerOnlyWhileItIsOn() {
+        val store = DesktopSettingsStore(TokenHolder(), tmp)
+        val told = mutableListOf<AudioLevelling?>()
+        val viewModel = SettingsViewModel(store, onAudioLevellingChange = { told += it })
+
+        // Picked while off: remembered for later, and the player stays without levelling.
+        viewModel.setAudioLevelling(AudioLevelling.STRONG)
+        assertEquals(AudioLevelling.STRONG, store.settings.value.audioLevelling)
+        viewModel.setAudioNormalizer(true)
+        viewModel.setAudioLevelling(AudioLevelling.LIGHT)
+
+        assertEquals(listOf(null, AudioLevelling.STRONG, AudioLevelling.LIGHT), told)
         viewModel.dispose()
         store.flush()
     }

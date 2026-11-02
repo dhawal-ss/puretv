@@ -1,5 +1,6 @@
 package com.puretv.twitch.core.model
 
+import com.puretv.twitch.core.audio.AudioLevelling
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
@@ -41,6 +42,11 @@ data class GameInfo(
     val id: String,
     val name: String,
     @SerialName("box_art_url") val boxArtUrl: String = "",
+    /**
+     * People watching right now. Anonymous GQL (signed out) says; Helix does not, so
+     * it is null signed in, where the list order (most watched first) is all there is.
+     */
+    val viewers: Long? = null,
 )
 
 /** Quality variants parsed out of the Twitch HLS master playlist. */
@@ -320,8 +326,13 @@ data class AppSettings(
 
     // Audio normalizer (Wave 4): evens out loud and quiet audio with the shared
     // curve in `audio.AudioNormalizerProfile`. Off by default because it changes
-    // the broadcaster's mix. Instant on mpv, phone and TV; VLC after a restart.
+    // the broadcaster's mix. Switches live everywhere (VLC by moving to another instance).
     val audioNormalizer: Boolean = false,
+    // How strongly it works when on (1.17.0). Older files load with the default level.
+    val audioLevelling: AudioLevelling = AudioLevelling.DEFAULT,
+
+    // How Browse orders the categories (1.17.0). Most watched first, like Twitch.
+    val browseSort: CategorySort = CategorySort.DEFAULT,
 
     // NVIDIA RTX Video, Windows with an RTX card only. Super Resolution sharpens the
     // video when it is shown larger than it was sent (on by default). HDR turns SDR

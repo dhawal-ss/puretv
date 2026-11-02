@@ -188,6 +188,7 @@ fun VodPlayerScreen(launch: VodLaunch, onBack: () -> Unit) {
             onToggleFullscreen = { fullscreen = !fullscreen },
             chatVisible = chatVisible,
             onToggleChat = { chatVisible = !chatVisible },
+            onToggleAudioNormalizer = { viewModel.toggleAudioNormalizer() },
             onRetry = viewModel::retry,
             onSelectQuality = viewModel::setQuality,
             onResume = viewModel::resume,
@@ -235,6 +236,7 @@ private fun VodPlayerArea(
     onToggleFullscreen: () -> Unit,
     chatVisible: Boolean,
     onToggleChat: () -> Unit,
+    onToggleAudioNormalizer: () -> Unit,
     onRetry: () -> Unit,
     onSelectQuality: (StreamQuality) -> Unit,
     onResume: () -> Unit,
@@ -390,6 +392,12 @@ private fun VodPlayerArea(
                             contentDescription = if (chatVisible) "Hide chat" else "Show chat",
                             onClick = onToggleChat,
                             tint = if (chatVisible) PureTvTheme.colors.primary else Color.White,
+                        )
+                        VodScrimButton(
+                            icon = ExpressiveIcons.Tune,
+                            contentDescription = if (state.audioNormalizer) "Even out audio: on" else "Even out audio: off",
+                            onClick = onToggleAudioNormalizer,
+                            tint = if (state.audioNormalizer) PureTvTheme.colors.primary else Color.White,
                         )
                         VodQualityButton(quality = state.quality, onSelect = onSelectQuality)
                         VodScrimButton(

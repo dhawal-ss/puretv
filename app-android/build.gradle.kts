@@ -21,8 +21,8 @@ android {
         // versionCode is the monotonic value the in-app updater compares against
         // the published android-version.json (see docs/android-version.json).
         // Bump it on every Android release so the updater offers the new APK.
-        versionCode = 10
-        versionName = "1.3.1"
+        versionCode = 11
+        versionName = "1.4.0"
         ndk { abiFilters += listOf("armeabi-v7a", "arm64-v8a") } // skip x86 to cut APK size
     }
 

@@ -1,5 +1,6 @@
 package com.puretv.twitch.desktop.player
 
+import com.puretv.twitch.core.audio.AudioLevelling
 import com.puretv.twitch.core.perf.TimingLog
 
 import com.puretv.twitch.core.model.PlaybackBackend
@@ -75,13 +76,14 @@ interface DesktopPlayer {
     fun setUpscaling(mode: UpscalingMode) {}
 
     /**
-     * Turn the audio normalizer (AudioNormalizerProfile) on or off for the LIVE
-     * audio. mpv swaps its audio filter on the running context. Default no-op:
-     * VLC only takes audio filters when its instance is built (see VlcPlayer's
-     * `extraArgs`), so there the setting applies after a restart. The caller
-     * persists the setting either way.
+     * Turn the audio normalizer (AudioNormalizerProfile) on at [level], off (null),
+     * or to another strength, for the LIVE audio. mpv swaps its audio filter on the
+     * running context; VLC, which only takes audio filters when an instance starts,
+     * moves the player to the libVLC instance with that level's arguments (or none)
+     * and starts the stream again (see VlcEngines). Default no-op. The caller
+     * persists the settings either way.
      */
-    fun setAudioNormalizer(enabled: Boolean) {}
+    fun setAudioLevelling(level: AudioLevelling?) {}
 
     /**
      * What NVIDIA RTX Video is doing for this player's video (see [RtxVideoChoice]).

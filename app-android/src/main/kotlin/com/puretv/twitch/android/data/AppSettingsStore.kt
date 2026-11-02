@@ -11,7 +11,9 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.puretv.twitch.core.di.TokenHolder
+import com.puretv.twitch.core.audio.AudioLevelling
 import com.puretv.twitch.core.model.AppSettings
+import com.puretv.twitch.core.model.CategorySort
 import com.puretv.twitch.core.session.SessionState
 import com.puretv.twitch.core.session.deriveSessionState
 import kotlinx.coroutines.flow.Flow
@@ -75,6 +77,10 @@ class AppSettingsStore(
 
         // Audio normalizer (Wave 4).
         val AUDIO_NORMALIZER = booleanPreferencesKey("audio_normalizer")
+        val AUDIO_LEVELLING = stringPreferencesKey("audio_levelling")
+
+        // Browse order (issue #41).
+        val BROWSE_SORT = stringPreferencesKey("browse_sort")
 
         // Per-channel go-live alerts: the channels the viewer turned the bell on for.
         val NOTIFY_CHANNELS = stringSetPreferencesKey("notify_channels")
@@ -139,6 +145,8 @@ class AppSettingsStore(
             userId = token.userId,
             // Audio normalizer (Wave 4).
             audioNormalizer = prefs[Keys.AUDIO_NORMALIZER] ?: AppSettings().audioNormalizer,
+            audioLevelling = AudioLevelling.parse(prefs[Keys.AUDIO_LEVELLING]),
+            browseSort = CategorySort.parse(prefs[Keys.BROWSE_SORT]),
             // Per-channel go-live alerts.
             notifyChannels = prefs[Keys.NOTIFY_CHANNELS] ?: emptySet(),
             perChannelNoteDismissed = prefs[Keys.PER_CHANNEL_NOTE_DISMISSED] ?: false,
@@ -191,6 +199,8 @@ class AppSettingsStore(
             prefs[Keys.NOTIFY_MUTED_LOGINS] = next.notifyMutedLogins.mapTo(HashSet()) { it.lowercase() }
             // Audio normalizer (Wave 4).
             prefs[Keys.AUDIO_NORMALIZER] = next.audioNormalizer
+            prefs[Keys.AUDIO_LEVELLING] = next.audioLevelling.key
+            prefs[Keys.BROWSE_SORT] = next.browseSort.key
             // Per-channel go-live alerts.
             prefs[Keys.NOTIFY_CHANNELS] = next.notifyChannels.mapTo(HashSet()) { it.lowercase() }
             prefs[Keys.PER_CHANNEL_NOTE_DISMISSED] = next.perChannelNoteDismissed

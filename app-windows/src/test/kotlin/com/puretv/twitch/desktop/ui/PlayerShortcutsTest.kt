@@ -37,6 +37,19 @@ class PlayerShortcutsTest {
         assertEquals(ShortcutAction.CycleSleepTimer, action(KeyEvent.VK_Z))
     }
 
+    @Test fun aEvensOutLoudAndQuietAudio() {
+        assertEquals(ShortcutAction.ToggleAudioNormalizer, action(KeyEvent.VK_A, 'a'))
+        assertEquals(ShortcutAction.ToggleAudioNormalizer, action(KeyEvent.VK_A, 'a', immersive = true))
+        // Ctrl+A (select all) and an "a" typed in chat are not ours.
+        assertNull(action(KeyEvent.VK_A, ctrlOrAlt = true))
+        assertNull(PlayerShortcuts.actionFor(KeyEvent.VK_A, 'a', false, false, textInputFocused = true))
+        // A toggle: holding the key flips it once, not on every repeat.
+        assertNull(PlayerShortcuts.actionFor(KeyEvent.VK_A, 'a', false, false, isRepeat = true))
+        // It is about sound, so the mini player keeps it, and the sheet lists it.
+        assertTrue(PlayerShortcuts.worksInMini(ShortcutAction.ToggleAudioNormalizer))
+        assertTrue(PlayerShortcuts.help.any { it.keys == "A" && "audio" in it.what })
+    }
+
     @Test fun theQuestionMarkOpensTheSheetOnAnyLayout() {
         // Shift+/ on a US layout, and a layout where ? sits on another key.
         assertEquals(ShortcutAction.ToggleHelp, action(KeyEvent.VK_SLASH, '?'))
@@ -53,7 +66,7 @@ class PlayerShortcutsTest {
     }
 
     @Test fun unknownKeysPassThrough() {
-        assertNull(action(KeyEvent.VK_A))
+        assertNull(action(KeyEvent.VK_Q))
         assertNull(action(KeyEvent.VK_ENTER))
     }
 

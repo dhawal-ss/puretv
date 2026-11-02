@@ -160,14 +160,18 @@ class PureTvApp : Application(), SingletonImageLoader.Factory {
         }
         koinApp.koin.get<GoLiveMonitor>().start(appScope)
 
-        // "Even out loud and quiet audio" switches live: the player's audio
-        // processor reads the flag on the audio thread.
+        // "Even out loud and quiet audio" and its strength switch live: the
+        // player's audio processor reads both on the audio thread. The level goes
+        // first, so switching on never plays a frame at the previous strength.
         appScope.launch {
             val player = koinApp.koin.get<TwitchPlayer>()
             koinApp.koin.get<AppSettingsStore>().flow
-                .map { it.audioNormalizer }
+                .map { it.audioNormalizer to it.audioLevelling }
                 .distinctUntilChanged()
-                .collect { player.setAudioNormalizer(it) }
+                .collect { (on, level) ->
+                    player.setAudioLevelling(level)
+                    player.setAudioNormalizer(on)
+                }
         }
     }
 

@@ -1,5 +1,6 @@
 package com.puretv.twitch.desktop.player
 
+import com.puretv.twitch.core.audio.AudioLevelling
 import com.puretv.twitch.core.audio.AudioNormalizerProfile
 import com.puretv.twitch.core.model.UpscalingMode
 import com.puretv.twitch.core.perf.TimingLog
@@ -205,9 +206,9 @@ class MpvPlayer(private val settingsStore: DesktopSettingsStore) : DesktopPlayer
         l.mpv_set_option_string(c, "network-timeout", "10")
         mpvScalerPropsWithRtx(mode, shaderPaths, rtxSuperResolutionLocked()).forEach { (k, v) -> l.mpv_set_option_string(c, k, v) }
         // Audio normalizer: a fresh context per surface, so the filter is set here
-        // as well as live in setAudioNormalizer.
-        if (settingsStore.settings.value.audioNormalizer) {
-            l.mpv_set_option_string(c, "af", AudioNormalizerProfile.mpvAudioFilter())
+        // as well as live in setAudioLevelling.
+        settingsStore.settings.value.audioLevellingInUse()?.let { level ->
+            l.mpv_set_option_string(c, "af", AudioNormalizerProfile.mpvAudioFilter(level))
         }
         // OSD styling for the upscaling stats overlay (show-text): a restrained
         // top-left mono readout, not a loud HUD. Consolas ships on Windows. These
@@ -276,7 +277,7 @@ class MpvPlayer(private val settingsStore: DesktopSettingsStore) : DesktopPlayer
                 ctx = c
                 initialized = true
                 attachedCanvas = panel
-                normalizerOverride?.let { applyNormalizer(l, c, it) }
+                normalizerOverride?.let { applyNormalizer(l, c, it.level) }
                 observedProps.forEach { l.mpv_observe_property(c, 0L, it, MpvConst.MPV_FORMAT_NONE) }
                 if (rtxGpuPresent()) {
                     rtxProps.forEach { l.mpv_observe_property(c, RTX_USERDATA, it, MpvConst.MPV_FORMAT_NONE) }
@@ -641,24 +642,26 @@ class MpvPlayer(private val settingsStore: DesktopSettingsStore) : DesktopPlayer
     }
 
     /**
-     * Swap the audio normalizer in or out of the running context: `af` is
-     * runtime-settable, and an empty list clears it. No-op when not attached;
-     * `applyPreInitOptions` reads the saved setting for the next stream.
+     * Swap the audio normalizer in, out, or to another strength on the running
+     * context: `af` is runtime-settable, and an empty list clears it. No-op when not
+     * attached; `applyPreInitOptions` reads the saved settings for the next stream.
      */
-    override fun setAudioNormalizer(enabled: Boolean) {
+    override fun setAudioLevelling(level: AudioLevelling?) {
         // Remembered first: a context still coming up (ctx is null until its attach
         // finishes) applies it as soon as it is live, so a switch flipped
         // mid-bring-up is never lost.
-        normalizerOverride = enabled
-        withCtx { l, c -> applyNormalizer(l, c, enabled) }
+        normalizerOverride = LevellingOverride(level)
+        withCtx { l, c -> applyNormalizer(l, c, level) }
     }
 
-    private fun applyNormalizer(l: MpvLibrary, c: Pointer, enabled: Boolean) {
-        runCatching { l.mpv_set_property_string(c, "af", if (enabled) AudioNormalizerProfile.mpvAudioFilter() else "") }
+    private fun applyNormalizer(l: MpvLibrary, c: Pointer, level: AudioLevelling?) {
+        runCatching { l.mpv_set_property_string(c, "af", level?.let { AudioNormalizerProfile.mpvAudioFilter(it) } ?: "") }
     }
 
-    // The newest live switch, for a context that was being created when it came in.
-    @Volatile private var normalizerOverride: Boolean? = null
+    // The newest live switch, for a context that was being created when it came in. A
+    // holder, so "switched off" (level null) differs from "never switched" (no holder).
+    private class LevellingOverride(val level: AudioLevelling?)
+    @Volatile private var normalizerOverride: LevellingOverride? = null
 
     override fun release() {
         // App shutdown — tear the live context down exactly like a surface detach

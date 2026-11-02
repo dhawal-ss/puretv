@@ -263,7 +263,7 @@ internal const val TOP_STREAMS_QUERY =
 
 internal const val TOP_GAMES_QUERY =
     "query(\$first: Int) { games(first: \$first, options: {sort: VIEWER_COUNT}) " +
-        "{ edges { node { id name displayName boxArtURL(width: 144, height: 192) } } } }"
+        "{ edges { node { id name displayName boxArtURL(width: 144, height: 192) viewersCount } } } }"
 
 internal const val GAME_STREAMS_QUERY =
     "query(\$id: ID!, \$first: Int) { game(id: \$id) { streams(first: \$first, options: {sort: VIEWER_COUNT}) " +
@@ -276,7 +276,7 @@ internal const val SEARCH_QUERY =
 
 internal const val SEARCH_CATEGORIES_QUERY =
     "query(\$query: String!, \$limit: Int) { searchFor(userQuery: \$query, platform: \"web\", target: {index: GAME, limit: \$limit}) " +
-        "{ games { edges { item { ... on Game { id name displayName boxArtURL(width: 144, height: 192) } } } } } }"
+        "{ games { edges { item { ... on Game { id name displayName boxArtURL(width: 144, height: 192) viewersCount } } } } } }"
 
 internal const val USER_QUERY =
     "query(\$login: String!) { user(login: \$login) { id login displayName description " +

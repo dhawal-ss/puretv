@@ -41,8 +41,8 @@ android {
         // versionCode is the monotonic value the in-app updater compares against
         // the published tv-version.json (see docs/tv-version.json). Bump it on
         // every TV release so the updater offers the new APK.
-        versionCode = 9
-        versionName = "1.3.0"
+        versionCode = 10
+        versionName = "1.4.0"
         ndk { abiFilters += listOf("armeabi-v7a", "arm64-v8a") }
     }
 

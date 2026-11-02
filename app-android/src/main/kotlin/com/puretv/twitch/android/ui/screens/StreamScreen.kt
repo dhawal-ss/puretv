@@ -179,6 +179,7 @@ fun StreamScreen(channelLogin: String, onBack: () -> Unit) {
                     onToggleFullscreen = { fullscreen = !fullscreen },
                     onToggleFill = { fillScreen = !fillScreen },
                     onToggleChat = toggleChat,
+                    onToggleAudioNormalizer = { viewModel.toggleAudioNormalizer() },
                     onRetry = viewModel::retry,
                     onSelectQuality = viewModel::setQuality,
                     isInPip = isInPip,
@@ -228,6 +229,7 @@ fun StreamScreen(channelLogin: String, onBack: () -> Unit) {
                 onToggleFullscreen = { fullscreen = true },
                 onToggleFill = { fillScreen = !fillScreen },
                 onToggleChat = toggleChat,
+                onToggleAudioNormalizer = { viewModel.toggleAudioNormalizer() },
                 onRetry = viewModel::retry,
                 onSelectQuality = viewModel::setQuality,
                 isInPip = isInPip,
@@ -340,6 +342,7 @@ private fun PlayerArea(
     onToggleFullscreen: () -> Unit,
     onToggleFill: () -> Unit,
     onToggleChat: () -> Unit,
+    onToggleAudioNormalizer: () -> Unit,
     onRetry: () -> Unit,
     onSelectQuality: (StreamQuality) -> Unit,
     isInPip: Boolean,
@@ -417,6 +420,8 @@ private fun PlayerArea(
                             fullscreen = fullscreen,
                             fillScreen = fillScreen,
                             onToggleChat = onToggleChat,
+                            audioNormalizer = state.audioNormalizer,
+                            onToggleAudioNormalizer = onToggleAudioNormalizer,
                             onToggleFill = onToggleFill,
                             onToggleFullscreen = onToggleFullscreen,
                             modifier = Modifier.align(Alignment.TopEnd).then(topInset).padding(6.dp),
@@ -469,7 +474,7 @@ private fun PlayerBackButton(onClick: () -> Unit, modifier: Modifier = Modifier)
 }
 
 /**
- * The welded quality/chat/fill/fullscreen cluster: one 28dp-radius `surfaceHigh`
+ * The welded quality/chat/audio/fill/fullscreen cluster: one 28dp-radius `surfaceHigh`
  * bar with 1dp `outlineVariant` dividers between square segments, matching the
  * desktop controls bar's `ConnectedControlsGroup`. Fill/Fit only matters once
  * fullscreen owns the whole display, so that segment only appears there.
@@ -482,6 +487,8 @@ private fun PlayerControlsGroup(
     fullscreen: Boolean,
     fillScreen: Boolean,
     onToggleChat: () -> Unit,
+    audioNormalizer: Boolean,
+    onToggleAudioNormalizer: () -> Unit,
     onToggleFill: () -> Unit,
     onToggleFullscreen: () -> Unit,
     modifier: Modifier = Modifier,
@@ -500,6 +507,14 @@ private fun PlayerControlsGroup(
             contentDescription = if (chatVisible) "Hide chat" else "Show chat",
             onClick = onToggleChat,
             tint = if (chatVisible) c.primary else null,
+        )
+        GroupDivider()
+        // The same flag as Settings > Even out loud and quiet audio, applied live.
+        ControlsGroupButton(
+            icon = ExpressiveIcons.Tune,
+            contentDescription = if (audioNormalizer) "Even out audio: on" else "Even out audio: off",
+            onClick = onToggleAudioNormalizer,
+            tint = if (audioNormalizer) c.primary else null,
         )
         if (fullscreen) {
             GroupDivider()

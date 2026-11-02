@@ -1,5 +1,6 @@
 package com.puretv.twitch.desktop
 
+import com.puretv.twitch.desktop.player.audioLevellingInUse
 import com.puretv.twitch.desktop.platform.NativePreload
 import com.puretv.twitch.desktop.platform.MacAppEvents
 import com.puretv.twitch.desktop.platform.LaunchArgs
@@ -50,9 +51,8 @@ import com.puretv.twitch.desktop.platform.WindowsNative
 import com.puretv.twitch.desktop.platform.LoginStartup
 import com.puretv.twitch.desktop.player.LocalStreamProxy
 import com.puretv.twitch.desktop.player.DesktopPlayerProvider
-import com.puretv.twitch.desktop.player.VlcEngine
+import com.puretv.twitch.desktop.player.VlcEngines
 import com.puretv.twitch.desktop.player.VlcPlayer
-import com.puretv.twitch.desktop.player.RtxVlcEngines
 import com.puretv.twitch.desktop.platform.RtxGpu
 import com.puretv.twitch.desktop.platform.UiStallWatch
 import com.puretv.twitch.desktop.platform.AppRestart
@@ -165,8 +165,25 @@ fun main(args: Array<String>) {
 
     val playerProvider = koinApp.koin.get<DesktopPlayerProvider>()
     val localStreamProxy = koinApp.koin.get<LocalStreamProxy>()
-    val vlcEngine = koinApp.koin.get<VlcEngine>()
-    val rtxEngines = koinApp.koin.get<RtxVlcEngines>()
+    val vlcEngines = koinApp.koin.get<VlcEngines>()
+    // "Even out loud and quiet audio" (on, off, or its strength) switches live: VLC
+    // takes it only when an instance starts, so every VLC player (the main one,
+    // multi-stream tiles, extra windows) is told and moves to the instance with that
+    // level, or without it. Watching the settings themselves
+    // means a change from anywhere (Settings, any window's player controls, the A key)
+    // reaches every VLC player, not only the one in front. Players already on the right
+    // instance ignore it; the main player is also told here, in case it is mpv.
+    backgroundScope.launch {
+        settingsStore.settings
+            .map { it.audioLevellingInUse() }
+            .distinctUntilChanged()
+            .collect { level ->
+                vlcEngines.levellingChanged(level)
+                // The main player may be mpv, which a change in another window (always VLC)
+                // would not reach otherwise. A VLC main player already on it ignores this.
+                playerProvider.ifCreated { runCatching { it.setAudioLevelling(level) } }
+            }
+    }
     Runtime.getRuntime().addShutdownHook(Thread {
         // The stores now persist off the UI thread via a conflated async writer; flush
         // any pending snapshot so a change made right before quitting is still durable.
@@ -179,8 +196,7 @@ fun main(args: Array<String>) {
         runCatching { runBlocking { localStreamProxy.stop() } }
         runCatching { playerProvider.releaseIfCreated() }
         runCatching { VlcPlayer.awaitAllReleased(3_000) }
-        runCatching { vlcEngine.releaseIfBuilt() }
-        runCatching { rtxEngines.releaseIfBuilt() }
+        runCatching { vlcEngines.releaseIfBuilt() }
     })
 
     // Create icon once before the Compose application loop so it isn't
@@ -424,8 +440,8 @@ fun main(args: Array<String>) {
     // Players stop and free their libVLC work on their own threads: let that finish
     // before libVLC itself is released (this is main(), never the UI thread).
     runCatching { VlcPlayer.awaitAllReleased(3_000) }
-    runCatching { vlcEngine.releaseIfBuilt() }
-    runCatching { rtxEngines.releaseIfBuilt() }
+    // Every libVLC instance that was started, the ones players moved away from included.
+    runCatching { vlcEngines.releaseIfBuilt() }
     // "Restart now" (an engine switch): start the launcher again; it waits for this copy to go.
     AppRestart.relaunchIfRequested()
     exitProcess(0)

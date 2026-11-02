@@ -1,10 +1,12 @@
 package com.puretv.twitch.desktop.data
 
+import com.puretv.twitch.core.audio.AudioLevelling
 import com.puretv.twitch.desktop.platform.AppDirs
 import com.puretv.twitch.core.api.DeviceAuth
 import com.puretv.twitch.core.api.TokenRefreshException
 import com.puretv.twitch.core.di.TokenHolder
 import com.puretv.twitch.core.model.AppSettings
+import com.puretv.twitch.core.model.CategorySort
 import com.puretv.twitch.core.model.PlaybackBackend
 import com.puretv.twitch.core.model.UpscalingMode
 import com.puretv.twitch.desktop.auth.CURRENT_AUTH_SCHEMA
@@ -182,6 +184,11 @@ class DesktopSettingsStore(
         val showSevenTvPaints: Boolean = true,
         // Audio normalizer (Wave 4). Missing from older files, which then load with it off.
         val audioNormalizer: Boolean = false,
+        // Its strength, by AudioLevelling.key. Missing from older files, which then load at
+        // Balanced; anything unknown loads at Balanced too (see AudioLevelling.parse).
+        val audioLevelling: String = "balanced",
+        // Browse order (1.17.0). Missing from older files, which then load most viewers first.
+        val browseSort: String = "viewers",
         // NVIDIA RTX Video. Missing from older files, which then load with Super
         // Resolution on and HDR off (see AppSettings).
         val rtxSuperResolution: Boolean = true,
@@ -219,6 +226,8 @@ class DesktopSettingsStore(
         minimizeToTray = minimizeToTray,
         showSevenTvPaints = showSevenTvPaints,
         audioNormalizer = audioNormalizer,
+        audioLevelling = AudioLevelling.parse(audioLevelling),
+        browseSort = CategorySort.parse(browseSort),
         rtxSuperResolution = rtxSuperResolution,
         rtxHdr = rtxHdr,
         notifyChannels = notifyChannels.mapTo(LinkedHashSet()) { it.lowercase() },
@@ -255,6 +264,8 @@ class DesktopSettingsStore(
         minimizeToTray = minimizeToTray,
         showSevenTvPaints = showSevenTvPaints,
         audioNormalizer = audioNormalizer,
+        audioLevelling = audioLevelling.key,
+        browseSort = browseSort.key,
         rtxSuperResolution = rtxSuperResolution,
         rtxHdr = rtxHdr,
         notifyChannels = notifyChannels.sorted(),

@@ -135,9 +135,10 @@ val tvModule = module {
     // TvFollowingViewModel(followedChannelsSource, settings): the Following
     // destination's own nav-rail screen, see TvFollowingScreen.
     viewModel { TvFollowingViewModel(get(), get()) }
-    // BrowseViewModel(channelRepo, tokenRefresher): tokenRefresher recovers the
-    // expired-token 401 that used to blank the category grid.
-    viewModel { BrowseViewModel(get(), get()) }
+    // BrowseViewModel(channelRepo, tokenRefresher, settings): tokenRefresher recovers
+    // the expired-token 401 that used to blank the category grid; settings hold
+    // the chosen order.
+    viewModel { BrowseViewModel(get(), get(), get()) }
     viewModel { (gameId: String) -> CategoryViewModel(gameId, get()) }
     viewModel { SearchViewModel(get()) }
     // The row a stream was opened from (Home, a category, Continue watching), so the

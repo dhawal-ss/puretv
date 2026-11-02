@@ -182,9 +182,12 @@ private fun VodPlayerScreen(koin: Koin, launch: VodLaunch, windowPlayback: Windo
     val latestMode = rememberUpdatedState(mode)
     val myWindow = LocalAwtWindow.current
     DisposableEffect(Unit) {
+        // A held A sends a KEY_PRESSED per auto-repeat; only the first one toggles.
+        var audioKeyHeld = false
         val dispatcher = KeyEventDispatcher { e ->
             // A key pressed in another PureTV window (a popped-out tile, a second window) is that window's.
             if (!AppWindows.handlesKeys(myWindow)) return@KeyEventDispatcher false
+            if (e.id == KeyEvent.KEY_RELEASED && e.keyCode == KeyEvent.VK_A) audioKeyHeld = false
             if (e.id != KeyEvent.KEY_PRESSED) return@KeyEventDispatcher false
             val m = latestMode.value
             // Any key brings hidden controls back; the key itself still does its own job below.
@@ -195,6 +198,15 @@ private fun VodPlayerScreen(koin: Koin, launch: VodLaunch, windowPlayback: Windo
                 KeyEvent.VK_C -> { shell.toggleChat(); true }
                 KeyEvent.VK_SPACE -> { viewModel.togglePlayPause(); true }
                 KeyEvent.VK_ESCAPE -> if (m != PlayerMode.DEFAULT) { shell.exitImmersive(); true } else false
+                // A: even out loud and quiet audio, as on the live player. Not with Ctrl or
+                // Alt, so system shortcuts (select all) keep working.
+                KeyEvent.VK_A -> if (!e.isControlDown && !e.isAltDown && !e.isMetaDown) {
+                    if (!audioKeyHeld) viewModel.toggleAudioNormalizer()
+                    audioKeyHeld = true
+                    true
+                } else {
+                    false
+                }
                 // Skip back / forward. Auto-repeat scrubs, since AWT sends a fresh
                 // KEY_PRESSED per repeat. resetControls() rides along so a seek in
                 // an immersive mode brings the timecode back rather than leaving
@@ -317,6 +329,10 @@ private fun VodPlayerScreen(koin: Koin, launch: VodLaunch, windowPlayback: Windo
                         ) else null,
                         engineNeedsRestart = playerProvider.runningBackend(appSettings.playbackBackend) != appSettings.playbackBackend,
                         onRestart = if (AppRestart.isAvailable) AppRestart::restart else null,
+                        audioNormalizer = appSettings.audioNormalizer,
+                        onAudioNormalizerChange = viewModel::setAudioNormalizer,
+                        audioLevelling = appSettings.audioLevelling,
+                        onAudioLevellingSelected = viewModel::setAudioLevelling,
                     )
                 }
 

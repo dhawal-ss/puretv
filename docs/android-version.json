@@ -1,6 +1,6 @@
 {
-  "versionCode": 10,
-  "versionName": "1.3.1",
+  "versionCode": 11,
+  "versionName": "1.4.0",
   "apkUrl": "https://github.com/dhawal-ss/puretv/releases/download/android-latest/PureTV-for-Twitch-Android.apk",
-  "notes": "View channel on Following now opens the channel page, so past broadcasts are one tap away (thanks to community contributor laryaonyx5-ux). Chat notices a dropped connection after sleep or a Wi-Fi change within about a minute and a half, and stops redialling nonstop when Twitch refuses a login. Ad breaks no longer fall back to a backup stream that Twitch already closed."
+  "notes": "Search finds categories as well as channels, and Browse shows every category instead of the top 20, sorted by most viewers, fewest viewers or A to Z. Even out loud and quiet audio now has Light, Balanced and Strong levels and its own button in the player controls. In chat, type a colon and two letters (like :kek) to see only emotes."
 }

@@ -22,7 +22,7 @@ import com.puretv.twitch.desktop.player.PlaybackStallWatchdog
 import com.puretv.twitch.desktop.player.ProxyUnavailableException
 import com.puretv.twitch.desktop.player.TILE_AUDIO_OUTPUT
 import com.puretv.twitch.desktop.player.TileQuality
-import com.puretv.twitch.desktop.player.VlcEngine
+import com.puretv.twitch.desktop.player.VlcEngines
 import com.puretv.twitch.desktop.player.VlcPlayer
 import com.puretv.twitch.core.repository.VodRepository
 import com.puretv.twitch.core.stream.MasterPlaylistResult
@@ -77,7 +77,7 @@ data class MultiViewUiState(
  * owned by [MultiStreamSession], not by the screen, so tiles that were popped out into
  * their own windows keep playing when the screen is left.
  *
- * Every tile is its own [VlcPlayer] made from the shared [VlcEngine], never the
+ * Every tile is its own [VlcPlayer] made from the shared [VlcEngines], never the
  * single-stream player, so leaving the normal stream screen can never stop a tile
  * (and the mpv engine is not involved). All tiles keep playing, each with its own
  * volume and mute. By default only the active tile is heard; the viewer can choose to
@@ -92,7 +92,7 @@ data class MultiViewUiState(
  */
 class MultiViewViewModel(
     initial: TileSource,
-    private val engine: VlcEngine,
+    private val engines: VlcEngines,
     private val adBlockEngine: AdBlockEngine,
     private val localStreamProxy: LocalStreamProxy,
     private val playableStreamCache: PlayableStreamCache,
@@ -392,7 +392,8 @@ class MultiViewViewModel(
         _state.update { it.copy(info = it.info + (tile.id to TileInfo(displayName = tile.login.ifBlank { "Past video" }))) }
         val setup = scope.launch {
             // libVLC is built on first use and its plugin scan is slow: not on the UI thread.
-            val player = VlcPlayer(engine, audioOutput = TILE_AUDIO_OUTPUT, replayOnNewSurface = true)
+            // On the instance the audio normalizer setting asks for, and it follows later changes.
+            val player = VlcPlayer(engines, audioOutput = TILE_AUDIO_OUTPUT, replayOnNewSurface = true)
             if (rt.closed) {
                 rt.freeOnce(player)
                 return@launch

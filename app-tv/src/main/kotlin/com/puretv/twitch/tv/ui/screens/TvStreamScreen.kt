@@ -43,6 +43,7 @@ import androidx.compose.ui.unit.dp
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.puretv.twitch.core.adblock.AdBlockStatus
+import com.puretv.twitch.core.audio.AudioLevelling
 import com.puretv.twitch.core.model.StreamQuality
 import com.puretv.twitch.core.playback.RemoteAction
 import com.puretv.twitch.core.playback.RemoteKey
@@ -321,6 +322,8 @@ fun TvStreamScreen(
                     alertsOn = bell.on,
                     alertsNote = bell.message,
                     onToggleAlerts = bell.toggle,
+                    audioLevellingLabel = audioLevellingLabel(state.audioNormalizer, state.audioLevelling),
+                    onCycleAudioLevelling = { viewModel.cycleAudioLevelling() },
                     playPauseFocusRequester = playPauseFocusRequester,
                 )
                 if (!state.chatBesideVideo) {
@@ -409,6 +412,8 @@ private fun StreamVideoArea(
     alertsOn: Boolean,
     alertsNote: String?,
     onToggleAlerts: () -> Unit,
+    audioLevellingLabel: String,
+    onCycleAudioLevelling: () -> Unit,
     playPauseFocusRequester: FocusRequester,
 ) {
     val context = LocalContext.current
@@ -475,10 +480,16 @@ private fun StreamVideoArea(
             alertsOn = alertsOn,
             alertsNote = alertsNote,
             onToggleAlerts = onToggleAlerts,
+            audioLevellingLabel = audioLevellingLabel,
+            onCycleAudioLevelling = onCycleAudioLevelling,
             playPauseFocusRequester = playPauseFocusRequester,
         )
     }
 }
+
+/** The player's audio levelling button label: the strength in use, or Off. */
+private fun audioLevellingLabel(on: Boolean, level: AudioLevelling): String =
+    "Audio levelling: ${if (on) level.label else "Off"}"
 
 /** Section 7.4 — FAST_FORWARD/REWIND remap to quality up/down on live (unseekable) streams. */
 private fun stepQuality(current: StreamQuality, up: Boolean): StreamQuality {

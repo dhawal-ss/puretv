@@ -33,6 +33,7 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Switch
 import androidx.tv.material3.Text
 import com.puretv.twitch.core.adblock.AdBlockStrategy
+import com.puretv.twitch.core.audio.AudioLevelling
 import com.puretv.twitch.core.model.ChatTextSize
 import com.puretv.twitch.core.model.StreamQuality
 import com.puretv.twitch.core.notify.GoLiveAlerts
@@ -115,6 +116,8 @@ fun TvSettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = koinView
                 onLowLatencyChange = viewModel::setLowLatency,
                 audioNormalizer = state.settings.audioNormalizer,
                 onAudioNormalizerChange = viewModel::setAudioNormalizer,
+                audioLevelling = state.settings.audioLevelling,
+                onAudioLevellingChange = viewModel::setAudioLevelling,
             )
         }
         TvDivider()
@@ -291,6 +294,8 @@ private fun StreamQualitySection(
     onLowLatencyChange: (Boolean) -> Unit,
     audioNormalizer: Boolean,
     onAudioNormalizerChange: (Boolean) -> Unit,
+    audioLevelling: AudioLevelling,
+    onAudioLevellingChange: (AudioLevelling) -> Unit,
 ) {
     val c = PureTvTvTheme.colors
     Column {
@@ -336,12 +341,28 @@ private fun StreamQualitySection(
                 Text("Even out loud and quiet audio", style = MaterialTheme.typography.bodyLarge, color = c.onSurface)
                 Text(
                     "Turns down sudden loud moments and lifts quiet voices a little, so you can " +
-                        "leave the volume alone. Music can sound flatter with it on.",
+                        "leave the volume alone. Music can sound flatter with it on. You can also " +
+                        "switch it from the player controls.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = c.onSurfaceVariant,
                 )
             }
             Switch(checked = audioNormalizer, onCheckedChange = onAudioNormalizerChange)
+        }
+        // How strongly, only while it is on. Applied live like the switch.
+        if (audioNormalizer) {
+            Spacer(Modifier.height(16.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                AudioLevelling.entries.forEach { level ->
+                    TvFilterChip(
+                        label = level.label,
+                        selected = level == audioLevelling,
+                        onClick = { onAudioLevellingChange(level) },
+                    )
+                }
+            }
+            Spacer(Modifier.height(10.dp))
+            Text(audioLevelling.description, style = MaterialTheme.typography.bodyMedium, color = c.onSurfaceVariant)
         }
     }
 }

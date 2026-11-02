@@ -19,6 +19,9 @@ enum class ShortcutAction {
     CycleSleepTimer,
     ToggleHelp,
     ToggleMini,
+
+    // "Even out loud and quiet audio" (the audio normalizer), on or off.
+    ToggleAudioNormalizer,
 }
 
 /**
@@ -29,8 +32,8 @@ enum class ShortcutAction {
  *
  * F fullscreen, T theater, C chat, Space play/pause, Esc leaves fullscreen or theater
  * (and closes the shortcuts sheet), F3 upscaling stats (mpv), PageUp/PageDown change
- * channel, Up/Down volume, M mute, Z sleep timer, I mini player (Esc leaves it too),
- * ? (Shift+/) or F1 this list.
+ * channel, Up/Down volume, M mute, A evens out loud and quiet audio, Z sleep timer,
+ * I mini player (Esc leaves it too), ? (Shift+/) or F1 this list.
  * Hold X compares the upscaler off and is handled separately because it needs the
  * release event too.
  */
@@ -93,6 +96,7 @@ object PlayerShortcuts {
             KeyEvent.VK_UP -> ShortcutAction.VolumeUp
             KeyEvent.VK_DOWN -> ShortcutAction.VolumeDown
             KeyEvent.VK_M -> ShortcutAction.ToggleMute
+            KeyEvent.VK_A -> ShortcutAction.ToggleAudioNormalizer
             KeyEvent.VK_Z -> ShortcutAction.CycleSleepTimer
             KeyEvent.VK_I -> ShortcutAction.ToggleMini
             else -> null
@@ -102,7 +106,8 @@ object PlayerShortcuts {
     /**
      * Whether [action] means anything in the mini player, which has no chat, no menus and
      * no room for the shortcuts sheet. Those keys are swallowed there rather than left to
-     * change state the viewer cannot see.
+     * change state the viewer cannot see. Sound keys (volume, mute, A) keep working: the
+     * viewer hears what they do.
      */
     fun worksInMini(action: ShortcutAction): Boolean = when (action) {
         ShortcutAction.ToggleFullscreen,
@@ -131,6 +136,7 @@ object PlayerShortcuts {
         Help("Page Up / Page Down", "Next or previous channel"),
         Help("Up / Down", "Volume"),
         Help("M", "Mute"),
+        Help("A", "Even out loud and quiet audio"),
         Help("Z", "Sleep timer"),
         Help("Hold X", "Compare with upscaling off (mpv)"),
         Help("F3", "Upscaling stats (mpv)"),

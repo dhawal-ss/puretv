@@ -13,8 +13,8 @@ class AudioNormalizerProfileTest {
     }
 
     @Test
-    fun vlcArgsLoadTheCompressorWithValuesInsideVlcRanges() {
-        val args = AudioNormalizerProfile.vlcArgs()
+    fun vlcArgsLoadTheCompressorWithValuesInsideVlcRanges() = AudioLevelling.entries.forEach { level ->
+        val args = AudioNormalizerProfile.vlcArgs(level)
         assertEquals("--audio-filter=compressor", args.first())
         val values = args.drop(1).associate { arg ->
             val (name, value) = arg.removePrefix("--").split("=", limit = 2)
@@ -32,13 +32,31 @@ class AudioNormalizerProfileTest {
         )
         assertEquals(ranges.keys, values.keys)
         ranges.forEach { (name, range) ->
-            assertTrue(values.getValue(name) in range, "$name=${values[name]} outside $range")
+            assertTrue(values.getValue(name) in range, "$level: $name=${values[name]} outside $range")
         }
     }
 
     @Test
-    fun mpvFilterIsCompressorThenLimiterWithoutAutoLevel() {
-        val filter = AudioNormalizerProfile.mpvAudioFilter()
+    fun levelsAreStoredByKeyAndUnknownKeysLoadTheDefault() {
+        assertEquals(AudioLevelling.BALANCED, AppSettings().audioLevelling)
+        AudioLevelling.entries.forEach { assertEquals(it, AudioLevelling.parse(it.key)) }
+        assertEquals(AudioLevelling.DEFAULT, AudioLevelling.parse(null))
+        assertEquals(AudioLevelling.DEFAULT, AudioLevelling.parse("ludicrous"))
+        assertEquals(listOf("light", "balanced", "strong"), AudioLevelling.entries.map { it.key }, "keys are in settings files")
+    }
+
+    @Test
+    fun strongerLevelsCompressHarderAndLiftMore() {
+        val (light, balanced, strong) = AudioLevelling.entries.map { it.curve }
+        assertTrue(light.thresholdDb >= balanced.thresholdDb && balanced.thresholdDb >= strong.thresholdDb)
+        assertTrue(light.ratio < balanced.ratio && balanced.ratio < strong.ratio)
+        assertTrue(light.makeupDb < balanced.makeupDb && balanced.makeupDb < strong.makeupDb)
+    }
+
+    @Test
+    fun mpvFilterIsCompressorThenLimiterWithoutAutoLevel() = AudioLevelling.entries.forEach { level ->
+        val curve = level.curve
+        val filter = AudioNormalizerProfile.mpvAudioFilter(level)
         assertTrue(filter.startsWith("lavfi=[acompressor="), filter)
         assertTrue(filter.endsWith("]"), filter)
         val (compressor, limiter) = filter.removePrefix("lavfi=[").removeSuffix("]").split(",")
@@ -46,8 +64,8 @@ class AudioNormalizerProfileTest {
         val l = options(limiter.removePrefix("alimiter="))
 
         // acompressor wants linear amplitudes and a linear knee ratio (1..8), not dB.
-        assertEquals(AudioNormalizerProfile.dbToLinear(AudioNormalizerProfile.THRESHOLD_DB), c.getValue("threshold").toDouble(), 1e-4)
-        assertEquals(AudioNormalizerProfile.RATIO, c.getValue("ratio").toDouble())
+        assertEquals(AudioNormalizerProfile.dbToLinear(curve.thresholdDb), c.getValue("threshold").toDouble(), 1e-4)
+        assertEquals(curve.ratio, c.getValue("ratio").toDouble())
         assertTrue(c.getValue("knee").toDouble() in 1.0..8.0)
         assertTrue(c.getValue("makeup").toDouble() in 1.0..64.0)
         assertEquals("peak", c["detection"])

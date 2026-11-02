@@ -9,17 +9,22 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -59,11 +64,16 @@ import com.puretv.twitch.android.ui.theme.PureTvMotion
 import com.puretv.twitch.android.ui.theme.PureTvTheme
 import com.puretv.twitch.android.ui.theme.itemMotion
 import com.puretv.twitch.core.api.ChannelSearchResult
+import com.puretv.twitch.core.model.GameInfo
 import org.koin.androidx.compose.koinViewModel
 
-/** SECTION 06.4: channel/game search with debounce-on-type (Helix Search Channels). */
+/**
+ * SECTION 06.4: channel and category search with debounce-on-type (Helix Search
+ * Channels and Search Categories, asked together). Matching categories lead, as
+ * a row of compact box-art tiles, then the channels.
+ */
 @Composable
-fun SearchScreen(onOpenChannel: (String) -> Unit) {
+fun SearchScreen(onOpenChannel: (String) -> Unit, onOpenCategory: (gameId: String, name: String) -> Unit) {
     val viewModel: SearchViewModel = koinViewModel()
     val state by viewModel.state.collectAsState()
     val focusManager = LocalFocusManager.current
@@ -89,7 +99,7 @@ fun SearchScreen(onOpenChannel: (String) -> Unit) {
                 message = state.error!!,
                 onRetry = { viewModel.onQueryChange(state.query) },
             )
-            state.isSearching && state.results.isEmpty() -> FullScreenLoading()
+            state.isSearching && state.results.isEmpty() && state.categories.isEmpty() -> FullScreenLoading()
             state.query.length < 2 -> if (state.recentSearches.isEmpty()) {
                 EmptyState(
                     title = "Search Twitch",
@@ -102,15 +112,20 @@ fun SearchScreen(onOpenChannel: (String) -> Unit) {
                     onClear = viewModel::clearHistory,
                 )
             }
-            state.results.isEmpty() -> EmptyState(
+            state.results.isEmpty() && state.categories.isEmpty() -> EmptyState(
                 title = "No results",
                 subtitle = "Nothing matches \"${state.query}\".",
             )
             else -> SearchResults(
                 results = state.results,
+                categories = state.categories,
                 onOpenChannel = { login ->
                     viewModel.commitSearch()
                     onOpenChannel(login)
+                },
+                onOpenCategory = { game ->
+                    viewModel.commitSearch()
+                    onOpenCategory(game.id, game.name)
                 },
             )
         }
@@ -196,25 +211,97 @@ private fun SearchField(
 }
 
 /**
- * All results in one [PureTvTheme.shapes.card] container on [surfaceLow][PureTvTheme.colors],
- * so the container clips its children and the first/last row inherit its
- * rounding without each row needing its own corner logic.
+ * One scrolling list: the "Categories" row (when any match) and then the
+ * channels, so with the keyboard up the tiles scroll away instead of squeezing
+ * the channel list. The channel rows read as one [PureTvTheme.shapes.card]
+ * container on [surfaceLow][PureTvTheme.colors]: only the first and last row
+ * are rounded, on their outer corners.
  */
 @Composable
-private fun SearchResults(results: List<ChannelSearchResult>, onOpenChannel: (String) -> Unit) {
+private fun SearchResults(
+    results: List<ChannelSearchResult>,
+    categories: List<GameInfo>,
+    onOpenChannel: (String) -> Unit,
+    onOpenCategory: (GameInfo) -> Unit,
+) {
+    val c = PureTvTheme.colors
+    val corner = PureTvTheme.shapes.card
+    LazyColumn(modifier = Modifier.fillMaxSize()) {
+        if (categories.isNotEmpty()) {
+            item(key = "section:categories") {
+                Column(modifier = Modifier.padding(bottom = 16.dp)) {
+                    SearchSectionLabel("Categories")
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(vertical = 4.dp)) {
+                        items(categories, key = { it.id }) { game ->
+                            SearchCategoryTile(game = game, onClick = { onOpenCategory(game) })
+                        }
+                    }
+                }
+            }
+            if (results.isNotEmpty()) item(key = "section:channels") { SearchSectionLabel("Channels") }
+        }
+        itemsIndexed(results, key = { _, result -> result.id }) { index, result ->
+            val shape = RoundedCornerShape(
+                topStart = if (index == 0) corner else 0.dp,
+                topEnd = if (index == 0) corner else 0.dp,
+                bottomStart = if (index == results.lastIndex) corner else 0.dp,
+                bottomEnd = if (index == results.lastIndex) corner else 0.dp,
+            )
+            SearchResultRow(
+                result,
+                onClick = { onOpenChannel(result.broadcaster_login) },
+                modifier = Modifier.then(itemMotion()).clip(shape).background(c.surfaceLow),
+            )
+        }
+    }
+}
+
+@Composable
+private fun SearchSectionLabel(text: String) {
+    Text(
+        text,
+        style = MaterialTheme.typography.titleMedium,
+        color = PureTvTheme.colors.onSurface,
+        modifier = Modifier.padding(vertical = 8.dp),
+    )
+}
+
+/**
+ * A compact box-art tile for the search row: smaller than Browse's
+ * [GameTile][com.puretv.twitch.android.ui.components.GameTile] so the row stays
+ * short above the channels, with the same press morph and art.
+ */
+@Composable
+private fun SearchCategoryTile(game: GameInfo, onClick: () -> Unit) {
     val c = PureTvTheme.colors
     val shapes = PureTvTheme.shapes
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .clip(shapes.cardShape)
-            .background(c.surfaceLow),
-    ) {
-        LazyColumn(modifier = Modifier.fillMaxSize()) {
-            items(results, key = { it.id }) { result ->
-                SearchResultRow(result, onClick = { onOpenChannel(result.broadcaster_login) }, modifier = Modifier.then(itemMotion()))
-            }
-        }
+    val interaction = remember { MutableInteractionSource() }
+
+    Column(modifier = Modifier.width(84.dp)) {
+        AsyncImage(
+            model = game.boxArtUrl.replace("{width}", "188").replace("{height}", "250"),
+            contentDescription = game.name,
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(3f / 4f)
+                .expressiveClickable(
+                    interaction = interaction,
+                    onClick = onClick,
+                    restRadius = shapes.card,
+                    pressRadius = shapes.cardMorph,
+                    color = c.surfaceHigh,
+                ),
+            contentScale = ContentScale.Crop,
+        )
+        Text(
+            game.name,
+            style = MaterialTheme.typography.bodySmall,
+            color = c.onSurfaceVariant,
+            minLines = 2,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+        )
     }
 }
 

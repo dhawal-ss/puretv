@@ -11,7 +11,7 @@ import kotlin.test.assertTrue
 
 class DynamicRangeCompressorTest {
     private val rate = 48_000
-    private val makeup = AudioNormalizerProfile.dbToLinear(AudioNormalizerProfile.MAKEUP_DB).toFloat()
+    private val makeup = AudioNormalizerProfile.dbToLinear(AudioLevelling.DEFAULT.curve.makeupDb).toFloat()
     private val ceiling = AudioNormalizerProfile.dbToLinear(AudioNormalizerProfile.CEILING_DB).toFloat()
 
     private fun compressor(on: Boolean = true) = DynamicRangeCompressor().apply {
@@ -44,20 +44,41 @@ class DynamicRangeCompressorTest {
         assertTrue(settled > 0.25f, "loud peak squashed too far, to $settled")
     }
 
+    /** Settled peak in dBFS of a 1 s sine at [amplitude] through a fresh compressor at [level]. */
+    private fun settledDb(amplitude: Float, level: AudioLevelling): Double {
+        val audio = sine(amplitude, seconds = 1.0)
+        compressor().apply { this.level = level }.process(audio)
+        return 20 * kotlin.math.log10(peak(audio, from = audio.size / 2).toDouble())
+    }
+
     @Test
     fun voiceAndBackgroundMusicEndUpMuchCloser() {
-        // Issue #36: a streamer's voice peaking at -3 dBFS over music at -36 dBFS.
-        // Off, that is a 33 dB gap; the curve must close most of it, and the voice
-        // must come out about as loud as the first curve left it (around -11 dBFS).
-        val voice = sine(0.708f, seconds = 1.0)
-        val music = sine(0.0158f, seconds = 1.0)
-        compressor().process(voice)
-        compressor().process(music)
-        val voiceDb = 20 * kotlin.math.log10(peak(voice, from = voice.size / 2).toDouble())
-        val musicDb = 20 * kotlin.math.log10(peak(music, from = music.size / 2).toDouble())
-        val gap = voiceDb - musicDb
-        assertTrue(gap < 16.0, "voice/music gap is still ${gap} dB")
-        assertTrue(voiceDb in -14.0..-8.0, "voice came out at ${voiceDb} dBFS")
+        // Issue #36: a streamer's voice peaking at -3 dBFS over music at -36 dBFS is
+        // a 33 dB gap with it off. Each level closes more of it, and none of them
+        // makes the voice much quieter than it was.
+        val gaps = AudioLevelling.entries.associateWith { settledDb(0.708f, it) - settledDb(0.0158f, it) }
+        assertTrue(gaps.getValue(AudioLevelling.LIGHT) < 22.0, "light gap ${gaps[AudioLevelling.LIGHT]}")
+        assertTrue(gaps.getValue(AudioLevelling.BALANCED) < 16.0, "balanced gap ${gaps[AudioLevelling.BALANCED]}")
+        assertTrue(gaps.getValue(AudioLevelling.STRONG) < 11.0, "strong gap ${gaps[AudioLevelling.STRONG]}")
+        assertTrue(gaps.getValue(AudioLevelling.STRONG) < gaps.getValue(AudioLevelling.BALANCED))
+        assertTrue(gaps.getValue(AudioLevelling.BALANCED) < gaps.getValue(AudioLevelling.LIGHT))
+        AudioLevelling.entries.forEach { level ->
+            val voice = settledDb(0.708f, level)
+            assertTrue(voice in -14.0..-8.0, "$level voice came out at $voice dBFS")
+        }
+    }
+
+    @Test
+    fun theLevelCanChangeWhilePlaying() {
+        val c = compressor()
+        val first = sine(0.0158f, seconds = 0.5)
+        c.process(first)
+        c.level = AudioLevelling.STRONG
+        val second = sine(0.0158f, seconds = 0.5)
+        c.process(second)
+        // Quiet music sits below every knee, so it gets exactly the new makeup gain.
+        val strongMakeup = AudioNormalizerProfile.dbToLinear(AudioLevelling.STRONG.curve.makeupDb).toFloat()
+        assertEquals(0.0158f * strongMakeup, peak(second, from = second.size / 2), 1e-3f)
     }
 
     @Test

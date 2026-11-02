@@ -1,5 +1,6 @@
 package com.puretv.twitch.desktop.ui.screens
 
+import com.puretv.twitch.core.audio.AudioLevelling
 import androidx.compose.runtime.produceState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -41,9 +42,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
-import com.puretv.twitch.core.model.PlaybackBackend
 import com.puretv.twitch.core.notify.GoLiveAlerts
 import com.puretv.twitch.desktop.player.DesktopPlayerProvider
 import com.puretv.twitch.core.model.StreamQuality
@@ -121,9 +122,8 @@ fun SettingsContent(koin: Koin, onExit: () -> Unit) {
             onLowLatencyChange = viewModel::setLowLatency,
             audioNormalizer = state.settings.audioNormalizer,
             onAudioNormalizerChange = viewModel::setAudioNormalizer,
-            // The engine running now, not the saved one: an engine switch itself waits for a restart.
-            normalizerNeedsRestart = koin.get<DesktopPlayerProvider>()
-                .runningBackend(state.settings.playbackBackend) == PlaybackBackend.VLC,
+            audioLevelling = state.settings.audioLevelling,
+            onAudioLevellingSelect = viewModel::setAudioLevelling,
         )
         Spacer(Modifier.height(16.dp))
 
@@ -340,7 +340,8 @@ private fun PlaybackPanel(
     onLowLatencyChange: (Boolean) -> Unit,
     audioNormalizer: Boolean,
     onAudioNormalizerChange: (Boolean) -> Unit,
-    normalizerNeedsRestart: Boolean,
+    audioLevelling: AudioLevelling,
+    onAudioLevellingSelect: (AudioLevelling) -> Unit,
 ) {
     val c = PureTvTheme.colors
     ExpressivePanel {
@@ -370,10 +371,33 @@ private fun PlaybackPanel(
             SettingsRow(
                 label = "Even out loud and quiet audio",
                 description = "Turns down sudden loud moments and lifts quiet voices a little, so you can " +
-                    "leave the volume alone. Music can sound flatter with it on." +
-                    if (normalizerNeedsRestart) " Applies after restart." else "",
+                    "leave the volume alone. Music can sound flatter with it on. Switches right away, " +
+                    "and you can also flip it from the player controls or with the A key while watching.",
             ) {
                 ExpressiveSwitch(checked = audioNormalizer, onCheckedChange = onAudioNormalizerChange)
+            }
+            // How strong it is: every level with its one line, the chosen one brighter, so
+            // the difference is clear before trying them. Offered while it is off too (a
+            // strength picked then is kept for when it is turned on), dimmed to say so.
+            Spacer(Modifier.height(16.dp))
+            Column(
+                modifier = Modifier.alpha(if (audioNormalizer) 1f else 0.6f),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                SegmentedToggle(
+                    options = AudioLevelling.entries,
+                    selected = audioLevelling,
+                    label = { it.label },
+                    onSelect = onAudioLevellingSelect,
+                )
+                Spacer(Modifier.height(8.dp))
+                AudioLevelling.entries.forEach { level ->
+                    Text(
+                        "${level.label}: ${level.description}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (audioNormalizer && level == audioLevelling) c.onSurface else c.onSurfaceVariant,
+                    )
+                }
             }
             ExpressiveDivider(Modifier.padding(vertical = 24.dp))
             SettingsRow(

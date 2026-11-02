@@ -17,6 +17,7 @@ import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.puretv.twitch.android.ui.theme.PureTvTheme
 import com.puretv.twitch.core.model.GameInfo
+import com.puretv.twitch.core.model.formatCategoryViewers
 
 /**
  * A category/game tile: a 3:4 box-art card at `shapes.card` that morphs out to
@@ -59,5 +60,15 @@ fun GameTile(game: GameInfo, onClick: () -> Unit, modifier: Modifier = Modifier)
                 .fillMaxWidth()
                 .padding(top = 8.dp),
         )
+        // Only known signed out (the anonymous directory carries it; Helix does
+        // not), and then every tile has it, so rows stay aligned.
+        game.viewers?.let { viewers ->
+            Text(
+                formatCategoryViewers(viewers),
+                style = MaterialTheme.typography.bodySmall,
+                color = c.onSurfaceVariant,
+                maxLines = 1,
+            )
+        }
     }
 }

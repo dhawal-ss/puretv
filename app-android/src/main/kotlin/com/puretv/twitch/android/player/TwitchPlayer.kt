@@ -17,6 +17,7 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.hls.HlsMediaSource
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import com.puretv.twitch.core.adblock.AdBlockEngine
+import com.puretv.twitch.core.audio.AudioLevelling
 import com.puretv.twitch.core.adblock.AdMarkers
 import okhttp3.Protocol
 import io.ktor.client.HttpClient
@@ -146,6 +147,7 @@ class TwitchPlayer(
     // "Even out loud and quiet audio". The flag outlives the player; each built
     // player gets its own processor, primed from it.
     @Volatile private var audioNormalizerOn = false
+    @Volatile private var audioLevelling = AudioLevelling.DEFAULT
     @Volatile private var audioNormalizer: AudioNormalizer? = null
 
     /** Switches the audio normalizer live. Never builds the player. */
@@ -154,12 +156,22 @@ class TwitchPlayer(
         audioNormalizer?.enabled = enabled
     }
 
+    /** Sets how strongly the normalizer works, live. Never builds the player. */
+    fun setAudioLevelling(level: AudioLevelling) {
+        audioLevelling = level
+        audioNormalizer?.level = level
+    }
+
     private fun buildPlayer(): ExoPlayer = ExoPlayer.Builder(
         context,
         NormalizingRenderersFactory(
             context,
             // Published before it reads the flag, so a switch flipped meanwhile is never lost.
-            AudioNormalizer().also { audioNormalizer = it; it.enabled = audioNormalizerOn },
+            AudioNormalizer().also {
+                audioNormalizer = it
+                it.level = audioLevelling
+                it.enabled = audioNormalizerOn
+            },
         ),
     )
         .setMediaSourceFactory(

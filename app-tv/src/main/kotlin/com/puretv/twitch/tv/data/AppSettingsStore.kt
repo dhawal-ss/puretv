@@ -11,7 +11,9 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.puretv.twitch.core.di.TokenHolder
+import com.puretv.twitch.core.audio.AudioLevelling
 import com.puretv.twitch.core.model.AppSettings
+import com.puretv.twitch.core.model.CategorySort
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.catch
@@ -73,6 +75,10 @@ class AppSettingsStore(
 
         // Audio normalizer (Wave 4).
         val AUDIO_NORMALIZER = booleanPreferencesKey("audio_normalizer")
+        val AUDIO_LEVELLING = stringPreferencesKey("audio_levelling")
+
+        // Browse order (issue #41).
+        val BROWSE_SORT = stringPreferencesKey("browse_sort")
 
         // Remote control (Wave 4).
         val TV_REMOTE_FLIP = booleanPreferencesKey("tv_remote_flip")
@@ -122,6 +128,8 @@ class AppSettingsStore(
             tvChatOpacity = prefs[Keys.TV_CHAT_OPACITY] ?: AppSettings().tvChatOpacity,
             // Audio normalizer (Wave 4).
             audioNormalizer = prefs[Keys.AUDIO_NORMALIZER] ?: AppSettings().audioNormalizer,
+            audioLevelling = AudioLevelling.parse(prefs[Keys.AUDIO_LEVELLING]),
+            browseSort = CategorySort.parse(prefs[Keys.BROWSE_SORT]),
             // Remote control (Wave 4).
             tvRemoteFlip = prefs[Keys.TV_REMOTE_FLIP] ?: AppSettings().tvRemoteFlip,
             // Per-channel go-live alerts.
@@ -177,6 +185,8 @@ class AppSettingsStore(
             prefs[Keys.TV_CHAT_OPACITY] = next.tvChatOpacity
             // Audio normalizer (Wave 4).
             prefs[Keys.AUDIO_NORMALIZER] = next.audioNormalizer
+            prefs[Keys.AUDIO_LEVELLING] = next.audioLevelling.key
+            prefs[Keys.BROWSE_SORT] = next.browseSort.key
             // Remote control (Wave 4).
             prefs[Keys.TV_REMOTE_FLIP] = next.tvRemoteFlip
             // Per-channel go-live alerts.

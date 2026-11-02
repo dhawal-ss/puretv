@@ -23,9 +23,10 @@ import javax.swing.SwingUtilities
 val TILE_AUDIO_OUTPUT: String? = NativeLibs.tileAudioOutput()
 
 /**
- * The one libVLC instance of the app. Loading libVLC scans its plugins, which is
- * slow, so it happens once and every [VlcPlayer] (the single-stream player, and
- * one per multi-stream tile) makes its own media player from it.
+ * One libVLC instance. Loading libVLC scans its plugins, which is slow, so it happens
+ * once per instance and every [VlcPlayer] on it (the single-stream player, one per
+ * multi-stream tile, one per extra window) makes its own media player from it. The
+ * app keeps one instance per set of arguments in [VlcEngines].
  *
  * VLC resolution order:
  *   1. Bundled copy: when running as a packaged distributable, looks for
@@ -36,9 +37,10 @@ val TILE_AUDIO_OUTPUT: String? = NativeLibs.tileAudioOutput()
  *
  * Construction is cheap; libVLC loads on first use (the background warm-up, the
  * first stream open, or the first multi-stream tile), never on the way to the
- * first window. [extraArgs] is read at that moment, so the audio normalizer
- * setting is whatever it is when VLC starts (VLC 3.0.23 only loads audio filters
- * per instance, so a change applies after a restart).
+ * first window. [extraArgs] is read at that moment and never again: VLC 3.0 only
+ * loads audio filters per instance, so the audio normalizer is part of which
+ * instance a player uses (see [VlcEngineKey]), and switching it moves the player to
+ * another instance instead of changing this one.
  */
 class VlcEngine(
     private val extraArgs: () -> List<String> = { emptyList() },
@@ -146,7 +148,7 @@ class VlcEngine(
         /**
          * libVLC's version ("3.0.24 Vetinari"), read without starting an instance; null when
          * VLC is missing. Windows only: on macOS this direct load breaks vlcj's (see
-         * RtxVlcEngines.vlcHdrSafe).
+         * RtxVlcSupport.vlcHdrSafe).
          */
         fun libVlcVersion(): String? = runCatching {
             detectBundledVlc()

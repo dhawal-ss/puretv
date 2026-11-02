@@ -1,5 +1,6 @@
 package com.puretv.twitch.desktop.di
 
+import com.puretv.twitch.desktop.player.audioLevellingInUse
 import com.puretv.twitch.desktop.platform.AppDirs
 import com.puretv.twitch.desktop.auth.DesktopOAuthManager
 import com.puretv.twitch.desktop.data.DesktopSettingsStore
@@ -18,7 +19,6 @@ import com.puretv.twitch.desktop.player.WindowPlayback
 import androidx.compose.ui.window.TrayState
 import com.puretv.twitch.desktop.data.ViewerHistoryStore
 import com.puretv.twitch.desktop.data.WatchProgressStore
-import com.puretv.twitch.core.audio.AudioNormalizerProfile
 import com.puretv.twitch.core.model.PlaybackBackend
 import com.puretv.twitch.desktop.player.DesktopPlayer
 import com.puretv.twitch.desktop.player.DesktopPlayerProvider
@@ -31,8 +31,8 @@ import okio.Path.Companion.toOkioPath
 import com.puretv.twitch.desktop.player.LocalStreamProxy
 import com.puretv.twitch.desktop.player.MpvPlayer
 import com.puretv.twitch.desktop.player.NativeLibs
-import com.puretv.twitch.desktop.player.VlcEngine
-import com.puretv.twitch.desktop.player.RtxVlcEngines
+import com.puretv.twitch.desktop.player.VlcEngines
+import com.puretv.twitch.desktop.player.RtxVlcSupport
 import com.puretv.twitch.desktop.player.RtxVideoChoice
 import com.puretv.twitch.desktop.platform.RtxGpu
 import com.puretv.twitch.desktop.player.VlcPlayer
@@ -148,30 +148,28 @@ val desktopModule = module {
     // Built on first use (the background warm-up just after the first window, or
     // the first stream open), never on the way to the first window: creating it
     // loads libVLC and its plugins, or the 120 MB libmpv.
-    // The one libVLC instance: the single-stream player and every multi-stream tile make
-    // their media players from it. VLC takes the audio normalizer only as instance
-    // arguments, read when libVLC starts.
+    // The app's libVLC instances, one per set of instance arguments (see VlcEngines): the
+    // single-stream player, every multi-stream tile and every extra window make their
+    // media players from the one their settings ask for. VLC takes the audio normalizer
+    // (and its strength) only as instance arguments, so it is part of which instance a
+    // player is on, and a change moves the players over (main() passes changes on).
     single {
         val store = get<DesktopSettingsStore>()
-        VlcEngine { if (store.settings.value.audioNormalizer) AudioNormalizerProfile.vlcArgs() else emptyList() }
+        VlcEngines(levelling = { store.settings.value.audioLevellingInUse() })
     }
     // NVIDIA RTX Video runs on instances of its own, for the main player only (see
-    // RtxVlcEngines). Without an RTX card the choice is always "nothing".
+    // RtxVlcSupport). Without an RTX card the choice is always "nothing".
     single {
         val store = get<DesktopSettingsStore>()
-        RtxVlcEngines(
-            standard = get(),
-            extraArgs = { if (store.settings.value.audioNormalizer) AudioNormalizerProfile.vlcArgs() else emptyList() },
-            choice = { RtxVideoChoice.from(store.settings.value, RtxGpu.present) },
-        )
+        RtxVlcSupport(choice = { RtxVideoChoice.from(store.settings.value, RtxGpu.present) })
     }
     single {
         val store = get<DesktopSettingsStore>()
-        val engine = get<VlcEngine>()
-        val rtx = get<RtxVlcEngines>()
+        val engines = get<VlcEngines>()
+        val rtx = get<RtxVlcSupport>()
         DesktopPlayerProvider {
             val mpv = store.settings.value.playbackBackend == PlaybackBackend.MPV && NativeLibs.mpvSupported()
-            if (mpv) MpvPlayer(store) else VlcPlayer(engine, rtx = rtx)
+            if (mpv) MpvPlayer(store) else VlcPlayer(engines, rtx = rtx)
         }
     }
     single<DesktopPlayer> { get<DesktopPlayerProvider>().player }
@@ -197,7 +195,7 @@ val desktopModule = module {
             localPins = { follows.followed.value.map { FollowedRef(it.id, it.login, it.displayName) } },
         )
     }
-    factory { BrowseViewModel(get()) }
+    factory { BrowseViewModel(get(), get()) }
     // Category drill-down takes (gameId, gameName) from the tapped Browse card.
     factory { (gameId: String, gameName: String) -> CategoryViewModel(gameId, gameName, get()) }
     factory { SearchViewModel(get()) }
@@ -249,10 +247,12 @@ val desktopModule = module {
     factory { (channelLogin: String) -> ChannelStatsViewModel(channelLogin, get(), get()) }
     factory {
         val players = get<DesktopPlayerProvider>()
-        // Live on mpv; never builds a player just to tell it about the setting.
+        // Live on both engines (VLC moves to the instance with or without it, and main()
+        // passes the change on to every other VLC player); never builds a player just to
+        // tell it about the setting.
         SettingsViewModel(
             get(),
-            onAudioNormalizerChange = { on -> players.ifCreated { it.setAudioNormalizer(on) } },
+            onAudioLevellingChange = { level -> players.ifCreated { it.setAudioLevelling(level) } },
             onRtxVideoChange = { players.ifCreated { it.applyRtxVideo() } },
         )
     }

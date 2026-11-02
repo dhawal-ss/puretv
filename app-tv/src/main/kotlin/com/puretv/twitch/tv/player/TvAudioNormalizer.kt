@@ -8,6 +8,7 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.audio.AudioSink
 import androidx.media3.exoplayer.audio.DefaultAudioSink
+import com.puretv.twitch.core.audio.AudioLevelling
 import com.puretv.twitch.core.audio.DynamicRangeCompressor
 import java.nio.ByteBuffer
 import kotlin.math.abs
@@ -31,6 +32,11 @@ class TvAudioNormalizer : BaseAudioProcessor() {
     var enabled: Boolean
         get() = compressor.enabled
         set(value) { compressor.enabled = value }
+
+    /** How strongly it works (Light, Balanced, Strong); switches live. */
+    var level: AudioLevelling
+        get() = compressor.level
+        set(value) { compressor.level = value }
 
     override fun onConfigure(inputAudioFormat: AudioProcessor.AudioFormat): AudioProcessor.AudioFormat =
         when (inputAudioFormat.encoding) {

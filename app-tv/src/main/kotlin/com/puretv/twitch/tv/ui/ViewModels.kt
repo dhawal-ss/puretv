@@ -5,8 +5,11 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.puretv.twitch.core.adblock.AdBlockEngine
 import com.puretv.twitch.core.adblock.AdBlockStatus
+import com.puretv.twitch.core.audio.AudioLevelling
+import com.puretv.twitch.core.api.ChannelSearchResult
 import com.puretv.twitch.core.api.DeviceAuth
 import com.puretv.twitch.core.api.DevicePollResult
+import com.puretv.twitch.core.api.GamesPage
 import com.puretv.twitch.core.chat.BadgeIndex
 import com.puretv.twitch.core.chat.BadgeRepository
 import com.puretv.twitch.core.chat.ChatChange
@@ -34,6 +37,8 @@ import com.puretv.twitch.core.model.ChatTextSize
 import com.puretv.twitch.core.model.StreamInfo
 import com.puretv.twitch.core.model.TV_CHAT_BESIDE_VIDEO
 import com.puretv.twitch.core.model.GameInfo
+import com.puretv.twitch.core.model.CategorySort
+import com.puretv.twitch.core.model.sortedCategories
 import com.puretv.twitch.core.notify.GoLiveAlerts
 import com.puretv.twitch.core.notify.LiveFollowsMonitor
 import com.puretv.twitch.core.playback.ChannelFlip
@@ -72,13 +77,16 @@ import com.puretv.twitch.tv.data.db.toStreamInfo
 import io.ktor.client.HttpClient
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -374,9 +382,16 @@ class TvFollowingViewModel(
 }
 
 data class BrowseUiState(
+    /** Everything loaded, in [shownSort] order. */
     val games: List<GameInfo> = emptyList(),
     val isLoading: Boolean = true,
+    /** Further pages are on their way. */
+    val isLoadingMore: Boolean = false,
     val error: String? = null,
+    /** The order picked (saved in Settings), for the sort button. */
+    val sort: CategorySort = CategorySort.DEFAULT,
+    /** The order [games] is in. Trails [sort] while every page loads for an order that needs them. */
+    val shownSort: CategorySort = CategorySort.DEFAULT,
 )
 
 /**
@@ -385,28 +400,86 @@ data class BrowseUiState(
  * full relaunch (the reported "categories just disappear" bug). Now it keeps the
  * last-known games on failure, surfaces an error + retry only when it has nothing
  * to show, and refreshes the token once before giving up.
+ *
+ * Paged (issue #41): [refresh] loads the first page, [loadMore] appends the next
+ * as the grid nears its end, until Twitch hands back no cursor. Pages arrive in
+ * Twitch's order (most viewers first), which is kept as is; the grid shows
+ * [sortedCategories] of it. Fewest viewers and A to Z need every page, so
+ * picking one loads the rest first.
  */
 class BrowseViewModel(
     private val channelRepository: ChannelRepository,
     private val tokenRefresher: TokenRefresher,
+    private val settingsStore: AppSettingsStore,
 ) : ViewModel() {
     private val _state = MutableStateFlow(BrowseUiState())
     val state: StateFlow<BrowseUiState> = _state.asStateFlow()
 
-    private var loadJob: Job? = null
+    // Everything loaded, in Twitch's order (that order is the viewer ranking).
+    private var raw: List<GameInfo> = emptyList()
 
-    init { refresh() }
+    // Where the next page starts; null once the directory is exhausted (or signed
+    // out, where Twitch refuses anonymous cursors and one page is all there is).
+    private var cursor: String? = null
+    private var loadJob: Job? = null
+    private var moreJob: Job? = null
+
+    // When the first page last arrived, so a resume only starts over once the
+    // list is worth refreshing.
+    private var loadedAtMs = 0L
+
+    init {
+        viewModelScope.launch {
+            settingsStore.flow.map { it.browseSort }.distinctUntilChanged().collect { sort ->
+                _state.update { it.copy(sort = sort) }
+                // While the first page is still coming, refresh() applies the order itself.
+                if (loadJob?.isActive != true) applySort()
+            }
+        }
+        refresh()
+    }
 
     fun retry() = refresh()
 
+    /**
+     * The screen came back (Back from a category, or the app returning). Starts
+     * over only when there is nothing good to show or the list is older than
+     * [STALE_AFTER_MS]; otherwise the games, cursor and scroll position stay, so
+     * the viewer is where they left off.
+     */
+    fun onResume() {
+        if (loadJob?.isActive == true) return
+        val s = _state.value
+        val stale = System.currentTimeMillis() - loadedAtMs > STALE_AFTER_MS
+        if (s.games.isEmpty() || s.error != null || stale) refresh()
+    }
+
+    /** Saved, so Browse opens in the same order next time; the collector above applies it. */
+    fun setSort(sort: CategorySort) = viewModelScope.launch {
+        // Shown at once, so a quick second press steps on from this pick rather
+        // than from the one still being saved.
+        _state.update { it.copy(sort = sort) }
+        settingsStore.update { it.copy(browseSort = sort) }
+    }
+
+    /** Back to the first page (on open, retry, and a resume once the list is stale). */
     fun refresh() {
         loadJob?.cancel()
+        // A page still arriving for the old cursor must not land on the fresh first page.
+        moreJob?.cancel()
         loadJob = viewModelScope.launch {
-            _state.update { it.copy(isLoading = it.games.isEmpty(), error = null) }
-            loadGamesResilient()
-                .onSuccess { games ->
-                    // ifEmpty: a transient empty response must not wipe a good grid.
-                    _state.update { it.copy(games = games.ifEmpty { it.games }, isLoading = false, error = null) }
+            _state.update { it.copy(isLoading = it.games.isEmpty(), isLoadingMore = false, error = null) }
+            loadPageResilient(after = null)
+                .onSuccess { page ->
+                    // A transient empty response must not wipe a good grid, nor the
+                    // cursor that goes with it.
+                    if (page.games.isNotEmpty()) {
+                        raw = page.games.distinctBy { g -> g.id }
+                        cursor = page.cursor
+                        loadedAtMs = System.currentTimeMillis()
+                    }
+                    _state.update { it.copy(isLoading = false, error = null) }
+                    applySort()
                 }
                 .onFailure { e ->
                     _state.update {
@@ -419,12 +492,95 @@ class BrowseViewModel(
         }
     }
 
-    private suspend fun loadGamesResilient(): Result<List<GameInfo>> {
-        val first = runCatching { channelRepository.topGames() }
+    /** The grid shows [raw] in [order]. */
+    private fun publish(order: CategorySort) {
+        _state.update { it.copy(games = sortedCategories(raw, order), shownSort = order) }
+    }
+
+    /**
+     * Shows the picked order. One that needs every page (Fewest viewers, A to Z)
+     * first loads the rest, up to [MAX_FILL_PAGES], with the current order still
+     * showing; a page that fails ends the filling and the order applies to what
+     * arrived.
+     */
+    private fun applySort() {
+        val sort = _state.value.sort
+        // A fill still running for an earlier pick must not land its order after this one.
+        moreJob?.cancel()
+        if (!sort.needsEveryPage || cursor == null) {
+            _state.update { it.copy(isLoadingMore = false) }
+            publish(sort)
+            return
+        }
+        publish(_state.value.shownSort)
+        moreJob = viewModelScope.launch {
+            _state.update { it.copy(isLoadingMore = true) }
+            var pages = 0
+            while (pages < MAX_FILL_PAGES) {
+                val after = cursor ?: break
+                val page = loadPageResilient(after).getOrNull()
+                if (page == null) {
+                    // Cancelled (another order, or a reload) ends here without showing anything.
+                    ensureActive()
+                    break
+                }
+                cursor = page.cursor
+                raw = raw.appendingPage(page.games)
+                pages++
+            }
+            _state.update { it.copy(isLoadingMore = false) }
+            publish(sort)
+        }
+    }
+
+    /** Appends the next page. A no-op while any load is running or when there is nothing more. */
+    fun loadMore() {
+        val after = cursor ?: return
+        if (loadJob?.isActive == true || moreJob?.isActive == true) return
+        moreJob = viewModelScope.launch {
+            _state.update { it.copy(isLoadingMore = true) }
+            loadPageResilient(after)
+                .onSuccess { page ->
+                    cursor = page.cursor
+                    raw = raw.appendingPage(page.games)
+                    _state.update { it.copy(isLoadingMore = false) }
+                    publish(_state.value.shownSort)
+                }
+                // The grid keeps what it has and the cursor stays, so the next scroll
+                // tries again. Cancelled (a fill took over) leaves the indicator to it.
+                .onFailure {
+                    ensureActive()
+                    _state.update { it.copy(isLoadingMore = false) }
+                }
+        }
+    }
+
+    private suspend fun loadPageResilient(after: String?): Result<GamesPage> {
+        val first = runCatching { channelRepository.topGamesPage(after = after) }
         if (first.isSuccess) return first
         runCatching { tokenRefresher.refreshIfPossible() }
-        return runCatching { channelRepository.topGames() }
+        return runCatching { channelRepository.topGamesPage(after = after) }
     }
+
+    private companion object {
+        // About 4,000 categories: well past where anyone scrolls, and a bound on
+        // how many requests one pick of Fewest viewers or A to Z can cost.
+        const val MAX_FILL_PAGES = 40
+
+        // Older than this, a resume starts the list over from the first page.
+        const val STALE_AFTER_MS = 5L * 60 * 1000
+    }
+}
+
+/**
+ * [page] added after these games, minus any already shown: the top-games ranking
+ * shifts between requests, so pages overlap, and a repeated id would crash the
+ * grid (it is keyed by id).
+ */
+private fun List<GameInfo>.appendingPage(page: List<GameInfo>): List<GameInfo> {
+    val seen = mapTo(HashSet()) { it.id }
+    val fresh = page.filter { seen.add(it.id) }
+    return if (fresh.isEmpty()) this else this + fresh
 }
 
 data class CategoryUiState(
@@ -460,7 +616,9 @@ class CategoryViewModel(
 
 data class SearchUiState(
     val query: String = "",
-    val results: List<com.puretv.twitch.core.api.ChannelSearchResult> = emptyList(),
+    val results: List<ChannelSearchResult> = emptyList(),
+    /** Categories matching the query, shown above the channels (issue #41). */
+    val categories: List<GameInfo> = emptyList(),
     val isSearching: Boolean = false,
 )
 
@@ -478,20 +636,53 @@ class SearchViewModel(private val channelRepository: ChannelRepository) : ViewMo
         _state.update { it.copy(query = query) }
         searchJob?.cancel()
         if (query.length < 2) {
-            _state.update { it.copy(results = emptyList(), isSearching = false) }
+            _state.update { it.copy(results = emptyList(), categories = emptyList(), isSearching = false) }
             return
         }
         searchJob = viewModelScope.launch {
             _state.update { it.copy(isSearching = true) }
             delay(SEARCH_DEBOUNCE_MS)
-            val results = runCatching { channelRepository.search(query) }.getOrDefault(emptyList())
-            _state.update { it.copy(results = results, isSearching = false) }
+            // Channels and categories together. A category failure only empties the
+            // categories; a channel failure empties the result, as it always has.
+            val hits = searchChannelsAndCategories(
+                channels = { channelRepository.search(query) },
+                categories = { channelRepository.searchCategories(query) },
+            ).getOrNull()
+            _state.update {
+                it.copy(results = hits?.channels.orEmpty(), categories = hits?.categories.orEmpty(), isSearching = false)
+            }
         }
     }
 
     private companion object {
         const val SEARCH_DEBOUNCE_MS = 350L
     }
+}
+
+/** What one query found: channels, plus the categories shown above them. */
+private class SearchHits(val channels: List<ChannelSearchResult>, val categories: List<GameInfo>)
+
+/**
+ * Asks for channels and categories at the same time (the phone app has the same
+ * helper). Only a channel failure fails the search, and cancellation (a newer
+ * keystroke) is never turned into a failure.
+ */
+private suspend fun searchChannelsAndCategories(
+    channels: suspend () -> List<ChannelSearchResult>,
+    categories: suspend () -> List<GameInfo>,
+): Result<SearchHits> = coroutineScope {
+    // Caught inside the async: a failure escaping it would cancel this scope, and
+    // the channel search with it. A real cancellation still surfaces at await().
+    val categoryLookup = async { runCatching { categories() }.getOrDefault(emptyList()) }
+    val found = try {
+        channels()
+    } catch (e: Exception) {
+        // Rethrows when this search was cancelled; anything else is a real failure.
+        ensureActive()
+        categoryLookup.cancel()
+        return@coroutineScope Result.failure(e)
+    }
+    Result.success(SearchHits(found, categoryLookup.await()))
 }
 
 data class StreamUiState(
@@ -536,6 +727,11 @@ data class StreamUiState(
 
     /** Settings > Up and Down change channel (off: they show the controls instead). */
     val upDownFlips: Boolean = true,
+
+    /** Settings > Even out loud and quiet audio, also switchable from the player controls. */
+    val audioNormalizer: Boolean = false,
+    /** How strongly, when [audioNormalizer] is on. */
+    val audioLevelling: AudioLevelling = AudioLevelling.DEFAULT,
 
     // Channel flipping. The channel can change without leaving the screen (see
     // StreamViewModel.flip), so the screen reads the login from here, not from its route.
@@ -682,6 +878,8 @@ class StreamViewModel(
                         // owns it from then on.
                         quality = it.quality ?: StreamQuality.fromSetting(settings.preferredQuality),
                         upDownFlips = settings.tvRemoteFlip,
+                        audioNormalizer = settings.audioNormalizer,
+                        audioLevelling = settings.audioLevelling,
                     )
                 }
             }
@@ -1026,6 +1224,26 @@ class StreamViewModel(
         }
     }
 
+    /**
+     * The player's audio levelling button (discussion #36): one button for a
+     * remote, stepping Off, Light, Balanced, Strong and back to Off. Saved like
+     * the Settings switch and strength, which the app-level collector applies
+     * to the player live.
+     */
+    fun cycleAudioLevelling() = viewModelScope.launch {
+        settingsStore.update { s ->
+            if (!s.audioNormalizer) {
+                s.copy(audioNormalizer = true, audioLevelling = AudioLevelling.LIGHT)
+            } else {
+                when (s.audioLevelling) {
+                    AudioLevelling.LIGHT -> s.copy(audioLevelling = AudioLevelling.BALANCED)
+                    AudioLevelling.BALANCED -> s.copy(audioLevelling = AudioLevelling.STRONG)
+                    AudioLevelling.STRONG -> s.copy(audioNormalizer = false)
+                }
+            }
+        }
+    }
+
     fun sendChatMessage(text: String) = viewModelScope.launch {
         chatClient.sendMessage(currentLogin, text)
     }
@@ -1154,6 +1372,11 @@ class SettingsViewModel(private val settingsStore: AppSettingsStore) : ViewModel
     // PureTvTvApp hands the saved value to the player, which applies it live.
     fun setAudioNormalizer(enabled: Boolean) = viewModelScope.launch {
         settingsStore.update { it.copy(audioNormalizer = enabled) }
+    }
+
+    // Applied live the same way as the switch above.
+    fun setAudioLevelling(level: AudioLevelling) = viewModelScope.launch {
+        settingsStore.update { it.copy(audioLevelling = level) }
     }
 
     fun setTvRemoteFlip(enabled: Boolean) = viewModelScope.launch {

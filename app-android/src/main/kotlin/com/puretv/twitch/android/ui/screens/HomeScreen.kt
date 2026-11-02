@@ -95,7 +95,8 @@ fun HomeScreen(
     onOpenStream: (String) -> Unit,
     onOpenChannel: (String) -> Unit,
     onOpenBrowse: () -> Unit,
-    onOpenCategory: (String) -> Unit,
+    /** A category's id and name (the name titles it when nothing there is live). */
+    onOpenCategory: (gameId: String, name: String) -> Unit,
     onOpenSearch: () -> Unit,
     onOpenVod: (VodLaunch) -> Unit,
     onOpenSettings: () -> Unit,
@@ -230,7 +231,7 @@ fun HomeScreen(
                                 SectionHeading(title = "Browse categories", actionLabel = "See all", onAction = onOpenBrowse)
                                 LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                                     items(state.games, key = { it.id }) { g ->
-                                        GameTile(game = g, onClick = { onOpenCategory(g.id) })
+                                        GameTile(game = g, onClick = { onOpenCategory(g.id, g.name) })
                                     }
                                 }
                             }

@@ -41,6 +41,8 @@ import com.puretv.twitch.core.model.Badge
 import com.puretv.twitch.core.model.ChannelInfo
 import com.puretv.twitch.core.model.ChatMessage
 import com.puretv.twitch.core.model.GameInfo
+import com.puretv.twitch.core.model.sortedCategories
+import com.puretv.twitch.core.model.CategorySort
 import com.puretv.twitch.core.model.StreamInfo
 import com.puretv.twitch.core.model.StreamQuality
 import com.puretv.twitch.core.model.PlaybackBackend
@@ -62,7 +64,10 @@ import com.puretv.twitch.desktop.player.ChannelClaims
 import com.puretv.twitch.desktop.player.PlayTicket
 import com.puretv.twitch.desktop.player.ProxyUnavailableException
 import com.puretv.twitch.desktop.player.DesktopPlayer
+import com.puretv.twitch.desktop.player.audioLevellingInUse
+import com.puretv.twitch.core.audio.AudioLevelling
 import io.ktor.client.HttpClient
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -253,27 +258,135 @@ class HomeViewModel(
 // ---- Browse ------------------------------------------------------------------
 
 data class BrowseUiState(
+    /** The categories in [sort] order, ready to show. */
     val games: List<GameInfo> = emptyList(),
     val isLoading: Boolean = true,
     /** Non-null when the load failed — lets the screen show an error + Retry instead of
      *  an empty grid that's indistinguishable from "no categories". */
     val error: String? = null,
+    /** True while more pages are on their way, for the spinner under the grid. */
+    val isLoadingMore: Boolean = false,
+    /** True when there is a next page to ask for (signed in, until the last page). */
+    val canLoadMore: Boolean = false,
+    val sort: CategorySort = CategorySort.DEFAULT,
 )
 
-class BrowseViewModel(private val channelRepository: ChannelRepository) : DesktopViewModel() {
-    private val _state = MutableStateFlow(BrowseUiState())
+/**
+ * Backs Browse: every live category, 100 at a time (issue #41: it used to stop at
+ * the top 20). Signed in, scrolling to the end fetches the next page; signed out,
+ * Twitch hands out one page only, so the 100 most watched categories are it.
+ *
+ * Twitch only ranks categories by viewers, so the other orders (fewest viewers,
+ * A to Z) are sorted here, and because their first entries can be on the last
+ * page, picking one loads the rest of the list first. The choice is remembered.
+ */
+class BrowseViewModel(
+    private val channelRepository: ChannelRepository,
+    private val settingsStore: DesktopSettingsStore? = null,
+) : DesktopViewModel() {
+    private val _state = MutableStateFlow(BrowseUiState(sort = settingsStore?.settings?.value?.browseSort ?: CategorySort.DEFAULT))
     val state: StateFlow<BrowseUiState> = _state.asStateFlow()
+
+    // Categories in the order Twitch sent them (most watched first), across pages.
+    private var ranked: List<GameInfo> = emptyList()
+    private var cursor: String? = null
+    private var loadJob: Job? = null
 
     init { load() }
 
-    /** (Re)load the category grid. Public so the screen's Retry button can call it. */
+    /** (Re)load the category grid from the first page. Public so the screen's Retry button can call it. */
     fun load() {
-        scope.launch {
-            _state.update { it.copy(isLoading = true, error = null) }
-            runCatching { channelRepository.topGames() }
-                .onSuccess { games -> _state.update { it.copy(games = games, isLoading = false, error = null) } }
-                .onFailure { e -> _state.update { it.copy(isLoading = false, error = StreamFailures.classify(e).sentence("Couldn't load categories")) } }
+        loadJob?.cancel()
+        loadJob = scope.launch {
+            _state.update { it.copy(isLoading = true, isLoadingMore = false, error = null) }
+            runCatching { channelRepository.topGamesPage() }
+                .onSuccess { page ->
+                    ranked = page.games
+                    cursor = page.cursor
+                    publish(isLoading = false)
+                    if (_state.value.sort.needsEveryPage) loadRest()
+                }
+                .onFailure { e ->
+                    if (e is CancellationException) throw e
+                    _state.update { it.copy(isLoading = false, error = StreamFailures.classify(e).sentence("Couldn't load categories")) }
+                }
         }
+    }
+
+    /**
+     * Appends the next page, if there is one and nothing is loading. A failed page
+     * keeps what is already shown and stops asking; the screen's Retry starts over.
+     */
+    fun loadMore() {
+        if (cursor == null || loadJob?.isActive == true) return
+        loadJob = scope.launch { nextPage() }
+    }
+
+    /** Shows the categories in [sort] order from now on, and remembers the choice. */
+    fun setSort(sort: CategorySort) {
+        if (sort == _state.value.sort) return
+        settingsStore?.updateSettings { it.copy(browseSort = sort) }
+        _state.update { it.copy(sort = sort, games = sortedCategories(ranked, sort)) }
+        if (sort.needsEveryPage && cursor != null) {
+            // A page already on its way finishes first, then the rest follow it.
+            val inFlight = loadJob?.takeIf { it.isActive }
+            loadJob = scope.launch {
+                inFlight?.join()
+                loadRest()
+            }
+        }
+    }
+
+    // Every remaining page, up to MAX_PAGES in all, for the orders that need the whole list.
+    // The grid is sorted once at the end, so tiles do not reshuffle under the viewer page by page.
+    private suspend fun loadRest() {
+        var pages = (ranked.size + PAGE_SIZE - 1) / PAGE_SIZE
+        _state.update { it.copy(isLoadingMore = true) }
+        while (cursor != null && pages < MAX_PAGES) {
+            if (!nextPage(show = false)) break
+            pages++
+        }
+        publish(isLoading = false)
+    }
+
+    // One more page onto [ranked]; false when it failed (and paging stops). [show] puts it
+    // on screen at once; loadRest shows everything together instead.
+    private suspend fun nextPage(show: Boolean = true): Boolean {
+        val next = cursor ?: return false
+        _state.update { it.copy(isLoadingMore = true) }
+        return runCatching { channelRepository.topGamesPage(after = next) }
+            .onSuccess { page ->
+                cursor = page.cursor
+                // Pages can overlap as viewer counts move between requests.
+                val seen = ranked.mapTo(HashSet()) { it.id }
+                ranked = ranked + page.games.filter { seen.add(it.id) }
+                if (show) publish(isLoading = false)
+            }
+            .onFailure { e ->
+                if (e is CancellationException) throw e
+                cursor = null
+                _state.update { it.copy(isLoadingMore = false, canLoadMore = false) }
+            }
+            .isSuccess
+    }
+
+    private fun publish(isLoading: Boolean) {
+        _state.update {
+            it.copy(
+                games = sortedCategories(ranked, it.sort),
+                isLoading = isLoading,
+                isLoadingMore = false,
+                error = null,
+                canLoadMore = cursor != null,
+            )
+        }
+    }
+
+    private companion object {
+        const val PAGE_SIZE = 100
+
+        /** 4,000 categories: far past the last one with anyone watching. */
+        const val MAX_PAGES = 40
     }
 }
 
@@ -319,6 +432,8 @@ class CategoryViewModel(
 data class SearchUiState(
     val query: String = "",
     val results: List<ChannelSearchResult> = emptyList(),
+    /** Categories matching the query, shown above the channels (issue #41). */
+    val categories: List<GameInfo> = emptyList(),
     val isSearching: Boolean = false,
     /** Non-null when the search request failed — lets the screen say "search failed" with
      *  a Retry rather than showing the same blank as "no matches". */
@@ -339,17 +454,30 @@ class SearchViewModel(private val channelRepository: ChannelRepository) : Deskto
         _state.update { it.copy(query = query) }
         searchJob?.cancel()
         if (query.length < 2) {
-            _state.update { it.copy(results = emptyList(), isSearching = false, error = null) }
+            _state.update { it.copy(results = emptyList(), categories = emptyList(), isSearching = false, error = null) }
             return
         }
         searchJob = scope.launch {
             _state.update { it.copy(isSearching = true, error = null) }
             delay(300) // debounce: wait for typing to settle before hitting the network
+            // Channels and categories are asked for side by side. Categories are a bonus:
+            // if only they fail, the channels still show, and only a channel failure is
+            // reported as a failed search.
+            val categories = async { runCatching { channelRepository.searchCategories(query) }.getOrDefault(emptyList()) }
             runCatching { channelRepository.search(query) }
-                .onSuccess { results -> _state.update { it.copy(results = results, isSearching = false, error = null) } }
+                .onSuccess { results ->
+                    val games = categories.await()
+                    _state.update { it.copy(results = results, categories = games, isSearching = false, error = null) }
+                }
                 .onFailure { e ->
+                    categories.cancel()
                     _state.update {
-                        it.copy(results = emptyList(), isSearching = false, error = StreamFailures.classify(e).sentence("Search failed"))
+                        it.copy(
+                            results = emptyList(),
+                            categories = emptyList(),
+                            isSearching = false,
+                            error = StreamFailures.classify(e).sentence("Search failed"),
+                        )
                     }
                 }
         }
@@ -731,6 +859,22 @@ class StreamViewModel(
         vlcPlayer.applyRtxVideo()
     }
 
+    /**
+     * "Even out loud and quiet audio" from the player controls: saved (the same setting
+     * as in Settings), then applied to this stream. mpv changes its filter in place; VLC
+     * starts the stream again on an instance with (or without) it, and every other VLC
+     * player follows the saved setting too (main() watches it).
+     */
+    fun setAudioNormalizer(on: Boolean) {
+        settingsStore.updateSettings { it.copy(audioNormalizer = on) }
+        vlcPlayer.setAudioLevelling(settingsStore.settings.value.audioLevellingInUse())
+    }
+
+    /** The normalizer's strength from the player menu: saved, then applied (when it is on). */
+    fun setAudioLevelling(level: AudioLevelling) {
+        settingsStore.updateSettings { it.copy(audioLevelling = level) }
+        vlcPlayer.setAudioLevelling(settingsStore.settings.value.audioLevellingInUse())
+    }
     /** Apply a scaler to the running player WITHOUT persisting — drives the
      *  hold-to-compare A/B (preview Off while held, restore the saved mode on release). */
     fun previewUpscaling(mode: UpscalingMode) = vlcPlayer.setUpscaling(mode)
@@ -907,8 +1051,9 @@ data class SettingsUiState(
 
 class SettingsViewModel(
     private val settingsStore: DesktopSettingsStore,
-    // Tells a running player about the audio normalizer switch (mpv applies it live).
-    private val onAudioNormalizerChange: (Boolean) -> Unit = {},
+    // Tells a running player the audio levelling it should run with now (a strength, or
+    // null for off). Both engines apply it live.
+    private val onAudioLevellingChange: (AudioLevelling?) -> Unit = {},
     // Tells a running main player the RTX Video settings changed.
     private val onRtxVideoChange: () -> Unit = {},
 ) : DesktopViewModel() {
@@ -953,7 +1098,13 @@ class SettingsViewModel(
 
     fun setAudioNormalizer(enabled: Boolean) {
         settingsStore.updateSettings { it.copy(audioNormalizer = enabled) }
-        onAudioNormalizerChange(enabled)
+        onAudioLevellingChange(settingsStore.settings.value.audioLevellingInUse())
+    }
+
+    /** The normalizer's strength. Saved even while it is off, for when it is turned on. */
+    fun setAudioLevelling(level: AudioLevelling) {
+        settingsStore.updateSettings { it.copy(audioLevelling = level) }
+        onAudioLevellingChange(settingsStore.settings.value.audioLevellingInUse())
     }
 
     fun setRtxSuperResolution(on: Boolean) {

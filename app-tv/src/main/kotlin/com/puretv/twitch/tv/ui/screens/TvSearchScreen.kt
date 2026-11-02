@@ -10,6 +10,7 @@ import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -17,7 +18,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -45,6 +48,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.puretv.twitch.core.api.ChannelSearchResult
+import com.puretv.twitch.core.model.GameInfo
 import com.puretv.twitch.tv.ui.SearchViewModel
 import com.puretv.twitch.tv.ui.components.ExpressiveIcons
 import com.puretv.twitch.tv.ui.components.TvExpressiveIconButton
@@ -67,17 +71,20 @@ import androidx.tv.material3.Text
  * it clear it is the one listening. The IME also exposes the remote's
  * voice/assist input. None of that plumbing changed here, only the shell
  * around it.
+ *
+ * Results are one D-pad-scrolled list under the field: a "Categories" row of
+ * box-art tiles when any category matches (issue #41), then the channels.
  */
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun TvSearchScreen(
     onOpenChannel: (String) -> Unit,
+    onOpenCategory: (gameId: String, name: String) -> Unit,
     onBack: () -> Unit,
     viewModel: SearchViewModel = koinViewModel(),
 ) {
     val state by viewModel.state.collectAsState()
     val c = PureTvTvTheme.colors
-    val shapes = PureTvTvTheme.shapes
     val focusRequester = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
     var searchFocused by remember { mutableStateOf(false) }
@@ -114,21 +121,80 @@ fun TvSearchScreen(
             Text(text = "Searching…", style = MaterialTheme.typography.bodyLarge, color = c.onSurfaceVariant)
         }
 
-        if (state.results.isNotEmpty()) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(shapes.cardShape)
-                    .background(c.surfaceLow),
-            ) {
-                LazyColumn(modifier = Modifier.fillMaxWidth()) {
-                    items(state.results, key = { it.broadcaster_login }) { result ->
-                        TvSearchResultRow(result = result, onClick = { onOpenChannel(result.broadcaster_login) })
+        if (state.results.isNotEmpty() || state.categories.isNotEmpty()) {
+            TvSearchResults(
+                results = state.results,
+                categories = state.categories,
+                onOpenChannel = onOpenChannel,
+                onOpenCategory = onOpenCategory,
+                modifier = Modifier.weight(1f),
+            )
+        }
+    }
+}
+
+/**
+ * Categories (a row of tiles) over channels, in one [LazyColumn] so moving focus
+ * down from the tiles scrolls the channels into view rather than leaving them
+ * below the screen edge. The channel rows read as one card on surfaceLow: only
+ * the first and last are rounded, on their outer corners.
+ */
+@Composable
+private fun TvSearchResults(
+    results: List<ChannelSearchResult>,
+    categories: List<GameInfo>,
+    onOpenChannel: (String) -> Unit,
+    onOpenCategory: (gameId: String, name: String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val c = PureTvTvTheme.colors
+    val corner = PureTvTvTheme.shapes.card
+    LazyColumn(
+        modifier = modifier.fillMaxWidth(),
+        // Room for a focused tile's grow, which the list would otherwise clip.
+        contentPadding = PaddingValues(vertical = 12.dp),
+    ) {
+        if (categories.isNotEmpty()) {
+            // Section keys carry a colon, which no Twitch login can, so they never
+            // collide with a channel row's key.
+            item(key = "section:categories") {
+                Column(modifier = Modifier.padding(bottom = 28.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    TvSearchSectionLabel("Categories")
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(24.dp),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                    ) {
+                        items(categories, key = { it.id }) { game ->
+                            GameTile(game = game, onClick = { onOpenCategory(game.id, game.name) }, width = 150.dp)
+                        }
                     }
                 }
             }
+            if (results.isNotEmpty()) {
+                item(key = "section:channels") {
+                    TvSearchSectionLabel("Channels", modifier = Modifier.padding(bottom = 16.dp))
+                }
+            }
+        }
+        itemsIndexed(results, key = { _, result -> result.broadcaster_login }) { index, result ->
+            val shape = RoundedCornerShape(
+                topStart = if (index == 0) corner else 0.dp,
+                topEnd = if (index == 0) corner else 0.dp,
+                bottomStart = if (index == results.lastIndex) corner else 0.dp,
+                bottomEnd = if (index == results.lastIndex) corner else 0.dp,
+            )
+            TvSearchResultRow(
+                result = result,
+                onClick = { onOpenChannel(result.broadcaster_login) },
+                modifier = Modifier.clip(shape).background(c.surfaceLow),
+            )
         }
     }
+}
+
+@Composable
+private fun TvSearchSectionLabel(text: String, modifier: Modifier = Modifier) {
+    Text(text = text, style = MaterialTheme.typography.titleLarge, color = PureTvTvTheme.colors.onSurface, modifier = modifier)
 }
 
 /**
@@ -174,7 +240,7 @@ private fun TvSearchField(
         Box(modifier = Modifier.fillMaxWidth()) {
             if (query.isEmpty()) {
                 Text(
-                    text = "Search channels",
+                    text = "Search channels and categories",
                     style = MaterialTheme.typography.bodyLarge,
                     color = c.onSurfaceVariant,
                 )
@@ -193,14 +259,14 @@ private fun TvSearchField(
 
 /** One search hit: a round avatar, name + status, and a LIVE pill when live. */
 @Composable
-private fun TvSearchResultRow(result: ChannelSearchResult, onClick: () -> Unit) {
+private fun TvSearchResultRow(result: ChannelSearchResult, onClick: () -> Unit, modifier: Modifier = Modifier) {
     val c = PureTvTvTheme.colors
     val shapes = PureTvTvTheme.shapes
     val interaction = remember { MutableInteractionSource() }
     val focused by interaction.collectIsFocusedAsState()
 
     Row(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .tvFocusClickable(
                 interaction = interaction,
