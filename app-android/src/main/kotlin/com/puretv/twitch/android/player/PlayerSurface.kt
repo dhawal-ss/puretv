@@ -11,7 +11,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -97,19 +100,36 @@ fun PlayerSurface(
         backgroundPlayback.startService()
     }
 
+    val sharedPlayer = twitchPlayer.exoPlayer
+
+    // Issue #42: keep the display awake while the video is meant to be playing,
+    // as every video app does, so a short system screen timeout does not blank a
+    // stream nobody is touching. Held through buffering too (a stall would
+    // otherwise let the screen go dark mid-stream); released on pause, error or
+    // end so the normal timeout applies again. It is set on the PlayerView, so
+    // Android drops it on its own once the video leaves the screen.
+    var keepScreenOn by remember { mutableStateOf(shouldKeepScreenOn(sharedPlayer)) }
+
     // Playback can restart without a lifecycle event: Stop in the notification
     // shade tears the session down without pausing the Activity, then a tap on
     // play would run with no notification behind it and keep going unseen once
     // the viewer leaves. Re-raise the session whenever playback actually starts;
-    // startService is idempotent and gated on the setting.
-    val sharedPlayer = twitchPlayer.exoPlayer
+    // startService is idempotent and gated on the setting. The same listener
+    // keeps [keepScreenOn] in step with the player.
     DisposableEffect(sharedPlayer) {
         val listener = object : Player.Listener {
             override fun onIsPlayingChanged(isPlaying: Boolean) {
                 if (isPlaying) backgroundPlayback.startService()
             }
+
+            override fun onEvents(player: Player, events: Player.Events) {
+                if (events.containsAny(Player.EVENT_PLAY_WHEN_READY_CHANGED, Player.EVENT_PLAYBACK_STATE_CHANGED)) {
+                    keepScreenOn = shouldKeepScreenOn(player)
+                }
+            }
         }
         sharedPlayer.addListener(listener)
+        keepScreenOn = shouldKeepScreenOn(sharedPlayer)
         onDispose { sharedPlayer.removeListener(listener) }
     }
 
@@ -183,9 +203,21 @@ fun PlayerSurface(
         },
         update = { view ->
             view.player = twitchPlayer.exoPlayer
+            view.keepScreenOn = keepScreenOn
             // Hide the controller in PiP (the tiny window should be video only).
             view.useController = useController
             view.resizeMode = resizeMode
         },
     )
 }
+
+private fun shouldKeepScreenOn(player: Player): Boolean =
+    shouldKeepScreenOn(player.playWhenReady, player.playbackState)
+
+/**
+ * Whether the screen should stay on: the viewer has asked to play and the player
+ * is either playing or buffering toward it. Paused, failed (IDLE) and finished
+ * (ENDED) all let the device's own screen timeout apply.
+ */
+internal fun shouldKeepScreenOn(playWhenReady: Boolean, playbackState: Int): Boolean =
+    playWhenReady && (playbackState == Player.STATE_READY || playbackState == Player.STATE_BUFFERING)
