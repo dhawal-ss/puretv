@@ -183,10 +183,17 @@ fun ChatPanel(
             }
         }
     }
+    // Only a drag back toward older lines pauses it. While a finger is down,
+    // isScrollInProgress is true even for a downward nudge at the bottom, and our
+    // own snap can't run under it, so the rows arriving meanwhile would make it
+    // look like the viewer had scrolled away.
     LaunchedEffect(listState) {
-        snapshotFlow { Triple(atBottom, listState.isScrollInProgress, autoScrolling) }.collect { (bottom, scrolling, ours) ->
+        snapshotFlow {
+            val userScrollingBack = listState.isScrollInProgress && !autoScrolling && listState.lastScrolledBackward
+            atBottom to userScrollingBack
+        }.collect { (bottom, scrollingBack) ->
             following = when {
-                scrolling && !ours && !bottom -> false
+                scrollingBack && !bottom -> false
                 bottom -> true
                 else -> following
             }

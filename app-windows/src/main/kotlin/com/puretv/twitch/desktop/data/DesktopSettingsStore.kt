@@ -121,6 +121,18 @@ class DesktopSettingsStore(
         SecretKeySpec(digest, "AES")
     }
 
+    /**
+     * The key from an existing seed file, without creating one; null when there is
+     * none. Declared before `init` for the same reason as [machineKey].
+     */
+    private val seedFileKey: SecretKeySpec? by lazy {
+        runCatching {
+            keyFile.takeIf { it.exists() }?.readText()?.trim()?.takeIf { it.isNotEmpty() }?.let { seed ->
+                SecretKeySpec(MessageDigest.getInstance("SHA-256").digest(seed.toByteArray(Charsets.UTF_8)), "AES")
+            }
+        }.getOrNull()
+    }
+
     init {
         appDataDir.mkdirs()
         runMigrations()
@@ -415,14 +427,28 @@ class DesktopSettingsStore(
         return iv + ciphertext
     }
 
+    /**
+     * Decrypts with [machineKey], then with the seed file's key when there is one.
+     * Windows once read MachineGuid by launching `reg.exe`; where that was blocked
+     * (policy, AppLocker, antivirus) the tokens were sealed with the seed file
+     * instead, and the registry API now reads the real MachineGuid on those same
+     * machines. Trying both keeps everyone signed in whichever key sealed them.
+     */
     private fun decrypt(blob: ByteArray): ByteArray {
         require(blob.size > 12) { "Encrypted token blob too short" }
-        val key = machineKey
         val iv = blob.copyOfRange(0, 12)
         val ciphertext = blob.copyOfRange(12, blob.size)
-        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-        cipher.init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(128, iv))
-        return cipher.doFinal(ciphertext)
+        var failure: Exception? = null
+        for (key in listOfNotNull(machineKey, seedFileKey?.takeIf { it != machineKey })) {
+            try {
+                val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+                cipher.init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(128, iv))
+                return cipher.doFinal(ciphertext)
+            } catch (e: Exception) {
+                failure = e
+            }
+        }
+        throw failure ?: IllegalStateException("No key to decrypt with")
     }
 
     /**

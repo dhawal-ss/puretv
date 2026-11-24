@@ -206,6 +206,10 @@ fun TvStreamScreen(
     // way back ask Twitch for a fresh session (the old signed URL may have expired)
     // so it starts again at the live edge.
     val lifecycleOwner = LocalLifecycleOwner.current
+    // stop() drops the player's audio-only mode (a new stream must not open as
+    // audio only), and the quality effect won't run again for an unchanged
+    // quality, so the picked quality is put back before the stream restarts.
+    val pickedQuality by rememberUpdatedState(state.quality)
     DisposableEffect(lifecycleOwner) {
         var stoppedInBackground = false
         val observer = LifecycleEventObserver { _, event ->
@@ -216,6 +220,7 @@ fun TvStreamScreen(
                 }
                 Lifecycle.Event.ON_START -> if (stoppedInBackground) {
                     stoppedInBackground = false
+                    pickedQuality?.let { runCatching { tvPlayer.setQuality(it) } }
                     viewModel.retry()
                 }
                 else -> Unit

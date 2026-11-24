@@ -194,8 +194,14 @@ class HomeViewModel(
         // Login flag, recomputed whenever the session changes. Signed out, Home
         // still loads: core reads the public directory through anonymous GQL.
         viewModelScope.launch {
+            // A sign-in (or a switch to another account) loads that account's Home
+            // right away instead of waiting for the screen's next refresh.
+            var seenUserId: String? = null
             settings.flow.collect { prefs ->
                 val loggedIn = prefs.accessToken.isNotBlank()
+                val userId = prefs.userId
+                if (seenUserId != null && userId.isNotBlank() && userId != seenUserId) refresh()
+                seenUserId = userId
                 _state.update {
                     it.copy(
                         isLoggedIn = loggedIn,
@@ -350,8 +356,15 @@ class TvFollowingViewModel(
 
     init {
         viewModelScope.launch {
+            // The account the list was last loaded for. A sign-in (or a switch to
+            // another account) loads that account's follows right away: the screen's
+            // own refresh is skipped when one ran moments ago, so it can't be relied on.
+            var seenUserId: String? = null
             settings.flow.collect { prefs ->
                 val loggedIn = prefs.accessToken.isNotBlank()
+                val userId = prefs.userId
+                if (seenUserId != null && userId.isNotBlank() && userId != seenUserId) refresh()
+                seenUserId = userId
                 if (!loggedIn) {
                     // A load already in flight belongs to the account that just left; its
                     // answer must not land after this wipe (see loadOnce).
