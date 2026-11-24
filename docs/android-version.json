@@ -1,6 +1,6 @@
 {
-  "versionCode": 11,
-  "versionName": "1.4.0",
+  "versionCode": 12,
+  "versionName": "1.4.1",
   "apkUrl": "https://github.com/dhawal-ss/puretv/releases/download/android-latest/PureTV-for-Twitch-Android.apk",
-  "notes": "Search finds categories as well as channels, and Browse shows every category instead of the top 20, sorted by most viewers, fewest viewers or A to Z. Even out loud and quiet audio now has Light, Balanced and Strong levels and its own button in the player controls. In chat, type a colon and two letters (like :kek) to see only emotes."
+  "notes": "The screen now stays on while you watch, Home loads faster, and chat no longer pulls you back down while you scroll up to read. Lighter on battery and memory, and big channels open without a stutter."
 }

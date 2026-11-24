@@ -11,6 +11,73 @@ release notes automatically.
 
 ---
 
+## 1.17.1 - 2026-11-24
+
+A speed-up release: streams start sooner, PureTV opens faster, and chat stays smooth while you type in a busy channel.
+
+### Improved
+- **Streams start about a second sooner.** The player was waiting for two
+  seconds of video before showing anything. It now waits one, so opening a
+  stream, switching channels, changing quality and recovering from a hiccup
+  are all quicker.
+- **PureTV opens faster,** especially on Windows. Work that used to happen
+  before the window appeared now happens after it, in the background.
+- **Typing in a busy chat stays smooth.** Emote and name suggestions were
+  being worked out again for every new chat message while you typed. Now they
+  only update when what you've typed changes.
+- **Channel up/down responds sooner.** A single press now changes channel
+  after a shorter pause (holding the key still skips through quickly).
+- **Big channels open without a stutter.** Loading a channel's emotes no
+  longer briefly freezes the window, and PureTV can load more things from
+  Twitch at the same time.
+
+## Android 1.4.1 - 2026-11-24
+
+The screen stays on while you watch, Home loads faster, and you can scroll back through chat in peace.
+
+### Fixed
+- **The screen stays on while you watch.** Your phone or tablet's screen-off
+  timer used to turn the screen off in the middle of a stream unless you kept
+  touching it. It now stays on while a stream or past broadcast is playing, and
+  goes back to normal when you pause or leave. Thanks to allansramblings for
+  reporting it ([#42](https://github.com/dhawal-ss/puretv/issues/42)).
+- **Scroll back through chat without being pulled down.** Chat used to jump
+  back to the newest message several times a second while you were reading
+  older ones. It now waits while you scroll up and shows a **New messages
+  below** button to jump back down.
+
+### Improved
+- **Home loads faster.** Live follows, categories and top streams now load at
+  the same time instead of one after another, and Home no longer downloads
+  your whole follow list on every launch just to throw it away.
+- **Lighter on battery.** The LIVE badges on stream cards no longer pulse, so
+  lists stop redrawing when nothing is moving. The big card at the top of Home
+  and a channel's page still pulse.
+- **Smoother over long sessions.** Rotating the phone or opening lots of
+  streams no longer slowly builds up memory.
+- **Big channels open without a stutter.** Loading a channel's emotes no
+  longer briefly freezes the app.
+
+## Android TV 1.4.1 - 2026-11-24
+
+Pressing Home stops the stream, menus feel quicker, and channel flipping responds sooner.
+
+### Fixed
+- **Pressing Home stops the stream.** Leaving PureTV with the Home button used
+  to leave the stream playing in the background, using data and slowing the
+  TV down. It now stops, and picks up live again when you come back.
+
+### Improved
+- **Channel up/down responds sooner.** A single press changes channel after a
+  shorter pause.
+- **Home and Following open faster.** They no longer load everything twice
+  when they open, and going back to Home right after a stream doesn't reload
+  it all again.
+- **Smoother scrolling with the remote.** The LIVE badges on cards no longer
+  pulse, which kept the TV redrawing the whole screen even when nothing moved.
+- **Smoother over long sessions.** Opening lots of streams no longer slowly
+  builds up memory, and big channels open without a stutter.
+
 ## 1.17.0 - 2026-11-02
 
 Minimizing keeps your stream playing again, Search finds categories, Browse shows every category your way, and audio levelling has three strengths and is one click away while you watch.
