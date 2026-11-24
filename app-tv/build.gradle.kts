@@ -41,8 +41,8 @@ android {
         // versionCode is the monotonic value the in-app updater compares against
         // the published tv-version.json (see docs/tv-version.json). Bump it on
         // every TV release so the updater offers the new APK.
-        versionCode = 11
-        versionName = "1.4.1"
+        versionCode = 12
+        versionName = "1.5.0"
         ndk { abiFilters += listOf("armeabi-v7a", "arm64-v8a") }
     }
 
@@ -194,11 +194,17 @@ fun signingCertSha256(keystore: File, password: String, alias: String): String? 
     MessageDigest.getInstance("SHA-256").digest(cert.encoded).joinToString("") { "%02x".format(it) }
 }.getOrNull()
 
-// The certificate every published TV release was signed with (CN=PureTV for
-// Twitch, the key in keystore.properties). Android installs an update only when
-// the certificates match, so the release build checks the key before packaging.
-// If this fails, restore the backed-up keystore; never edit the value to pass.
-val publishedTvSigningSha256 = "3d19d7907a88ea3710f8b0e9a2cd5fb740a6017494bd53068af219d287f1f94c"
+// The certificate TV releases are signed with: the keyAlias entry in the
+// keystore named by keystore.properties (CN=PureTV for Twitch). Android installs
+// an update only when the certificates match, so the release build checks the
+// key before packaging.
+//
+// This value changed once, for 1.5.0. The key that signed releases up to 1.4.0
+// (3d19d790...) was destroyed with the PC it lived on, and no backup existed.
+// Signing-key rotation needs the old private key, so there was no way to keep
+// continuity; 1.5.0 therefore requires a reinstall. If this check fails, restore
+// the backed-up keystore; never edit the value to pass.
+val publishedTvSigningSha256 = "d1bf7c1925e43b871e533b9757d4dea508f9ef8beea474fe48d9b8e8fbb3e5bc"
 
 val verifyTvReleaseSigningKey by tasks.registering {
     description = "Fails the TV release build when the release key is missing or is not the published one."

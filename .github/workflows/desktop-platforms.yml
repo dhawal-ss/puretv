@@ -59,7 +59,8 @@ jobs:
 
   macos:
     name: macOS (arm64 .dmg + launch)
-    runs-on: macos-14
+    # macos-14 was retired on 2026-11-02; macos-15 is the pinned arm64 image.
+    runs-on: macos-15
     env:
       # Empty outside a release: the build then carries the placeholder, which is fine for
       # a launch check that never signs in.

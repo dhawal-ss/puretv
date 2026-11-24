@@ -11,7 +11,7 @@ release notes automatically.
 
 ---
 
-## 1.17.1 - 2026-11-24
+## 1.17.2 - 2026-11-24
 
 A speed-up release: streams start sooner, PureTV opens faster, and chat stays smooth while you type in a busy channel.
 
@@ -31,7 +31,17 @@ A speed-up release: streams start sooner, PureTV opens faster, and chat stays sm
   longer briefly freezes the window, and PureTV can load more things from
   Twitch at the same time.
 
-## Android 1.4.1 - 2026-11-24
+## Android 1.5.0 - 2026-11-24
+
+**Install this from GitHub, not from the update prompt in the app.** PureTV is
+signed with a new key from this release on, so it will not install over the copy
+you have now, and the uninstall it takes is not a clean swap: it clears PureTV's
+settings and watch history, and nothing can restore them. Write down anything
+you have customised first, such as a custom proxy URL or your notification
+channels. Then uninstall PureTV, install the new APK, and sign in to Twitch
+again. It is a one-time thing: updates install normally again after this. The old
+signing key was lost when the PC it lived on had to be wiped; your Twitch account
+itself is not affected.
 
 The screen stays on while you watch, Home loads faster, and you can scroll back through chat in peace.
 
@@ -58,7 +68,17 @@ The screen stays on while you watch, Home loads faster, and you can scroll back 
 - **Big channels open without a stutter.** Loading a channel's emotes no
   longer briefly freezes the app.
 
-## Android TV 1.4.1 - 2026-11-24
+## Android TV 1.5.0 - 2026-11-24
+
+**Install this from GitHub, not from the update prompt in the app.** PureTV is
+signed with a new key from this release on, so it will not install over the copy
+you have now, and the uninstall it takes is not a clean swap: it clears PureTV's
+settings and watch history, and nothing can restore them. Write down anything
+you have customised first, such as a custom proxy URL or your notification
+channels. Then uninstall PureTV, sideload the new APK, and sign in to Twitch
+again. It is a one-time thing: updates install normally again after this. The old
+signing key was lost when the PC it lived on had to be wiped; your Twitch account
+itself is not affected.
 
 Pressing Home stops the stream, menus feel quicker, and channel flipping responds sooner.
 

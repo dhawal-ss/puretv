@@ -1,6 +1,6 @@
 {
-  "versionCode": 12,
-  "versionName": "1.4.1",
+  "versionCode": 13,
+  "versionName": "1.5.0",
   "apkUrl": "https://github.com/dhawal-ss/puretv/releases/download/android-latest/PureTV-for-Twitch-Android.apk",
-  "notes": "The screen now stays on while you watch, Home loads faster, and chat no longer pulls you back down while you scroll up to read. Lighter on battery and memory, and big channels open without a stutter."
+  "notes": "Install 1.5.0 from GitHub, not with this button: PureTV has a new signing certificate, so this update cannot install over the copy you have now. Before you uninstall, write down anything you have customised, such as a custom proxy URL or your notification channels, because uninstalling clears PureTV's settings and watch history and they cannot be restored. Then uninstall PureTV, install the new APK from the GitHub releases page, and sign in to Twitch again. Updates work normally again after that.\n\nNew in 1.5.0: the screen stays on while you watch, chat no longer pulls you back down while you scroll up to read, Home loads faster, and big channels open without a stutter."
 }

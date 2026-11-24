@@ -1,6 +1,6 @@
 {
-  "versionCode": 11,
-  "versionName": "1.4.1",
+  "versionCode": 12,
+  "versionName": "1.5.0",
   "apkUrl": "https://github.com/dhawal-ss/puretv/releases/download/tv-latest/PureTV-FireTV-AndroidTV.apk",
-  "notes": "Pressing Home now stops the stream instead of leaving it playing in the background. Channel up/down responds sooner, Home and Following open faster, and scrolling with the remote is smoother."
+  "notes": "Install 1.5.0 from GitHub, not with this button: PureTV has a new signing certificate, so this update cannot install over the copy you have now. Before you uninstall, write down anything you have customised, such as a custom proxy URL or your notification channels, because uninstalling clears PureTV's settings and watch history and they cannot be restored. Then uninstall PureTV, sideload the new APK from the GitHub releases page, and sign in to Twitch again. Updates work normally again after that.\n\nNew in 1.5.0: pressing Home stops the stream instead of leaving it playing, channel up/down responds sooner, and Home and Following open faster."
 }
