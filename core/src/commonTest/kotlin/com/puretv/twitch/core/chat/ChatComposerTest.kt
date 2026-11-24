@@ -303,4 +303,17 @@ class ChatComposerTest {
     @Test fun nothingToCompleteIsNull() {
         assertEquals(null, tabComplete("hello", 5, emptyList(), previous = null))
     }
+
+    @Test fun onlyColonSearchesSkipChatters() {
+        assertTrue(suggestionsUseChatters("@bo"))
+        assertTrue(suggestionsUseChatters("bob"))
+        assertTrue(!suggestionsUseChatters(":kek"))
+        assertTrue(!suggestionsUseChatters(""))
+    }
+
+    @Test fun matchingIgnoresCase() {
+        val emotes = listOf("KEKW", "kekLaugh", "OMEGAKEK", "Pog").map { PickableEmote(code = it, imageUrl = "", animated = false, source = EmoteSource.SEVENTV) }
+        assertEquals(listOf("KEKW", "kekLaugh"), matchEmotes("KeK", emotes).map { it.code })
+        assertEquals(listOf("KEKW", "kekLaugh", "OMEGAKEK"), matchEmotesByColon("KEK", emotes).map { it.code })
+    }
 }

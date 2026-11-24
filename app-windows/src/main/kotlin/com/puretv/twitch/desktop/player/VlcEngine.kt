@@ -131,16 +131,18 @@ class VlcEngine(
 
     companion object {
         // `--no-video-title-show`   suppress VLC's on-video filename overlay.
-        // `--network-caching=2000`  2s network buffer; smooths over Twitch's variable
-        //                           segment delivery without adding noticeable latency.
-        // `--live-caching=1000`     separate, shorter buffer specifically for live sources.
-        // `--sout-mux-caching=500`  output muxer cache; keeps A/V sync tight.
+        // `--network-caching=1000`  how much VLC buffers before it starts playing. Every
+        //                           start, channel switch, quality change and retry waits
+        //                           this out; it was 2000, a full second more than VLC's
+        //                           own default, and the HLS demuxer buffers segments on
+        //                           top of it anyway. (`--live-caching` and
+        //                           `--sout-mux-caching` used to sit here too: they only
+        //                           apply to capture devices and stream output, never to
+        //                           playback.)
         private fun buildFactory(extra: List<String>): MediaPlayerFactory? = runCatching {
             MediaPlayerFactory(
                 "--no-video-title-show",
-                "--network-caching=2000",
-                "--live-caching=1000",
-                "--sout-mux-caching=500",
+                "--network-caching=1000",
                 *extra.toTypedArray(),
             )
         }.getOrNull()

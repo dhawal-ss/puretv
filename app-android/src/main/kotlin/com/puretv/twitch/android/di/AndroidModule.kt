@@ -57,7 +57,14 @@ val androidModule = module {
     // android target). Without it the whole networking graph (HttpClient ->
     // TwitchApiClient -> repositories -> ViewModels) cannot construct, and the
     // app crashes on the first screen.
-    single<HttpClientEngine> { OkHttp.create() }
+    // OkHttp queues anything past 5 requests to one host, even over HTTP/2, and
+    // opening a stream alone fires about six to api.twitch.tv (plus the Following
+    // fan-out). Ktor applies this after installing its own dispatcher.
+    single<HttpClientEngine> {
+        OkHttp.create {
+            config { dispatcher(okhttp3.Dispatcher().apply { maxRequestsPerHost = 16; maxRequests = 64 }) }
+        }
+    }
 
     // --- Persistence -----------------------------------------------------
     single {
@@ -130,7 +137,7 @@ val androidModule = module {
     // --- ViewModels --------------------------------------------------------
     // get() resolves each constructor argument by type, so argument order does
     // not matter as long as every type is bound above (the DAOs are).
-    viewModel { HomeViewModel(get(), get(), get(), get(), get(), get(), get(), get()) }
+    viewModel { HomeViewModel(get(), get(), get(), get(), get(), get(), get()) }
     viewModel { FollowingViewModel(get(), get(), get()) }
     viewModel { WelcomeViewModel(get(), get()) }
     viewModel { BrowseViewModel(get(), get()) }

@@ -6,8 +6,11 @@ import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.get
 import com.puretv.twitch.core.storage.TextStore
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.sync.Mutex
@@ -46,6 +49,10 @@ class EmoteRepository(
     private val json: Json = Json { ignoreUnknownKeys = true },
     private val timeSource: TimeSource = TimeSource.Monotonic,
     private val channelRefreshInterval: Duration = 10.minutes,
+    // Provider responses run to hundreds of KB (7TV's channel payload carries
+    // every emote's full metadata). Decoding them on the caller's dispatcher,
+    // usually Main, stalled the UI when a big channel opened.
+    private val workDispatcher: CoroutineDispatcher = Dispatchers.Default,
 ) {
     private var globalsLoadedThisSession = false
     private val channelFetchLock = Mutex()
@@ -72,10 +79,10 @@ class EmoteRepository(
         if (fresh != cached) emit(fresh)
     }
 
-    suspend fun loadGlobalEmotes(): List<ChannelEmote> {
+    suspend fun loadGlobalEmotes(): List<ChannelEmote> = withContext(workDispatcher) {
         val cached = runCatching { cache.globalEmotes() }.getOrNull()
-        if (globalsLoadedThisSession && cached != null) return cached
-        return coroutineScope {
+        if (globalsLoadedThisSession && cached != null) return@withContext cached
+        coroutineScope {
             val bttvResult = async { runCatching { fetchBttvGlobal() } }
             val seventvResult = async { runCatching { fetchSevenTvGlobal() } }
             val bttv = bttvResult.await()
@@ -89,13 +96,13 @@ class EmoteRepository(
         }
     }
 
-    suspend fun loadChannelEmotes(channelId: String, channelLogin: String): List<ChannelEmote> {
+    suspend fun loadChannelEmotes(channelId: String, channelLogin: String): List<ChannelEmote> = withContext(workDispatcher) {
         val cached = runCatching { cache.channelEmotes(channelId) }.getOrNull()
         val recentlyFetched = channelFetchLock.withLock {
             channelFetchedAt[channelId]?.let { it.elapsedNow() < channelRefreshInterval } == true
         }
-        if (recentlyFetched && cached != null) return cached
-        return coroutineScope {
+        if (recentlyFetched && cached != null) return@withContext cached
+        coroutineScope {
             val bttv = async { runCatching { fetchBttvChannel(channelId) } }
             val ffz = async { runCatching { fetchFfzChannel(channelLogin) } }
             val seventv = async { runCatching { fetchSevenTvChannel(channelId) } }
@@ -248,7 +255,10 @@ class InMemoryEmoteCache : EmoteCache {
  * cold start shows emotes before any provider has answered. A corrupt or
  * unreadable entry is just a miss.
  */
-class PersistentEmoteCache(private val store: TextStore) : EmoteCache {
+class PersistentEmoteCache(
+    private val store: TextStore,
+    private val workDispatcher: CoroutineDispatcher = Dispatchers.Default,
+) : EmoteCache {
     private val json = Json { ignoreUnknownKeys = true }
     private val lock = Mutex()
     private val memory = HashMap<String, List<ChannelEmote>>()
@@ -262,14 +272,15 @@ class PersistentEmoteCache(private val store: TextStore) : EmoteCache {
     private suspend fun get(name: String): List<ChannelEmote>? {
         lock.withLock { memory[name] }?.let { return it }
         val text = store.read(name) ?: return null
-        val emotes = runCatching { json.decodeFromString(serializer, text) }.getOrNull() ?: return null
+        // A big channel's list is hundreds of KB of JSON: decode it off the caller's thread.
+        val emotes = withContext(workDispatcher) { runCatching { json.decodeFromString(serializer, text) }.getOrNull() } ?: return null
         lock.withLock { memory[name] = emotes }
         return emotes
     }
 
     private suspend fun put(name: String, emotes: List<ChannelEmote>) {
         lock.withLock { memory[name] = emotes }
-        store.write(name, json.encodeToString(serializer, emotes))
+        store.write(name, withContext(workDispatcher) { json.encodeToString(serializer, emotes) })
     }
 
     private companion object {

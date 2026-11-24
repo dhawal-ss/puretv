@@ -300,7 +300,7 @@ private fun TvSearchResultRow(result: ChannelSearchResult, onClick: () -> Unit, 
             )
         }
 
-        if (result.is_live) TvLivePill()
+        if (result.is_live) TvLivePill(pulse = false)
     }
 }
 

@@ -112,7 +112,6 @@ data class HomeUiState(
 
 class HomeViewModel(
     private val streamRepository: StreamRepository,
-    private val userRepository: UserRepository,
     private val channelRepository: ChannelRepository,
     private val sessionManager: SessionManager,
     private val watchHistoryDao: WatchHistoryDao,
@@ -206,13 +205,21 @@ class HomeViewModel(
             .onSuccess { live -> _state.update { it.copy(followedLive = live.sortedByDescending { s -> s.viewerCount }) } }
     }
 
+    // Home's three sections are independent, so they load side by side: each
+    // shows as soon as its own answer lands instead of queueing behind the one
+    // above it. (The follow list used to load here too, after all three; nothing
+    // on phone reads it, so it was 2+ requests of pure delay on every launch.)
     private suspend fun loadLoggedInHome() {
         _state.update { it.copy(isLoggedIn = true, isLoading = it.topStreams.isEmpty(), error = null) }
-        refreshFollowedLive()
-        val games = runCatching { channelRepository.topGames() }
-            .onSuccess { g -> _state.update { it.copy(games = g) } }
-        val top = runCatching { streamRepository.refreshTopStreams() }
-        runCatching { userRepository.loadFollowsForCurrentUser() }
+        val (games, top) = coroutineScope {
+            launch { refreshFollowedLive() }
+            val games = async {
+                runCatching { channelRepository.topGames() }
+                    .onSuccess { g -> _state.update { it.copy(games = g) } }
+            }
+            val top = async { runCatching { streamRepository.refreshTopStreams() } }
+            games.await() to top.await()
+        }
         val failed = games.isFailure && top.isFailure && _state.value.topStreams.isEmpty()
         _state.update {
             it.copy(
@@ -226,9 +233,11 @@ class HomeViewModel(
         refreshJob?.cancel()
         refreshJob = viewModelScope.launch {
             _state.update { it.copy(isLoading = true, error = null) }
-            val top = runCatching { streamRepository.refreshTopStreams() }
-            runCatching { channelRepository.topGames() }.onSuccess { g -> _state.update { it.copy(games = g) } }
-            refreshFollowedLive()
+            val top = coroutineScope {
+                launch { refreshFollowedLive() }
+                launch { runCatching { channelRepository.topGames() }.onSuccess { g -> _state.update { it.copy(games = g) } } }
+                runCatching { streamRepository.refreshTopStreams() }
+            }
             _state.update {
                 it.copy(
                     isLoading = false,

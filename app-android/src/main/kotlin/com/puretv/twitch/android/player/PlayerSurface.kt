@@ -201,6 +201,12 @@ fun PlayerSurface(
                 }
             }
         },
+        // The player is an app-wide singleton, and a PlayerView only unhooks its
+        // listeners (and its Activity) from the player in setPlayer. Without this
+        // every rotation, PiP switch and stream open left the old view attached.
+        // Safe even if the new view is already attached: the player only clears
+        // a surface that is still its current one.
+        onRelease = { view -> view.player = null },
         update = { view ->
             view.player = twitchPlayer.exoPlayer
             view.keepScreenOn = keepScreenOn

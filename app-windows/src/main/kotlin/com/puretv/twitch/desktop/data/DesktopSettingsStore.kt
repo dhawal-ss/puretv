@@ -2,6 +2,7 @@ package com.puretv.twitch.desktop.data
 
 import com.puretv.twitch.core.audio.AudioLevelling
 import com.puretv.twitch.desktop.platform.AppDirs
+import com.puretv.twitch.desktop.platform.HostOs
 import com.puretv.twitch.core.api.DeviceAuth
 import com.puretv.twitch.core.api.TokenRefreshException
 import com.puretv.twitch.core.di.TokenHolder
@@ -141,7 +142,11 @@ class DesktopSettingsStore(
         if (needsAuthReset(storedSchema, CURRENT_AUTH_SCHEMA, hasSession = tokensFile.exists())) {
             clearTokens()
         }
-        runCatching { AtomicFile.writeTextAtomically(authSchemaFile, CURRENT_AUTH_SCHEMA.toString()) }
+        // Only when it changes: an atomic write fsyncs, and this ran on every launch
+        // before the first window.
+        if (storedSchema != CURRENT_AUTH_SCHEMA) {
+            runCatching { AtomicFile.writeTextAtomically(authSchemaFile, CURRENT_AUTH_SCHEMA.toString()) }
+        }
     }
 
     // ---- Settings (plaintext JSON) -----------------------------------------
@@ -420,7 +425,28 @@ class DesktopSettingsStore(
         return cipher.doFinal(ciphertext)
     }
 
-    private fun readMachineGuid(): String? = runCatching {
+    /**
+     * Windows' MachineGuid, the token key's seed; null elsewhere (the seed file is
+     * used instead). Read through the registry API: launching `reg.exe` for it cost
+     * a process start (plus antivirus) before the first window on every launch.
+     * The 64-bit view, as `reg.exe` from this 64-bit app saw it, so the key and every
+     * saved session stay exactly the same; `reg.exe` stays as a fallback.
+     */
+    private fun readMachineGuid(): String? {
+        if (HostOs.current != HostOs.WINDOWS) return null
+        return readMachineGuidFromRegistry() ?: readMachineGuidWithRegExe()
+    }
+
+    private fun readMachineGuidFromRegistry(): String? = runCatching {
+        com.sun.jna.platform.win32.Advapi32Util.registryGetStringValue(
+            com.sun.jna.platform.win32.WinReg.HKEY_LOCAL_MACHINE,
+            "SOFTWARE\\Microsoft\\Cryptography",
+            "MachineGuid",
+            com.sun.jna.platform.win32.WinNT.KEY_WOW64_64KEY,
+        )?.trim()?.takeIf { it.isNotEmpty() }
+    }.getOrNull()
+
+    private fun readMachineGuidWithRegExe(): String? = runCatching {
         val process = ProcessBuilder(
             "reg", "query", "HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Cryptography", "/v", "MachineGuid"
         ).redirectErrorStream(true).start()

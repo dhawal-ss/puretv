@@ -41,10 +41,13 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -84,6 +87,7 @@ import com.puretv.twitch.core.chat.labels
 import com.puretv.twitch.core.chat.composerSuggestions
 import com.puretv.twitch.core.chat.insertAtCursor
 import com.puretv.twitch.core.chat.recentChatters
+import com.puretv.twitch.core.chat.suggestionsUseChatters
 import com.puretv.twitch.core.chat.wordAtCursor
 import com.puretv.twitch.core.emotes.EmoteSource
 import com.puretv.twitch.core.emotes.PickableEmote
@@ -92,6 +96,7 @@ import com.puretv.twitch.core.model.MessagePart
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlinx.coroutines.launch
 
 /**
  * SECTION 06.4 / 05: live chat list + composer, Material 3 Expressive. Each row
@@ -146,14 +151,48 @@ fun ChatPanel(
     // A quiet chat glides to each new line. A busy one snaps: its batches land
     // about ten times a second, and a scroll animation restarted on every batch
     // never settles, so the list would never stop moving.
+    //
+    // Only while following the live feed, though: a viewer who drags up to read
+    // older lines pauses it (it used to yank them back down ten times a second),
+    // and scrolling back to the bottom, or tapping the pill, resumes it. Same rule
+    // as desktop's ChatMessageList.
     val lastScrollAt = remember { longArrayOf(0L) }
+    var following by remember { mutableStateOf(true) }
+    // True while our own glide runs, so it isn't mistaken for the viewer scrolling.
+    var autoScrolling by remember { mutableStateOf(false) }
+    val atBottom by remember {
+        derivedStateOf {
+            val info = listState.layoutInfo
+            val lastVisible = info.visibleItemsInfo.lastOrNull()?.index ?: -1
+            info.totalItemsCount == 0 || lastVisible >= info.totalItemsCount - 1
+        }
+    }
     LaunchedEffect(messages.lastOrNull()?.id) {
-        if (messages.isEmpty()) return@LaunchedEffect
+        if (messages.isEmpty() || !following) return@LaunchedEffect
         val now = SystemClock.uptimeMillis()
         val busy = now - lastScrollAt[0] < GLIDE_MIN_GAP_MS
         lastScrollAt[0] = now
-        if (busy) listState.scrollToItem(messages.lastIndex) else listState.animateScrollToItem(messages.lastIndex)
+        if (busy) {
+            listState.scrollToItem(messages.lastIndex)
+        } else {
+            autoScrolling = true
+            try {
+                listState.animateScrollToItem(messages.lastIndex)
+            } finally {
+                autoScrolling = false
+            }
+        }
     }
+    LaunchedEffect(listState) {
+        snapshotFlow { Triple(atBottom, listState.isScrollInProgress, autoScrolling) }.collect { (bottom, scrolling, ours) ->
+            following = when {
+                scrolling && !ours && !bottom -> false
+                bottom -> true
+                else -> following
+            }
+        }
+    }
+    val scope = rememberCoroutineScope()
 
     // Trimmed like desktop's submit(): a completion leaves a trailing space.
     val send: () -> Unit = {
@@ -167,11 +206,14 @@ fun ChatPanel(
     // Suggestions for the word the cursor sits in. Skipped for an empty word so a
     // busy chat doesn't rescan its 200 rows on every message while you're idle.
     val (word, _) = wordAtCursor(draft.text, draft.selection.start)
-    val suggestions = remember(word, pickableEmotes, messages, selfLogin) {
+    // Only words that can match a chatter follow the message list (which changes
+    // with every chat batch); a ":" emote search doesn't rerun as chat moves.
+    val chatterSource = if (suggestionsUseChatters(word)) messages else null
+    val suggestions = remember(word, pickableEmotes, chatterSource, selfLogin) {
         if (word.isEmpty()) {
             emptyList()
         } else {
-            composerSuggestions(word, pickableEmotes, recentChatters(messages, selfLogin))
+            composerSuggestions(word, pickableEmotes, chatterSource?.let { recentChatters(it, selfLogin) }.orEmpty())
         }
     }
 
@@ -184,18 +226,37 @@ fun ChatPanel(
         Column(modifier = Modifier.fillMaxSize()) {
             val density = LocalDensity.current
             CompositionLocalProvider(LocalDensity provides Density(density.density * textScale, density.fontScale)) {
-                LazyColumn(
-                    state = listState,
-                    modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = 8.dp),
-                    verticalArrangement = Arrangement.spacedBy(2.dp),
-                ) {
-                    items(messages, key = { it.id }) { message ->
-                        ChatMessageRow(
-                            message = message,
-                            emotes = emotes,
-                            badges = badges,
-                            showBadges = showBadges,
-                            modifier = Modifier.fillMaxWidth(),
+                Box(Modifier.weight(1f).fillMaxWidth()) {
+                    LazyColumn(
+                        state = listState,
+                        modifier = Modifier.fillMaxSize().padding(horizontal = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
+                    ) {
+                        items(messages, key = { it.id }) { message ->
+                            ChatMessageRow(
+                                message = message,
+                                emotes = emotes,
+                                badges = badges,
+                                showBadges = showBadges,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        }
+                    }
+                    if (!following) {
+                        Text(
+                            "New messages below",
+                            color = c.onPrimary,
+                            style = MaterialTheme.typography.labelMedium,
+                            modifier = Modifier
+                                .align(Alignment.BottomCenter)
+                                .padding(bottom = 8.dp)
+                                .clip(CircleShape)
+                                .background(c.primary)
+                                .clickable {
+                                    following = true
+                                    scope.launch { if (messages.isNotEmpty()) listState.scrollToItem(messages.lastIndex) }
+                                }
+                                .padding(horizontal = 14.dp, vertical = 8.dp),
                         )
                     }
                 }

@@ -146,7 +146,7 @@ fun TvHomeScreen(
     LaunchedEffect(Unit) {
         lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
             while (true) {
-                viewModel.refresh()
+                viewModel.refreshIfStale()
                 delay(HOME_REFRESH_INTERVAL_MS)
             }
         }

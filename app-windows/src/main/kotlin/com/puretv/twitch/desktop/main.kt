@@ -140,8 +140,11 @@ fun main(args: Array<String>) {
     // while alerts are on, at least one channel is opted in (signed in or not) and
     // Windows has a tray to show them in; collectLatest cancels the loop the moment
     // any of those stops being true, so with no channels there are no network calls.
-    val monitor = koinApp.koin.get<LiveFollowsMonitor>()
+    // Resolved inside the coroutine, not here: the monitor pulls in the whole HTTP
+    // stack (Ktor, OkHttp, serialization: thousands of classes on a cold JVM), which
+    // used to be built on the main thread before the first window.
     backgroundScope.launch {
+        val monitor = koinApp.koin.get<LiveFollowsMonitor>()
         settingsStore.settings
             .map { (it.liveNotifications && it.notifyChannels.isNotEmpty() && isTraySupported) to it.notifyChannels }
             .distinctUntilChanged()
@@ -164,7 +167,11 @@ fun main(args: Array<String>) {
     }
 
     val playerProvider = koinApp.koin.get<DesktopPlayerProvider>()
-    val localStreamProxy = koinApp.koin.get<LocalStreamProxy>()
+    // Lazy for the same reason as the monitor: the proxy needs the HTTP stack. It is
+    // first touched once the window is up (its start below); every way to a stream
+    // goes through that, so a proxy that was never touched was never started.
+    val localStreamProxyLazy = lazy { koinApp.koin.get<LocalStreamProxy>() }
+    val localStreamProxy by localStreamProxyLazy
     val vlcEngines = koinApp.koin.get<VlcEngines>()
     // "Even out loud and quiet audio" (on, off, or its strength) switches live: VLC
     // takes it only when an instance starts, so every VLC player (the main one,
@@ -193,7 +200,7 @@ fun main(args: Array<String>) {
         runCatching { koinApp.koin.get<ViewerHistoryStore>().flush() }
         // A lost write here would announce the same streams again on the next start.
         runCatching { koinApp.koin.get<LiveNotifyFileStore>().flush() }
-        runCatching { runBlocking { localStreamProxy.stop() } }
+        if (localStreamProxyLazy.isInitialized()) runCatching { runBlocking { localStreamProxy.stop() } }
         runCatching { playerProvider.releaseIfCreated() }
         runCatching { VlcPlayer.awaitAllReleased(3_000) }
         runCatching { vlcEngines.releaseIfBuilt() }
@@ -435,7 +442,9 @@ fun main(args: Array<String>) {
     // the player, then hard-exit. exitProcess still runs the shutdown hook above,
     // which flushes the persistence stores.
     runCatching { koinApp.koin.get<MultiSession>().end() }
-    runCatching { runBlocking { withTimeoutOrNull(3_000) { localStreamProxy.stop() } } }
+    if (localStreamProxyLazy.isInitialized()) {
+        runCatching { runBlocking { withTimeoutOrNull(3_000) { localStreamProxy.stop() } } }
+    }
     runCatching { playerProvider.releaseIfCreated() }
     // Players stop and free their libVLC work on their own threads: let that finish
     // before libVLC itself is released (this is main(), never the UI thread).

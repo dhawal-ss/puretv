@@ -17,9 +17,11 @@ import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
 import io.ktor.http.contentType
 import io.ktor.http.isSuccess
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.add
@@ -226,7 +228,9 @@ class TwitchGqlDirectoryClient(
         if (!response.status.isSuccess()) {
             throw GqlDirectoryException("Twitch GQL request failed: HTTP ${response.status.value}")
         }
-        val parsed = json.decodeFromString<GqlDirectoryResponse<T>>(response.bodyAsText())
+        // Directory pages can be large; decode them off the caller's (often Main) thread.
+        val body = response.bodyAsText()
+        val parsed = withContext(Dispatchers.Default) { json.decodeFromString<GqlDirectoryResponse<T>>(body) }
         // GQL reports failures as HTTP 200 with `errors`, usually beside a `data`
         // whose field is null ({"streams":null} for an out-of-range page size or a
         // failed integrity check). Any error is a failure, never an empty directory.

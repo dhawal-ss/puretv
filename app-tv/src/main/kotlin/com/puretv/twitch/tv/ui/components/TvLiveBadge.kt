@@ -12,7 +12,7 @@ import java.util.Locale
  */
 @Composable
 fun TvLiveBadge(viewerCount: Long, modifier: Modifier = Modifier) {
-    TvLivePill(modifier = modifier, trailing = formatTvViewerCount(viewerCount))
+    TvLivePill(modifier = modifier, trailing = formatTvViewerCount(viewerCount), pulse = false)
 }
 
 internal fun formatTvViewerCount(count: Long): String = when {

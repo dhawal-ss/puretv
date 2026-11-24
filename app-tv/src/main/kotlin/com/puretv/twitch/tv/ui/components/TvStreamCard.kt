@@ -84,7 +84,7 @@ fun TvStreamCard(stream: StreamInfo, onClick: () -> Unit, modifier: Modifier = M
                 Box(Modifier.fillMaxSize().background(c.surfaceHigh))
             }
             Box(Modifier.fillMaxSize().background(c.cardScrim))
-            TvLivePill(modifier = Modifier.align(Alignment.TopStart).padding(10.dp), height = 28.dp)
+            TvLivePill(modifier = Modifier.align(Alignment.TopStart).padding(10.dp), height = 28.dp, pulse = false)
             Text(
                 text = formatTvViewerCount(stream.viewerCount.toLong()),
                 style = PureTvTvType.dataSmall,

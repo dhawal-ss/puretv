@@ -144,6 +144,10 @@ class TwitchPlayer(
     val exoPlayer: ExoPlayer
         get() = _exoPlayer ?: buildPlayer().also { _exoPlayer = it }
 
+    /** Whether a player exists and is playing. Unlike [exoPlayer], never builds one. */
+    val isPlayingIfBuilt: Boolean
+        get() = runCatching { _exoPlayer?.isPlaying == true }.getOrDefault(false)
+
     // "Even out loud and quiet audio". The flag outlives the player; each built
     // player gets its own processor, primed from it.
     @Volatile private var audioNormalizerOn = false

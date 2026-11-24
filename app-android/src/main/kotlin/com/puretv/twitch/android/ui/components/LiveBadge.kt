@@ -22,7 +22,7 @@ import java.util.Locale
 fun LiveBadge(viewerCount: Long, modifier: Modifier = Modifier) {
     val c = PureTvTheme.colors
     Row(verticalAlignment = Alignment.CenterVertically, modifier = modifier) {
-        LivePill()
+        LivePill(pulse = false)
         Spacer(Modifier.width(6.dp))
         Text(
             text = "${formatViewerCount(viewerCount)} viewers",

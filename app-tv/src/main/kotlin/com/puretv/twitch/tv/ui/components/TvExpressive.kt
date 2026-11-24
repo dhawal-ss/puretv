@@ -375,7 +375,12 @@ fun TvFilterChip(
 
 // ---- Status pills ------------------------------------------------------------
 
-/** The LIVE badge. Error-container red with a pulsing dot. */
+/**
+ * The LIVE badge. Error-container red with a dot that pulses when `pulse` is on.
+ * Each pulsing pill is an endless animation that keeps the whole screen redrawing,
+ * which TV GPUs feel during D-pad scrolling, so cards and rows pass `pulse = false`
+ * and only single pills (the Home hero, a channel's header) pulse.
+ */
 @Composable
 fun TvLivePill(
     modifier: Modifier = Modifier,

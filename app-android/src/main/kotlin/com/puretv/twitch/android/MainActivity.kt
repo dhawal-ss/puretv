@@ -269,10 +269,12 @@ class MainActivity : ComponentActivity() {
         // Only float a PiP window when a stream is actually playing. Entering PiP
         // from a spinner or an error overlay just pops a black, chrome-less window
         // the user cannot retry from.
-        val isPlaying = runCatching { twitchPlayer.exoPlayer.isPlaying }.getOrDefault(false)
         // The viewer can turn PiP off to keep listening with nothing on screen.
-        if (!backgroundPlayback.pipOnLeave) return
-        if (currentRouteIsStream && isPlaying && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        if (!backgroundPlayback.pipOnLeave || !currentRouteIsStream) return
+        // Asked of the player only if one exists: reading `exoPlayer` builds one,
+        // which used to happen on every Home press from any screen.
+        val isPlaying = twitchPlayer.isPlayingIfBuilt
+        if (isPlaying && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val params = PictureInPictureParams.Builder()
                 .setAspectRatio(Rational(16, 9))
                 .build()

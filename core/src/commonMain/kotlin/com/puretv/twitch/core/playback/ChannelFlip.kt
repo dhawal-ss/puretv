@@ -127,8 +127,12 @@ class PendingFlip(private val settleMs: Long = SETTLE_MS) {
     }
 
     companion object {
-        /** Long enough to ride out three quick presses, short enough to feel instant. */
-        const val SETTLE_MS = 450L
+        /**
+         * Long enough to ride out quick repeated presses, short enough to feel
+         * instant. Every single flip waits this out before anything loads, so it
+         * stays tight: 450 ms read as lag on every channel change.
+         */
+        const val SETTLE_MS = 300L
     }
 }
 

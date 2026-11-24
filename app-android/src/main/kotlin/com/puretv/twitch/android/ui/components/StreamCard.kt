@@ -60,7 +60,7 @@ fun StreamCard(stream: StreamInfo, onClick: () -> Unit, modifier: Modifier = Mod
                     contentScale = ContentScale.Crop,
                 )
                 Box(Modifier.fillMaxSize().background(c.cardScrim))
-                LivePill(modifier = Modifier.align(Alignment.TopStart).padding(8.dp), height = 22.dp)
+                LivePill(modifier = Modifier.align(Alignment.TopStart).padding(8.dp), height = 22.dp, pulse = false)
                 Text(
                     formatViewerCount(stream.viewerCount.toLong()),
                     style = PureTvType.dataSmall,

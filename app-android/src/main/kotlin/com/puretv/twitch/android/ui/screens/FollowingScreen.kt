@@ -323,7 +323,7 @@ private fun LiveFollowCard(
                     contentScale = ContentScale.Crop,
                 )
                 Box(Modifier.fillMaxSize().background(c.cardScrim))
-                LivePill(modifier = Modifier.align(Alignment.TopStart).padding(8.dp), height = 20.dp)
+                LivePill(modifier = Modifier.align(Alignment.TopStart).padding(8.dp), height = 20.dp, pulse = false)
                 Text(
                     formatViewerCount(row.viewerCount.toLong()),
                     style = PureTvType.dataSmall,
@@ -372,7 +372,7 @@ private fun LiveListRow(row: FollowRow, onClick: () -> Unit, alerts: Boolean, on
                 contentScale = ContentScale.Crop,
             )
             Box(Modifier.fillMaxSize().background(c.cardScrim))
-            LivePill(modifier = Modifier.align(Alignment.TopStart).padding(6.dp), height = 18.dp)
+            LivePill(modifier = Modifier.align(Alignment.TopStart).padding(6.dp), height = 18.dp, pulse = false)
         }
         Spacer(Modifier.width(14.dp))
         Column(modifier = Modifier.weight(1f).heightIn(min = 40.dp)) {

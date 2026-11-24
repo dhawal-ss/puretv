@@ -90,7 +90,7 @@ private fun BannerCard(banner: GoLiveBanner) {
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-            TvLivePill(height = 28.dp)
+            TvLivePill(height = 28.dp, pulse = false)
             Text(
                 banner.title,
                 style = MaterialTheme.typography.titleLarge,

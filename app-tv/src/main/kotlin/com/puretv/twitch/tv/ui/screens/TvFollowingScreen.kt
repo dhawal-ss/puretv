@@ -95,7 +95,7 @@ fun TvFollowingScreen(
     val focusManager = LocalFocusManager.current
     val firstFocusRequester = remember { FocusRequester() }
 
-    LaunchedEffect(Unit) { viewModel.refresh() }
+    LaunchedEffect(Unit) { viewModel.refreshIfStale() }
 
     val noData = state.live.isEmpty() && state.offline.isEmpty()
 
@@ -364,7 +364,7 @@ private fun TvFollowLiveCard(
                 Box(Modifier.fillMaxSize().background(c.surfaceHigh))
             }
             Box(Modifier.fillMaxSize().background(c.cardScrim))
-            TvLivePill(modifier = Modifier.align(Alignment.TopStart).padding(10.dp), height = 28.dp)
+            TvLivePill(modifier = Modifier.align(Alignment.TopStart).padding(10.dp), height = 28.dp, pulse = false)
             Text(
                 text = formatTvViewerCount(row.viewerCount.toLong()),
                 style = PureTvTvType.dataSmall,

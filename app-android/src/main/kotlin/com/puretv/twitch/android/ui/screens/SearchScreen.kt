@@ -346,7 +346,7 @@ private fun SearchResultRow(result: ChannelSearchResult, onClick: () -> Unit, mo
 
         // No viewer count on the search model, so live results get a bare LIVE
         // pill rather than LivePill's trailing-count form.
-        if (result.is_live) LivePill()
+        if (result.is_live) LivePill(pulse = false)
     }
 }
 

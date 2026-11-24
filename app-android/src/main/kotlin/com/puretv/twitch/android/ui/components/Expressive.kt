@@ -439,7 +439,12 @@ fun <T> SegmentedToggle(
 
 // ---- Status pills ------------------------------------------------------------
 
-/** The LIVE badge. Error-container red with a pulsing dot. */
+/**
+ * The LIVE badge. Error-container red with a dot that pulses when [pulse] is on.
+ * Every pulsing pill is its own endless animation, which keeps the screen drawing
+ * frames even while nothing else moves, so lists of cards pass `pulse = false`
+ * and only single pills (the Home hero, a channel's header) pulse.
+ */
 @Composable
 fun LivePill(
     modifier: Modifier = Modifier,

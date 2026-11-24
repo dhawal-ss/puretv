@@ -292,6 +292,8 @@ fun TvVodScreen(
                         descendantFocusability = android.view.ViewGroup.FOCUS_BLOCK_DESCENDANTS
                     }
                 },
+                // Unhook from the shared player when the view goes, or it stays attached for good.
+                onRelease = { view -> view.player = null },
                 update = { view -> view.player = tvPlayer.exoPlayer },
             )
         }

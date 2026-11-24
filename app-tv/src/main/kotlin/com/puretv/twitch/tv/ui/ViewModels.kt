@@ -212,7 +212,22 @@ class HomeViewModel(
         refresh()
     }
 
+    private var lastRefreshAt = 0L
+
+    /**
+     * The screen's refresh, on each return to it and on its poll. Skipped while a
+     * load is still running or one started moments ago: the screen used to call
+     * this right after `init` had, cancelling that first load and starting over,
+     * and every Back to Home reloaded everything again.
+     */
+    fun refreshIfStale() {
+        if (refreshJob?.isActive == true) return
+        if (android.os.SystemClock.elapsedRealtime() - lastRefreshAt < MIN_REFRESH_GAP_MS) return
+        refresh()
+    }
+
     fun refresh() {
+        lastRefreshAt = android.os.SystemClock.elapsedRealtime()
         refreshJob?.cancel()
         refreshJob = viewModelScope.launch {
             _state.update { it.copy(isLoading = it.topStreams.isEmpty(), error = null) }
@@ -352,7 +367,21 @@ class TvFollowingViewModel(
         refresh()
     }
 
+    private var lastRefreshAt = 0L
+
+    /**
+     * The screen's refresh when it opens. Skipped while a load is still running or
+     * one started moments ago, so opening Following no longer cancels the load
+     * `init` just started and re-downloads the whole follow list.
+     */
+    fun refreshIfStale() {
+        if (loadJob?.isActive == true) return
+        if (android.os.SystemClock.elapsedRealtime() - lastRefreshAt < MIN_REFRESH_GAP_MS) return
+        refresh()
+    }
+
     fun refresh() {
+        lastRefreshAt = android.os.SystemClock.elapsedRealtime()
         loadJob?.cancel()
         loadJob = viewModelScope.launch { loadOnce() }
     }
@@ -1494,3 +1523,6 @@ class LoginViewModel(
         super.onCleared()
     }
 }
+
+/** A screen-triggered refresh this soon after the last one is skipped (see refreshIfStale). */
+private const val MIN_REFRESH_GAP_MS = 30_000L

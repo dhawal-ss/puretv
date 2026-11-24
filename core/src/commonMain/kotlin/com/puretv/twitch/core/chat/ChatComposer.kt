@@ -21,8 +21,9 @@ fun wordAtCursor(text: String, cursor: Int): Pair<String, Int> {
 /** Up to [limit] emotes whose code starts with [word] (case-insensitive). Empty if word < 2 chars. */
 fun matchEmotes(word: String, all: List<PickableEmote>, limit: Int = 8): List<PickableEmote> {
     if (word.length < 2) return emptyList()
-    val w = word.lowercase()
-    return all.asSequence().filter { it.code.lowercase().startsWith(w) }.take(limit).toList()
+    // ignoreCase compares in place: lowercasing every code allocated a string per
+    // emote (thousands with 7TV, BTTV and FFZ) on each keystroke and chat batch.
+    return all.asSequence().filter { it.code.startsWith(word, ignoreCase = true) }.take(limit).toList()
 }
 
 /**
@@ -32,10 +33,9 @@ fun matchEmotes(word: String, all: List<PickableEmote>, limit: Int = 8): List<Pi
  */
 fun matchEmotesByColon(query: String, all: List<PickableEmote>, limit: Int = 8): List<PickableEmote> {
     if (query.length < 2) return emptyList()
-    val q = query.lowercase()
-    val starts = all.filter { it.code.lowercase().startsWith(q) }
+    val starts = all.filter { it.code.startsWith(query, ignoreCase = true) }
     if (starts.size >= limit) return starts.take(limit)
-    val contains = all.filter { val c = it.code.lowercase(); !c.startsWith(q) && c.contains(q) }
+    val contains = all.filter { !it.code.startsWith(query, ignoreCase = true) && it.code.contains(query, ignoreCase = true) }
     return (starts + contains).take(limit)
 }
 
@@ -95,12 +95,18 @@ fun recentChatters(messages: List<ChatMessage>, excludeLogin: String? = null, li
  * everyone, so a bare "@" lists the most recent chatters.
  */
 fun matchChatters(prefix: String, chatters: List<Chatter>, limit: Int = 8): List<Chatter> {
-    val p = prefix.lowercase()
     return chatters.asSequence()
-        .filter { it.login.lowercase().startsWith(p) || it.displayName.lowercase().startsWith(p) }
+        .filter { it.login.startsWith(prefix, ignoreCase = true) || it.displayName.startsWith(prefix, ignoreCase = true) }
         .take(limit)
         .toList()
 }
+
+/**
+ * Whether [composerSuggestions] would look at chatters for [word]. A `:` search is
+ * emotes only, so callers can skip building the chatter list (and keying on the
+ * message list, which changes with every chat batch) for it.
+ */
+fun suggestionsUseChatters(word: String): Boolean = word.isNotEmpty() && !word.startsWith(":")
 
 /** One entry in the composer's autocomplete strip. */
 sealed class ComposerSuggestion {

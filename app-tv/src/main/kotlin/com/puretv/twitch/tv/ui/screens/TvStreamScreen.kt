@@ -22,6 +22,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.foundation.focusable
@@ -195,6 +198,31 @@ fun TvStreamScreen(
         if (!controlsVisible || controlsTouchedAt == 0L) return@LaunchedEffect
         delay(3_000)
         controlsVisible = false
+    }
+
+    // Home (or any other app) only stops the Activity; it doesn't leave this
+    // screen, so the onDispose stop below never ran and the stream kept decoding
+    // and downloading behind the launcher. Stop it with the Activity, and on the
+    // way back ask Twitch for a fresh session (the old signed URL may have expired)
+    // so it starts again at the live edge.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        var stoppedInBackground = false
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_STOP -> {
+                    stoppedInBackground = true
+                    tvPlayer.stop()
+                }
+                Lifecycle.Event.ON_START -> if (stoppedInBackground) {
+                    stoppedInBackground = false
+                    viewModel.retry()
+                }
+                else -> Unit
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
     DisposableEffect(Unit) {
@@ -434,6 +462,10 @@ private fun StreamVideoArea(
                         descendantFocusability = android.view.ViewGroup.FOCUS_BLOCK_DESCENDANTS
                     }
                 },
+                // The player is an app-wide singleton, and a PlayerView only unhooks
+                // its listeners (and its Activity) in setPlayer: without this every
+                // stream opened left its view attached to the player for good.
+                onRelease = { view -> view.player = null },
                 update = { view -> view.player = tvPlayer.exoPlayer },
             )
         }

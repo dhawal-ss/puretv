@@ -80,7 +80,14 @@ import org.koin.dsl.module
 val desktopModule = module {
     // --- Networking engine (coreModule provides `single { buildKtorClient(get()) }`,
     // which resolves an `HttpClientEngine` - OkHttp here, matching Android/TV). ---
-    single<HttpClientEngine> { OkHttp.create() }
+    // OkHttp queues anything past 5 requests to one host, even over HTTP/2, and
+    // opening a stream alone fires about six to api.twitch.tv (plus the Following
+    // fan-out). Ktor applies this after installing its own dispatcher.
+    single<HttpClientEngine> {
+        OkHttp.create {
+            config { dispatcher(okhttp3.Dispatcher().apply { maxRequestsPerHost = 16; maxRequests = 64 }) }
+        }
+    }
 
     // --- Persistence -------------------------------------------------------
     // Takes TokenHolder (from coreModule) so saved tokens flow back into the

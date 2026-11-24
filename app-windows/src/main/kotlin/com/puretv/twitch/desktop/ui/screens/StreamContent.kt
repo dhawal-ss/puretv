@@ -88,6 +88,7 @@ import com.puretv.twitch.core.chat.insertAtCursor
 import com.puretv.twitch.core.chat.TabCompletion
 import com.puretv.twitch.core.chat.isCurrent
 import com.puretv.twitch.core.chat.recentChatters
+import com.puretv.twitch.core.chat.suggestionsUseChatters
 import com.puretv.twitch.core.chat.tabComplete
 import com.puretv.twitch.core.chat.wordAtCursor
 import com.puretv.twitch.core.model.ChatMessage
@@ -1444,12 +1445,18 @@ internal fun ChatInputBar(
 
     // Autocomplete suggestions for the word the cursor sits in: emotes, plus
     // recent chatters for "@" (and, ranked after emotes, for a plain prefix).
-    // Skipped for an empty word so new messages don't rescan chat while idle.
+    // Skipped for an empty word so new messages don't rescan chat while idle, and
+    // remembered: this used to run on every chat batch (about ten a second) while a
+    // word sat in the box, scanning every emote each time. Only words that can
+    // match a chatter follow the message list at all.
     val (word, _) = wordAtCursor(value.text, value.selection.start)
-    val suggestions = if (word.isEmpty()) {
-        emptyList()
-    } else {
-        composerSuggestions(word, emotes, recentChatters(recentMessages, selfLogin))
+    val chatterSource = if (suggestionsUseChatters(word)) recentMessages else null
+    val suggestions = remember(word, emotes, chatterSource, selfLogin) {
+        if (word.isEmpty()) {
+            emptyList()
+        } else {
+            composerSuggestions(word, emotes, chatterSource?.let { recentChatters(it, selfLogin) }.orEmpty())
+        }
     }
 
     // Tab completion in progress: pressing Tab again swaps in the next suggestion
